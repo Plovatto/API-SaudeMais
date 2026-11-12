@@ -1,6 +1,21 @@
-import { createApp } from '@/app.js';
+import { Writable } from 'node:stream';
+import { createApp, type AppConfig } from '@/app.js';
+import { createLogger } from '@/config/logger.js';
 
-export function buildTestApp() {
-  const app = createApp();
-  return { app };
+export const TEST_CORS_ORIGIN = 'http://localhost:5173';
+
+/** Builds the app with a logger that writes to memory, so tests can inspect what was logged. */
+export function buildTestApp(overrides: Partial<AppConfig> = {}) {
+  const logLines: string[] = [];
+  const destination = new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      logLines.push(chunk.toString());
+      callback();
+    },
+  });
+  const logger = createLogger({ NODE_ENV: 'test', LOG_LEVEL: 'info' }, destination);
+  const config: AppConfig = { CORS_ORIGIN: TEST_CORS_ORIGIN, TRUST_PROXY_HOPS: 0, ...overrides };
+  const app = createApp({ config, logger });
+
+  return { app, logLines };
 }
