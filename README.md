@@ -13,21 +13,23 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 ## Funcionalidades
 
+- Banco PostgreSQL com migrations em SQL aplicadas ao iniciar
 - Configuração centralizada e validada por variáveis de ambiente
 - Respostas de erro padronizadas no formato `{ message, code, fields? }`
 - Cabeçalhos de segurança com Helmet e CORS restrito à origem do front
 - Logging estruturado sem query string, cabeçalhos ou corpo das requisições, e com dados sensíveis ocultados
-- Testes automatizados com Vitest
+- Testes automatizados com Vitest, em PostgreSQL em memória e em PostgreSQL real
 
 ## Tecnologias
 
 - [Node.js](https://nodejs.org/) 22.13+ (24 LTS recomendado)
 - [TypeScript](https://www.typescriptlang.org/)
 - [Express](https://expressjs.com/)
+- [PostgreSQL](https://www.postgresql.org/) com [Drizzle ORM](https://orm.drizzle.team/)
 - [Zod](https://zod.dev/) - validação de requisições e variáveis de ambiente
 - [Helmet](https://helmetjs.github.io/) e [cors](https://github.com/expressjs/cors) - segurança HTTP
 - [Pino](https://getpino.io/) - logging estruturado
-- [Vitest](https://vitest.dev/) e [Supertest](https://github.com/ladjs/supertest) - testes automatizados
+- [Vitest](https://vitest.dev/), [Supertest](https://github.com/ladjs/supertest) e [PGlite](https://pglite.dev/) - testes automatizados
 - ESLint - análise e padronização do código
 
 ## Como Executar
@@ -36,6 +38,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 - [Node.js](https://nodejs.org/) 22.13 ou superior
 - npm
+- [PostgreSQL](https://www.postgresql.org/) 16 ou superior, com as extensões `citext` e `btree_gist` disponíveis
 
 ### Instalação
 
@@ -85,11 +88,14 @@ PORT=3001
 LOG_LEVEL=info
 TRUST_PROXY_HOPS=0
 CORS_ORIGIN=http://localhost:5173
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais
 ```
 
 `NODE_ENV` vale `production` quando não é definida; use `development` localmente, como no `.env.example`.
 
 `CORS_ORIGIN` é a origem do front (esquema, domínio e porta, sem caminho) e é obrigatória em produção. Variáveis vazias são tratadas como não definidas.
+
+`DATABASE_URL` é a conexão direta com o PostgreSQL (sem pooler). As migrations pendentes são aplicadas quando a API inicia.
 
 `TRUST_PROXY_HOPS` é o número de proxies reversos na frente da API. Com o valor certo, os limites de requisição usam o IP de cada usuário em vez do IP do proxy. Mantenha `0` quando a API recebe as conexões diretamente.
 
@@ -104,6 +110,26 @@ CORS_ORIGIN=http://localhost:5173
 | `npm run lint` | Analisa o código |
 | `npm test` | Roda os testes |
 | `npm run test:coverage` | Roda os testes com relatório de cobertura |
+| `npm run test:pg` | Roda a suíte que exige um PostgreSQL real (`TEST_DATABASE_URL`) |
+| `npm run db:generate` | Gera uma migration a partir do schema |
+
+## Banco de Dados
+
+O schema fica em `src/database/schema` e as migrations, em `drizzle/`, como arquivos SQL versionados.
+
+Para criar uma migration a partir de mudanças no schema:
+
+```bash
+npm run db:generate
+```
+
+Extensões, exclusion constraints e índices parciais são escritos à mão em uma migration vazia:
+
+```bash
+npx drizzle-kit generate --custom --name=nome_da_migration
+```
+
+Os testes de `npm test` usam um PostgreSQL em memória (PGlite) com as mesmas migrations. O que depende de travas e concorrência reais fica em `test-pg/` e roda com `npm run test:pg`, apontando `TEST_DATABASE_URL` para um banco descartável: a suíte apaga os schemas `public` e `drizzle` desse banco.
 
 ## Rotas
 
