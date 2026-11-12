@@ -14,7 +14,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Configuração centralizada e validada por variáveis de ambiente
 - Respostas de erro padronizadas no formato `{ message, code, fields? }`
 - Cabeçalhos de segurança com Helmet e CORS restrito à origem do front
-- Logging estruturado com dados sensíveis ocultados
+- Logging estruturado sem query string, cabeçalhos ou corpo das requisições, e com dados sensíveis ocultados
 - Testes automatizados com Vitest
 
 ## Tecnologias
@@ -85,7 +85,9 @@ TRUST_PROXY_HOPS=0
 CORS_ORIGIN=http://localhost:5173
 ```
 
-`CORS_ORIGIN` é a origem do front (esquema, domínio e porta, sem caminho) e é obrigatória em produção.
+`NODE_ENV` vale `production` quando não é definida; use `development` localmente, como no `.env.example`.
+
+`CORS_ORIGIN` é a origem do front (esquema, domínio e porta, sem caminho) e é obrigatória em produção. Variáveis vazias são tratadas como não definidas.
 
 `TRUST_PROXY_HOPS` é o número de proxies reversos na frente da API. Com o valor certo, os limites de requisição usam o IP de cada usuário em vez do IP do proxy. Mantenha `0` quando a API recebe as conexões diretamente.
 
@@ -99,6 +101,7 @@ CORS_ORIGIN=http://localhost:5173
 | `npm run typecheck` | Verifica os tipos |
 | `npm run lint` | Analisa o código |
 | `npm test` | Roda os testes |
+| `npm run test:coverage` | Roda os testes com relatório de cobertura |
 
 ## Rotas
 
