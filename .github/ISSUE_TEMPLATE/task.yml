@@ -1,0 +1,36 @@
+name: Tarefa
+description: Funcionalidade, melhoria ou manutenção planejada
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Objetivo
+      description: O que esta tarefa entrega e por quê.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Escopo
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critérios de aceite
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependências
+      value: "- Nenhuma"
+  - type: input
+    id: branch
+    attributes:
+      label: Branch
+      placeholder: feature/nome-api
