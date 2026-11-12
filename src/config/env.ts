@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import '../lib/zod-locale.js';
 import { z } from 'zod';
 
 function integer(min: number, max: number, fallback: number) {

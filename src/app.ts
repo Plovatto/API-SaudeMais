@@ -36,11 +36,12 @@ export function createApp({ config = env, logger = defaultLogger }: AppOptions =
       // Only what is needed to trace a request: no headers, query string, params or body,
       // since they may carry tokens or personal data (LGPD).
       serializers: {
-        req: (req: { id: unknown; method: string; url: string; remoteAddress?: string }) => ({
+        req: (req: { id: unknown; method: string; url: string; remoteAddress?: string; raw?: { ip?: string } }) => ({
           id: req.id,
           method: req.method,
           path: pathOf(req.url),
-          remoteAddress: req.remoteAddress,
+          // Client IP honoring `trust proxy`, so it is not the proxy address behind Northflank.
+          ip: req.raw?.ip ?? req.remoteAddress,
         }),
         res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
       },

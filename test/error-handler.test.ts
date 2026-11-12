@@ -143,6 +143,15 @@ describe('errorHandler', () => {
     expect(response.status).toBe(500);
   });
 
+  it('does not trust a non-integer status even when marked as exposable', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const odd = Object.assign(new Error('odd'), { status: 404.5, expose: true });
+
+    const response = await request(buildAppThatThrows(odd)).get('/sync');
+
+    expect(response.status).toBe(500);
+  });
+
   it('answers a URL parameter that cannot be decoded with 400', async () => {
     const response = await request(buildAppThatThrows(null)).get('/users/%E0%A4%A');
 

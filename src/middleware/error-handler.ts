@@ -23,7 +23,7 @@ function asHttpClientError(err: unknown): HttpClientError | undefined {
   if (typeof err !== 'object' || err === null) return undefined;
   const candidate = err as { status?: unknown; statusCode?: unknown; expose?: unknown; type?: unknown };
   const status = candidate.status ?? candidate.statusCode;
-  if (typeof status !== 'number' || status < 400 || status > 499) return undefined;
+  if (typeof status !== 'number' || !Number.isInteger(status) || status < 400 || status > 499) return undefined;
   if (candidate.expose === true || err instanceof URIError) return { status, type: candidate.type };
   return undefined;
 }

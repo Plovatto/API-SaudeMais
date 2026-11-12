@@ -117,7 +117,7 @@ describe('access log', () => {
       res: Record<string, unknown>;
     };
     expect(entry.level).toBe(40);
-    expect(entry.req).toEqual({ id: expect.anything() as unknown, method: 'GET', path: '/api/x/PATHVALUE', remoteAddress: expect.any(String) as unknown });
+    expect(entry.req).toEqual({ id: expect.anything() as unknown, method: 'GET', path: '/api/x/PATHVALUE', ip: expect.any(String) as unknown });
     expect(entry.res).toEqual({ statusCode: 404 });
     for (const secret of ['QUERYSECRET', 'ana@example.com', 'HEADERSECRET', 'COOKIESECRET']) {
       expect(output).not.toContain(secret);
@@ -135,5 +135,19 @@ describe('access log', () => {
 
     const statuses = logLines.map((line) => (JSON.parse(line) as { res: { statusCode: number } }).res.statusCode);
     expect(statuses).toEqual([400, 204]);
+  });
+});
+
+describe('trust proxy', () => {
+  it('logs the client IP from X-Forwarded-For only when a proxy hop is trusted', async () => {
+    const direct = buildTestApp();
+    const proxied = buildTestApp({ TRUST_PROXY_HOPS: 1 });
+
+    await request(direct.app).get('/api/x').set('X-Forwarded-For', '203.0.113.7');
+    await request(proxied.app).get('/api/x').set('X-Forwarded-For', '203.0.113.7');
+
+    const ipOf = (lines: string[]) => (JSON.parse(lines[0] ?? '{}') as { req: { ip: string } }).req.ip;
+    expect(ipOf(direct.logLines)).not.toBe('203.0.113.7');
+    expect(ipOf(proxied.logLines)).toBe('203.0.113.7');
   });
 });
