@@ -4,13 +4,8 @@ import pg, { type PoolConfig } from 'pg';
 import { logger } from '../config/logger.js';
 import * as schema from './schema/index.js';
 
-/** Driver-independent database type, so repositories work with node-postgres and with PGlite in tests. */
 export type Database = PgDatabase<PgQueryResultHKT, typeof schema>;
 
-/**
- * Small pool with every wait bounded: the database is a free-tier instance that scales to zero,
- * so connections must be few, short-lived when idle and never block a request forever.
- */
 export function poolOptions(connectionString: string): PoolConfig {
   return {
     connectionString,
@@ -24,7 +19,6 @@ export function poolOptions(connectionString: string): PoolConfig {
 
 export function createPool(connectionString: string): pg.Pool {
   const pool = new pg.Pool(poolOptions(connectionString));
-  // Without a listener, an error on an idle client (e.g. the database suspending) would crash the process.
   pool.on('error', (err) => {
     logger.error({ err }, 'Idle database client error');
   });
