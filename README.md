@@ -1,5 +1,7 @@
 # Saúde+ API
 
+[![CI](https://github.com/Plovatto/API-SaudeMais/actions/workflows/ci.yml/badge.svg)](https://github.com/Plovatto/API-SaudeMais/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Plovatto/API-SaudeMais/badge)](https://scorecard.dev/viewer/?uri=github.com/Plovatto/API-SaudeMais)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.12-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 
@@ -108,6 +110,10 @@ CORS_ORIGIN=http://localhost:5173
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/health` | Verifica se o servidor está no ar |
+
+## Contribuindo
+
+Veja o [guia de contribuição](CONTRIBUTING.md) e a [política de segurança](SECURITY.md).
 
 ## Licença
 
