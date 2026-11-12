@@ -2,7 +2,7 @@
 
 ## Reportando problemas
 
-Abra uma [issue](https://github.com/Plovatto/API-SaudeMais/issues/new/choose) descrevendo o problema, os passos para reproduzir e o comportamento esperado. Falhas de segurança devem ser reportadas pela [política de segurança](SECURITY.md).
+Abra uma [issue](https://github.com/Plovatto/API-SaudeMais/issues) descrevendo o problema, os passos para reproduzir e o comportamento esperado. Falhas de segurança devem ser reportadas pela [política de segurança](SECURITY.md).
 
 ## Organização
 
