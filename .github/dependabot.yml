@@ -29,6 +29,6 @@ updates:
         patterns:
           - "*"
     labels:
-      - chore
+      - ci
     commit-message:
       prefix: ":arrow_up: ci"

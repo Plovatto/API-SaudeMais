@@ -17,6 +17,10 @@ O trabalho é planejado no [quadro do projeto](https://github.com/users/Plovatto
 5. Abra o pull request para a `main` seguindo o modelo (o que foi feito, detalhes e testes) e ligue a issue com `Closes #n`.
 6. O merge é feito com merge commit, depois que o CI passar.
 
+## Atualizações de dependências
+
+Os pull requests do Dependabot (`dependabot/...`) são a exceção às regras de nome de branch e de issue vinculada: entram depois que o CI passar.
+
 ## Mudanças no contrato da API
 
 Alterações em rotas, corpos ou respostas recebem o rótulo `api-contract` e devem ser compatíveis com a versão do [front-end](https://github.com/Plovatto/SaudeMais) já publicada.

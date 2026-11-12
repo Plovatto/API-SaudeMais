@@ -12,16 +12,16 @@ body:
     id: scope
     attributes:
       label: Escopo
-      value: |
-        - [ ]
+      placeholder: |
+        - [ ] ...
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
       label: Critérios de aceite
-      value: |
-        - [ ]
+      placeholder: |
+        - [ ] ...
     validations:
       required: true
   - type: textarea
