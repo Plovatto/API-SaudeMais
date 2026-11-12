@@ -3,7 +3,7 @@
 [![CI](https://github.com/Plovatto/API-SaudeMais/actions/workflows/ci.yml/badge.svg)](https://github.com/Plovatto/API-SaudeMais/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Plovatto/API-SaudeMais/badge)](https://scorecard.dev/viewer/?uri=github.com/Plovatto/API-SaudeMais)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.12-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.13-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 
 API do Saúde+, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador. Desenvolvida com Node.js, TypeScript e Express.
 
@@ -21,7 +21,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 ## Tecnologias
 
-- [Node.js](https://nodejs.org/) 22.12+ (24 LTS recomendado)
+- [Node.js](https://nodejs.org/) 22.13+ (24 LTS recomendado)
 - [TypeScript](https://www.typescriptlang.org/)
 - [Express](https://expressjs.com/)
 - [Zod](https://zod.dev/) - validação de requisições e variáveis de ambiente
@@ -34,7 +34,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 ### Pré-requisitos
 
-- [Node.js](https://nodejs.org/) 22.12 ou superior
+- [Node.js](https://nodejs.org/) 22.13 ou superior
 - npm
 
 ### Instalação
