@@ -6,8 +6,10 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     ignore:
-      # Kept on the lowest supported Node.js major (package.json engines).
       - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: typescript
         update-types:
           - version-update:semver-major
     groups:
