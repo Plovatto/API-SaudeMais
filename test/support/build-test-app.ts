@@ -4,7 +4,6 @@ import { createLogger } from '@/config/logger.js';
 
 export const TEST_CORS_ORIGIN = 'http://localhost:5173';
 
-/** Builds the app with a logger that writes to memory, so tests can inspect what was logged. */
 export function buildTestApp(overrides: Partial<AppConfig> = {}) {
   const logLines: string[] = [];
   const destination = new Writable({

@@ -23,7 +23,6 @@ export function createApp({ config = env, logger = defaultLogger }: AppOptions =
   const app = express();
   app.set('trust proxy', config.TRUST_PROXY_HOPS);
 
-  // First, so every request is logged, including CORS preflights and body-parser errors.
   app.use(
     pinoHttp({
       logger,
@@ -33,14 +32,11 @@ export function createApp({ config = env, logger = defaultLogger }: AppOptions =
         if (res.statusCode >= 400) return 'warn';
         return 'info';
       },
-      // Only what is needed to trace a request: no headers, query string, params or body,
-      // since they may carry tokens or personal data (LGPD).
       serializers: {
         req: (req: { id: unknown; method: string; url: string; remoteAddress?: string; raw?: { ip?: string } }) => ({
           id: req.id,
           method: req.method,
           path: pathOf(req.url),
-          // Client IP honoring `trust proxy`, so it is not the proxy address behind Northflank.
           ip: req.raw?.ip ?? req.remoteAddress,
         }),
         res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
@@ -48,11 +44,9 @@ export function createApp({ config = env, logger = defaultLogger }: AppOptions =
     }),
   );
   app.use(helmet());
-  // The front sends the session as a Bearer token, never as a cookie, so credentials stay off.
   app.use(cors({ origin: config.CORS_ORIGIN, maxAge: 600 }));
   app.use(express.json({ limit: '100kb' }));
 
-  // Does not touch the database, so health checks never wake it up.
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
   });

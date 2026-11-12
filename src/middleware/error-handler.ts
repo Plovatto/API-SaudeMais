@@ -14,11 +14,6 @@ interface HttpClientError {
   type?: unknown;
 }
 
-/**
- * Client errors raised by Express itself: body-parser (http-errors with `expose: true`) and the
- * router when a URL parameter cannot be decoded (URIError with status 400).
- * Errors from third-party SDKs that merely have a `status` are not trusted and become 500.
- */
 function asHttpClientError(err: unknown): HttpClientError | undefined {
   if (typeof err !== 'object' || err === null) return undefined;
   const candidate = err as { status?: unknown; statusCode?: unknown; expose?: unknown; type?: unknown };
@@ -77,7 +72,6 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
 
   const { status, body } = toResponse(err);
   if (status >= 500) {
-    // req.log ties the entry to the request id when pino-http is mounted.
     (req.log ?? logger).error({ err }, 'Unhandled error');
   }
   res.status(status).json(body);

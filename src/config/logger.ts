@@ -1,8 +1,6 @@
 import { pino, type DestinationStream, type Logger, type LoggerOptions } from 'pino';
 import { env, type Env } from './env.js';
 
-// Fields that may carry credentials. Request bodies, query strings and headers are never logged
-// (see the request serializer in app.ts); these paths cover what is logged explicitly.
 export const redactedPaths = [
   'req.headers.authorization',
   'req.headers["proxy-authorization"]',
@@ -22,7 +20,6 @@ export function buildLoggerOptions(config: Pick<Env, 'NODE_ENV' | 'LOG_LEVEL'>):
     redact: { paths: redactedPaths, censor: '[redacted]' },
   };
 
-  // Pretty output only when development is set explicitly; pino-pretty is a dev dependency.
   if (config.NODE_ENV === 'development') {
     options.transport = {
       target: 'pino-pretty',

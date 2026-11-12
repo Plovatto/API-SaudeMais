@@ -3,7 +3,6 @@ import '../lib/zod-locale.js';
 import { z } from 'zod';
 
 function integer(min: number, max: number, fallback: number) {
-  // Decimal digits only: rejects values such as "0x50" or "1e3" that z.coerce.number() would accept.
   return z
     .string()
     .regex(/^\d+$/, 'Expected a whole number')
@@ -36,11 +35,9 @@ export interface Env {
 const DEV_CORS_ORIGIN = 'http://localhost:5173';
 
 export function parseEnv(source: Record<string, string | undefined>): Env {
-  // An empty value (`PORT=`) means "not set", so the default applies instead of failing.
   const cleaned = Object.fromEntries(Object.entries(source).filter(([, value]) => value !== ''));
   const parsed = envSchema.safeParse(cleaned);
 
-  // Only variable names and rules are reported, never the values, so secrets do not reach the logs.
   const problems = parsed.success
     ? []
     : parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);

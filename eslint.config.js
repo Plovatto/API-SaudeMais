@@ -21,7 +21,6 @@ export default defineConfig(
     },
   },
   {
-    // The `@/` alias only exists in tests (vitest); compiled code run by Node would not resolve it.
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', { patterns: [{ group: ['@/*'], message: 'Use relative imports with .js in src.' }] }],
