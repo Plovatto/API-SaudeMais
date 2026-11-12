@@ -1,5 +1,7 @@
+import { readdirSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
+import { migrationsFolder } from '@/database/migrate.js';
 import { createTestDb } from './support/create-test-db.js';
 
 describe('database migrations', () => {
@@ -20,7 +22,8 @@ describe('database migrations', () => {
       sql`select count(*)::int as total from drizzle.__drizzle_migrations`,
     );
 
-    expect(result.rows[0]?.total).toBeGreaterThan(0);
+    const migrationFiles = readdirSync(migrationsFolder).filter((name) => name.endsWith('.sql'));
+    expect(result.rows[0]?.total).toBe(migrationFiles.length);
   });
 
   it('compares citext values without case sensitivity', async () => {

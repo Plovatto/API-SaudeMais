@@ -1,4 +1,6 @@
-import { readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrationsFolder, runMigrations } from '@/database/migrate.js';
@@ -45,5 +47,25 @@ describe('runMigrations on PostgreSQL', () => {
 
     expect(locks.rows[0]?.total).toBe(0);
     expect(timeout.rows[0]?.statement_timeout).toBe('15s');
+  });
+
+  it('frees the lock and reports the migration error when a migration fails', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'broken-migrations-'));
+    mkdirSync(join(folder, 'meta'));
+    writeFileSync(join(folder, '9999_broken.sql'), 'SELECT * FROM table_that_does_not_exist;');
+    writeFileSync(
+      join(folder, 'meta', '_journal.json'),
+      JSON.stringify({
+        version: '7',
+        dialect: 'postgresql',
+        entries: [{ idx: 0, version: '7', when: Date.now() + 86_400_000, tag: '9999_broken', breakpoints: true }],
+      }),
+    );
+
+    await expect(runMigrations(pool, folder)).rejects.toThrow(/table_that_does_not_exist/);
+
+    const locks = await pool.query<{ total: number }>("select count(*)::int as total from pg_locks where locktype = 'advisory'");
+    expect(locks.rows[0]?.total).toBe(0);
+    await expect(runMigrations(pool)).resolves.toBeUndefined();
   });
 });
