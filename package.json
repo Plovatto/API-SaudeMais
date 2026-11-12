@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist/server.js",
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.13"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",

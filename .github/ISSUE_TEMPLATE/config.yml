@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar vulnerabilidade
+    url: https://github.com/Plovatto/API-SaudeMais/security/advisories/new
+    about: Falhas de segurança devem ser reportadas de forma privada, nunca em issues públicas.
