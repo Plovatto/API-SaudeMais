@@ -45,14 +45,14 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:17-alpine@sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: saudemais_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres"
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d saudemais_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
