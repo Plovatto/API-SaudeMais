@@ -9,15 +9,14 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    // Every variable is pinned so a local .env never changes the test run.
     env: {
       NODE_ENV: 'test',
       PORT: '3001',
       LOG_LEVEL: 'silent',
       TRUST_PROXY_HOPS: '0',
       CORS_ORIGIN: 'http://localhost:5173',
+      DATABASE_URL: 'postgres://test:test@127.0.0.1:1/test',
     },
-    // Tests live in test/, not next to the source.
     include: ['test/**/*.test.ts'],
     coverage: {
       provider: 'v8',

@@ -21,6 +21,7 @@ const envSchema = z.object({
     .url({ protocol: /^https?$/ })
     .refine((value) => !value.includes(','), 'Only one origin is allowed')
     .optional(),
+  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
 });
 
 export interface Env {
@@ -29,6 +30,7 @@ export interface Env {
   LOG_LEVEL: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
   TRUST_PROXY_HOPS: number;
   CORS_ORIGIN: string;
+  DATABASE_URL: string;
 }
 
 const DEV_CORS_ORIGIN = 'http://localhost:5173';

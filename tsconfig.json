@@ -24,6 +24,6 @@
     "verbatimModuleSyntax": true,
     "noEmit": true
   },
-  "include": ["src", "test", "*.ts"],
+  "include": ["src", "test", "test-pg", "*.ts"],
   "exclude": ["node_modules", "dist"]
 }
