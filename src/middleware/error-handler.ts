@@ -9,19 +9,23 @@ interface ErrorBody {
   fields?: FieldErrors;
 }
 
-// Errors raised by express.json() carry an HTTP status and a `type`.
-interface BodyParserError {
+interface HttpClientError {
   status: number;
-  type: string;
+  type?: unknown;
 }
 
-function isBodyParserError(err: unknown): err is BodyParserError {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    typeof (err as Partial<BodyParserError>).type === 'string' &&
-    typeof (err as Partial<BodyParserError>).status === 'number'
-  );
+/**
+ * Client errors raised by Express itself: body-parser (http-errors with `expose: true`) and the
+ * router when a URL parameter cannot be decoded (URIError with status 400).
+ * Errors from third-party SDKs that merely have a `status` are not trusted and become 500.
+ */
+function asHttpClientError(err: unknown): HttpClientError | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const candidate = err as { status?: unknown; statusCode?: unknown; expose?: unknown; type?: unknown };
+  const status = candidate.status ?? candidate.statusCode;
+  if (typeof status !== 'number' || status < 400 || status > 499) return undefined;
+  if (candidate.expose === true || err instanceof URIError) return { status, type: candidate.type };
+  return undefined;
 }
 
 function zodFieldErrors(error: ZodError): FieldErrors {
@@ -36,7 +40,7 @@ function zodFieldErrors(error: ZodError): FieldErrors {
 function toResponse(err: unknown): { status: number; body: ErrorBody } {
   if (err instanceof AppError) {
     const body: ErrorBody = { message: err.message, code: err.code };
-    if (err.fields) body.fields = err.fields;
+    if (err.fields && Object.keys(err.fields).length > 0) body.fields = err.fields;
     return { status: err.status, body };
   }
 
@@ -47,26 +51,25 @@ function toResponse(err: unknown): { status: number; body: ErrorBody } {
     };
   }
 
-  if (isBodyParserError(err)) {
-    if (err.type === 'entity.parse.failed') {
+  const clientError = asHttpClientError(err);
+  if (clientError) {
+    if (clientError.type === 'entity.parse.failed') {
       return { status: 400, body: { message: 'O corpo da requisição não é um JSON válido.', code: 'INVALID_JSON' } };
     }
-    if (err.type === 'entity.too.large') {
+    if (clientError.type === 'entity.too.large') {
       return { status: 413, body: { message: 'O corpo da requisição é grande demais.', code: 'PAYLOAD_TOO_LARGE' } };
     }
-    if (err.status >= 400 && err.status < 500) {
-      return { status: err.status, body: { message: 'Requisição inválida.', code: 'BAD_REQUEST' } };
-    }
+    return { status: clientError.status, body: { message: 'Requisição inválida.', code: 'BAD_REQUEST' } };
   }
 
   return { status: 500, body: { message: 'Erro interno do servidor.', code: 'INTERNAL_ERROR' } };
 }
 
-export function notFoundHandler(req: Request, _res: Response, next: NextFunction): void {
-  next(new AppError(404, 'ROUTE_NOT_FOUND', `Rota não encontrada: ${req.method} ${req.path}`));
+export function notFoundHandler(_req: Request, _res: Response, next: NextFunction): void {
+  next(new AppError(404, 'ROUTE_NOT_FOUND', 'Rota não encontrada.'));
 }
 
-export function errorHandler(err: unknown, _req: Request, res: Response, next: NextFunction): void {
+export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction): void {
   if (res.headersSent) {
     next(err);
     return;
@@ -74,7 +77,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, next: N
 
   const { status, body } = toResponse(err);
   if (status >= 500) {
-    logger.error({ err }, 'Unhandled error');
+    // req.log ties the entry to the request id when pino-http is mounted.
+    (req.log ?? logger).error({ err }, 'Unhandled error');
   }
   res.status(status).json(body);
 }
