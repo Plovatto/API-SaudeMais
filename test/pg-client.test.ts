@@ -10,6 +10,7 @@ describe('poolOptions', () => {
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
       statement_timeout: 15_000,
+      idle_in_transaction_session_timeout: 30_000,
       application_name: 'api-saudemais',
     });
   });

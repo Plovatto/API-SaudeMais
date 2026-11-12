@@ -5,8 +5,15 @@ import { runMigrations } from './database/migrate.js';
 import { createPool } from './database/pg-client.js';
 
 const pool = createPool(env.DATABASE_URL);
-await runMigrations(pool);
-logger.info('Database migrations applied');
+
+try {
+  await runMigrations(pool);
+  logger.info('Database migrations applied');
+} catch (err) {
+  logger.fatal({ err }, 'Database migrations failed');
+  await pool.end();
+  process.exit(1);
+}
 
 const app = createApp();
 
