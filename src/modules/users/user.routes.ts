@@ -75,6 +75,7 @@ registry.registerPath({
   responses: {
     204: { description: 'Sessão encerrada.' },
     401: unauthenticatedResponse,
+    429: tooManyRequestsResponse,
     500: internalErrorResponse,
   },
 });
@@ -95,6 +96,6 @@ export function createUserRouter({ controller, requireAuth, rateLimits }: UserRo
     rateLimits.loginByEmail,
     controller.login,
   );
-  router.post('/api/users/logout', requireAuth, controller.logout);
+  router.post('/api/users/logout', rateLimits.session, requireAuth, controller.logout);
   return router;
 }
