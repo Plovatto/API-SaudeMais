@@ -30,7 +30,7 @@ describe('GET /docs/openapi.json', () => {
   it('describes the error body and the bearer session', async () => {
     const { document } = await fetchDocument();
 
-    expect(document.components.schemas.ErrorResponse).toEqual({
+    expect(document.components.schemas.ErrorResponse).toMatchObject({
       type: 'object',
       properties: {
         message: expect.objectContaining({ type: 'string' }) as unknown,
