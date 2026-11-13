@@ -15,6 +15,7 @@ import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { UserController } from './user.controller.js';
+import { isDemoEmail } from './user.demo.js';
 import { loginResponseSchema, loginSchema, normalizeEmail, publicUserSchema, registerSchema } from './user.model.js';
 
 function emailOf(req: Request): string {
@@ -110,6 +111,7 @@ export function createUserRouter({ controller, requireAuth }: UserRouterDeps): R
     limit: 50,
     skipSuccessfulRequests: true,
     keyGenerator: (req) => emailOf(req) || `ip:${ipOf(req)}`,
+    skip: (req) => isDemoEmail(emailOf(req)),
   });
   const sessionLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
 

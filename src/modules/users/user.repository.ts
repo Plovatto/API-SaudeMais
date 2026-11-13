@@ -13,12 +13,14 @@ const publicUserColumns = {
   >`array(select ${userRoles.role} from ${userRoles} where ${userRoles.userId} = ${users.id} order by ${userRoles.role})`,
 };
 
-export interface NewPatient {
+export interface NewUser {
   fullName: string;
   email: string;
   phone: string | undefined;
   passwordHash: string;
-  termsVersion: string;
+  roles: Role[];
+  isProtected: boolean;
+  termsVersion: string | null;
   now: Date;
 }
 
@@ -44,20 +46,45 @@ export interface ActiveSession {
   remember: boolean;
   lastUsedAt: Date;
   absoluteExpiresAt: Date;
+  isProtected: boolean;
   user: PublicUser;
 }
 
 export class UserRepository {
   constructor(private readonly db: Database) {}
 
-  createPatient({ fullName, email, phone, passwordHash, termsVersion, now }: NewPatient): Promise<PublicUser> {
+  createUser({
+    fullName,
+    email,
+    phone,
+    passwordHash,
+    roles,
+    isProtected,
+    termsVersion,
+    now,
+  }: NewUser): Promise<PublicUser> {
     return this.db.transaction(async (tx) => {
-      const [user] = await tx.insert(users).values({ fullName, email, phone, passwordHash }).returning(userColumns);
+      const [user] = await tx
+        .insert(users)
+        .values({ fullName, email, phone, passwordHash, isProtected })
+        .returning(userColumns);
       if (!user) throw new Error('User insert returned no row');
-      await tx.insert(userRoles).values({ userId: user.id, role: 'patient', grantedAt: now });
-      await tx.insert(termsAcceptances).values({ userId: user.id, termsVersion, acceptedAt: now });
-      return { ...user, roles: ['patient'] };
+      await tx.insert(userRoles).values(roles.map((role) => ({ userId: user.id, role, grantedAt: now })));
+      if (termsVersion) await tx.insert(termsAcceptances).values({ userId: user.id, termsVersion, acceptedAt: now });
+      return { ...user, roles: [...roles].sort() };
     });
+  }
+
+  async findIdByEmail(email: string): Promise<string | undefined> {
+    const [user] = await this.db.select({ id: users.id }).from(users).where(eq(users.email, email));
+    return user?.id;
+  }
+
+  async grantRoles(userId: string, roles: Role[], now: Date): Promise<void> {
+    await this.db
+      .insert(userRoles)
+      .values(roles.map((role) => ({ userId, role, grantedAt: now })))
+      .onConflictDoNothing();
   }
 
   async findLoginCandidate(email: string): Promise<LoginCandidate | undefined> {
@@ -99,6 +126,7 @@ export class UserRepository {
         remember: sessions.remember,
         lastUsedAt: sessions.lastUsedAt,
         absoluteExpiresAt: sessions.absoluteExpiresAt,
+        isProtected: users.isProtected,
         user: publicUserColumns,
       })
       .from(sessions)

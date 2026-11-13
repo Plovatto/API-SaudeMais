@@ -23,6 +23,8 @@ const envSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   SESSION_TTL_HOURS: integer(1, 72, 12),
   SESSION_REMEMBER_DAYS: integer(1, 30, 7),
+  ADMIN_EMAIL: z.email().optional(),
+  ADMIN_PASSWORD: z.string().min(12, 'Use at least 12 characters').max(128).optional(),
 });
 
 export interface Env {
@@ -34,6 +36,8 @@ export interface Env {
   DATABASE_URL: string;
   SESSION_TTL_HOURS: number;
   SESSION_REMEMBER_DAYS: number;
+  ADMIN_EMAIL?: string | undefined;
+  ADMIN_PASSWORD?: string | undefined;
 }
 
 const DEV_CORS_ORIGIN = 'http://localhost:5173';
@@ -49,6 +53,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   const nodeEnv = parsed.success ? parsed.data.NODE_ENV : cleaned.NODE_ENV;
   if ((nodeEnv ?? 'production') === 'production' && cleaned.CORS_ORIGIN === undefined) {
     problems.push('CORS_ORIGIN: Required in production');
+  }
+  if ((cleaned.ADMIN_EMAIL === undefined) !== (cleaned.ADMIN_PASSWORD === undefined)) {
+    problems.push('ADMIN_EMAIL and ADMIN_PASSWORD: Set both or neither');
   }
   if ((nodeEnv ?? 'production') === 'production' && cleaned.TRUST_PROXY_HOPS === undefined) {
     problems.push('TRUST_PROXY_HOPS: Required in production');

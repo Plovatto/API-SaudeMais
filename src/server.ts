@@ -42,16 +42,7 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-try {
-  await runMigrations(pool);
-  logger.info('Database migrations applied');
-} catch (err) {
-  logger.fatal({ err }, 'Database migrations failed');
-  await pool.end();
-  process.exit(1);
-}
-
-const { routers } = createModules({
+const { users, routers } = createModules({
   db: createDb(pool),
   clock: systemClock,
   policy: {
@@ -60,6 +51,19 @@ const { routers } = createModules({
     maxSessionsPerUser: 10,
   },
 });
+
+try {
+  await runMigrations(pool);
+  logger.info('Database migrations applied');
+  const admin =
+    env.ADMIN_EMAIL && env.ADMIN_PASSWORD ? { email: env.ADMIN_EMAIL, password: env.ADMIN_PASSWORD } : undefined;
+  await users.bootstrap(admin);
+  logger.info('Initial accounts ensured');
+} catch (err) {
+  logger.fatal({ err }, 'Database setup failed');
+  await pool.end();
+  process.exit(1);
+}
 
 const app = createApp({ routers });
 

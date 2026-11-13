@@ -4,6 +4,7 @@ import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { DAY, HOUR, MINUTE } from '../../lib/time.js';
 import type { LoginInput, LoginResponse, PublicUser, RegisterInput } from './user.model.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
+import type { SeedAccount } from './user.demo.js';
 import type { UserRepository } from './user.repository.js';
 import { createSessionToken, hashToken, isWellFormedToken } from './user.token.js';
 
@@ -24,7 +25,14 @@ export interface ClientInfo {
 
 export interface AuthContext {
   sessionId: string;
+  isProtected: boolean;
   user: PublicUser;
+}
+
+export function assertNotProtected(context: AuthContext): void {
+  if (context.isProtected) {
+    throw new AppError(403, 'PROTECTED_ACCOUNT', 'Esta é uma conta de demonstração e não pode ser alterada.');
+  }
 }
 
 export class UserService {
@@ -37,11 +45,13 @@ export class UserService {
   async register({ fullName, email, phone, password }: RegisterInput): Promise<PublicUser> {
     const passwordHash = await hashPassword(password);
     try {
-      return await this.repository.createPatient({
+      return await this.repository.createUser({
         fullName,
         email,
         phone,
         passwordHash,
+        roles: ['patient'],
+        isProtected: false,
         termsVersion: TERMS_VERSION,
         now: this.clock.now(),
       });
@@ -90,7 +100,31 @@ export class UserService {
       const expiresAt = session.remember ? session.absoluteExpiresAt : this.idleExpiry(now, session.absoluteExpiresAt);
       await this.repository.touchSession(session.id, now, expiresAt);
     }
-    return { sessionId: session.id, user: session.user };
+    return { sessionId: session.id, isProtected: session.isProtected, user: session.user };
+  }
+
+  async ensureAccount({ fullName, email, password, roles, isProtected }: SeedAccount): Promise<void> {
+    const now = this.clock.now();
+    const existing = await this.repository.findIdByEmail(email);
+    if (existing) {
+      await this.repository.grantRoles(existing, roles, now);
+      return;
+    }
+    const passwordHash = await hashPassword(password);
+    try {
+      await this.repository.createUser({
+        fullName,
+        email,
+        phone: undefined,
+        passwordHash,
+        roles,
+        isProtected,
+        termsVersion: null,
+        now,
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error, 'users_email_key')) throw error;
+    }
   }
 
   logout(sessionId: string): Promise<void> {
