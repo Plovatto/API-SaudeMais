@@ -25,6 +25,7 @@ const envSchema = z.object({
   SESSION_REMEMBER_DAYS: integer(1, 30, 7),
   ADMIN_EMAIL: z.email().optional(),
   ADMIN_PASSWORD: z.string().min(12, 'Use at least 12 characters').max(128).optional(),
+  APP_PUBLIC_URL: z.url({ protocol: /^https?$/ }).optional(),
   MAIL_DRIVER: z.enum(['console', 'smtp']).default('console'),
   SMTP_HOST: z.string().min(1).default('smtp.gmail.com'),
   SMTP_PORT: integer(1, 65535, 465),
@@ -44,6 +45,7 @@ export interface Env {
   SESSION_REMEMBER_DAYS: number;
   ADMIN_EMAIL?: string | undefined;
   ADMIN_PASSWORD?: string | undefined;
+  APP_PUBLIC_URL: string;
   MAIL_DRIVER: 'console' | 'smtp';
   SMTP_HOST: string;
   SMTP_PORT: number;
@@ -67,6 +69,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     problems.push('CORS_ORIGIN: Required in production');
   }
   const production = (nodeEnv ?? 'production') === 'production';
+  if (production && cleaned.APP_PUBLIC_URL === undefined) {
+    problems.push('APP_PUBLIC_URL: Required in production');
+  }
   if (production && cleaned.MAIL_DRIVER !== 'smtp') {
     problems.push('MAIL_DRIVER: Must be smtp in production');
   }
@@ -89,6 +94,7 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   return {
     ...parsed.data,
     CORS_ORIGIN: new URL(parsed.data.CORS_ORIGIN ?? DEV_CORS_ORIGIN).origin,
+    APP_PUBLIC_URL: (parsed.data.APP_PUBLIC_URL ?? DEV_CORS_ORIGIN).replace(/\/+$/, ''),
   };
 }
 

@@ -28,6 +28,7 @@ async function buildRolesApp() {
   const modules = createModules({
     db,
     mail: new MailQueue(new MemoryMailer(), logger),
+    appUrl: 'https://app.saudemais.test',
     clock: fixedClock(START),
     policy: { idleHours: 12, maxDays: 7, maxSessionsPerUser: 10 },
   });

@@ -95,6 +95,7 @@ jobs:
             -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais_test \
             -e CORS_ORIGIN=https://plovatto.github.io \
             -e TRUST_PROXY_HOPS=0 \
+            -e APP_PUBLIC_URL=https://plovatto.github.io/SaudeMais \
             -e MAIL_DRIVER=smtp \
             -e SMTP_HOST=127.0.0.1 \
             -e SMTP_PORT=2525 \
