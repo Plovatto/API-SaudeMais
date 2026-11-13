@@ -23,7 +23,7 @@ Toda resposta de erro tem o mesmo formato:
 |---|---|
 | \`400\` | Corpo, parâmetros ou JSON inválidos |
 | \`401\` | Sem sessão, sessão expirada ou credenciais incorretas |
-| \`403\` | Conta desativada |
+| \`403\` | Conta desativada, sem o perfil exigido ou de demonstração |
 | \`404\` | Rota ou método inexistente |
 | \`409\` | Conflito com o estado atual, como e-mail já cadastrado |
 | \`413\` | Corpo maior que 100 KB |
@@ -32,7 +32,7 @@ Toda resposta de erro tem o mesmo formato:
 | \`500\` | Erro interno; os detalhes ficam só nos logs |
 | \`503\` | Servidor ocupado conferindo senhas; tente de novo em instantes |
 
-Convenção para as próximas rotas: \`403\` também sem o perfil exigido, \`404\` também para recurso inexistente ou de outra pessoa, \`409\` também para horário já ocupado e \`422\` para regra de negócio não atendida.
+Convenção para as próximas rotas: \`404\` também para recurso inexistente ou de outra pessoa, \`409\` também para horário já ocupado e \`422\` para regra de negócio não atendida.
 
 ## Códigos de erro
 
@@ -44,6 +44,8 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`INVALID_JSON\` | 400 | O corpo não é um JSON válido ou não é um objeto ou array |
 | \`BAD_REQUEST\` | 400 ou 415 | Requisição malformada, como parâmetro de URL inválido, charset ou codificação não suportados |
 | \`UNAUTHENTICATED\` | 401 | Rota exige login e o token falta, é inválido ou expirou |
+| \`FORBIDDEN\` | 403 | A conta não tem o perfil exigido pela rota |
+| \`PROTECTED_ACCOUNT\` | 403 | Contas de demonstração não podem ser alteradas |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |
 | \`TOO_MANY_REQUESTS\` | 429 | Muitas requisições do mesmo IP (300 por minuto) ou limite próprio da rota |
@@ -61,6 +63,10 @@ Authorization: Bearer <token>
 Sem "Lembrar de mim", a sessão expira após 12 horas sem uso; com ele, dura 7 dias. Nenhuma sessão passa de 7 dias, e \`POST /api/users/logout\` encerra a sessão na hora. Quando a sessão não vale mais, a rota responde \`401\` com \`UNAUTHENTICATED\`.
 
 O botão **Authorize** desta página envia o token em todas as chamadas de teste. Fora de produção, o token fica salvo neste navegador até você clicar em **Logout**.
+
+## Conta de demonstração
+
+Para testar sem criar conta, entre com o paciente de demonstração: \`paciente@saudemais.test\`, senha \`paciente-demo-123\`. Os dados dele são de exemplo e ele não pode ser alterado nem desativado.
 
 ## Datas
 

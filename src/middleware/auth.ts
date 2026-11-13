@@ -1,5 +1,6 @@
 import type { Request, RequestHandler } from 'express';
 import { AppError } from '../lib/app-error.js';
+import type { Role } from '../database/schema/users.js';
 import type { AuthContext, UserService } from '../modules/users/user.service.js';
 
 const contexts = new WeakMap<Request, AuthContext>();
@@ -10,6 +11,24 @@ export function createRequireAuth(service: Pick<UserService, 'authenticate'>): R
     const context = await service.authenticate(token ?? '');
     if (!context) throw new AppError(401, 'UNAUTHENTICATED', 'Sua sessão expirou. Entre novamente.');
     contexts.set(req, context);
+    next();
+  };
+}
+
+export function createRequireRole(role: Role): RequestHandler {
+  return (req, _res, next) => {
+    if (!authOf(req).user.roles.includes(role)) {
+      throw new AppError(403, 'FORBIDDEN', 'Você não tem acesso a esta área.');
+    }
+    next();
+  };
+}
+
+export function createRequireWritable(): RequestHandler {
+  return (req, _res, next) => {
+    if (authOf(req).isProtected) {
+      throw new AppError(403, 'PROTECTED_ACCOUNT', 'Esta é uma conta de demonstração e não pode ser alterada.');
+    }
     next();
   };
 }

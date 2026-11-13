@@ -4,12 +4,14 @@ import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { DAY, HOUR, MINUTE } from '../../lib/time.js';
 import type { LoginInput, LoginResponse, PublicUser, RegisterInput } from './user.model.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
+import type { SeedAccount } from './user.demo.js';
 import type { UserRepository } from './user.repository.js';
 import { createSessionToken, hashToken, isWellFormedToken } from './user.token.js';
 
 export const TERMS_VERSION = '2026-11-13';
 
 const TOUCH_INTERVAL = 5 * MINUTE;
+const PROTECTED_SESSION_LIMIT = 500;
 
 export interface SessionPolicy {
   idleHours: number;
@@ -24,6 +26,7 @@ export interface ClientInfo {
 
 export interface AuthContext {
   sessionId: string;
+  isProtected: boolean;
   user: PublicUser;
 }
 
@@ -37,11 +40,13 @@ export class UserService {
   async register({ fullName, email, phone, password }: RegisterInput): Promise<PublicUser> {
     const passwordHash = await hashPassword(password);
     try {
-      return await this.repository.createPatient({
+      return await this.repository.createUser({
         fullName,
         email,
         phone,
         passwordHash,
+        roles: ['patient'],
+        isProtected: false,
         termsVersion: TERMS_VERSION,
         now: this.clock.now(),
       });
@@ -62,19 +67,20 @@ export class UserService {
 
     const now = this.clock.now();
     const absoluteExpiresAt = new Date(now.getTime() + this.policy.maxDays * DAY);
-    const expiresAt = remember ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
+    const remembered = remember && !candidate.isProtected;
+    const expiresAt = remembered ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
     const { token, tokenHash } = createSessionToken();
     const sessionId = await this.repository.createSession({
       userId: candidate.id,
       tokenHash,
-      remember,
+      remember: remembered,
       userAgent: client.userAgent,
       ip: client.ip,
       createdAt: now,
       expiresAt,
       absoluteExpiresAt,
     });
-    const limit = candidate.isProtected ? null : this.policy.maxSessionsPerUser;
+    const limit = candidate.isProtected ? PROTECTED_SESSION_LIMIT : this.policy.maxSessionsPerUser;
     await this.repository.pruneSessions(candidate.id, sessionId, now, limit);
 
     const { passwordHash: _hash, isProtected: _protected, deactivatedAt: _deactivated, ...user } = candidate;
@@ -90,7 +96,39 @@ export class UserService {
       const expiresAt = session.remember ? session.absoluteExpiresAt : this.idleExpiry(now, session.absoluteExpiresAt);
       await this.repository.touchSession(session.id, now, expiresAt);
     }
-    return { sessionId: session.id, user: session.user };
+    return { sessionId: session.id, isProtected: session.isProtected, user: session.user };
+  }
+
+  async ensureAccount({ fullName, email, password, roles, isProtected }: SeedAccount): Promise<void> {
+    const now = this.clock.now();
+    const existing = await this.repository.findLoginCandidate(email);
+    if (existing) {
+      if (existing.isProtected !== isProtected) {
+        throw new Error(`Seed account ${email} already exists with a different protection setting`);
+      }
+      const missing = roles.filter((role) => !existing.roles.includes(role));
+      if (missing.length === 0) return;
+      if (existing.deactivatedAt || !(await verifyPassword(password, existing.passwordHash))) {
+        throw new Error(`${email} belongs to an existing account whose password does not match`);
+      }
+      await this.repository.grantRoles(existing.id, missing, now);
+      return;
+    }
+    const passwordHash = await hashPassword(password);
+    try {
+      await this.repository.createUser({
+        fullName,
+        email,
+        phone: undefined,
+        passwordHash,
+        roles,
+        isProtected,
+        termsVersion: null,
+        now,
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error, 'users_email_key')) throw error;
+    }
   }
 
   logout(sessionId: string): Promise<void> {
