@@ -5,6 +5,7 @@ import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
+import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import { updateProfileSchema } from '../users/user.model.js';
 import type { AdminUserController } from './admin-users.controller.js';
@@ -184,7 +185,8 @@ document({
   path: '/api/admin/users/{id}/doctor-profile',
   operationId: 'adminDeleteDoctorProfile',
   summary: 'Remover perfil médico',
-  description: 'Remove o perfil médico e o perfil de médico; as consultas futuras que ele atende serão canceladas.',
+  description:
+    'Tira o perfil de médico da conta; os dados do registro ficam guardados para o histórico e podem voltar a valer com um novo POST. As consultas futuras que ele atende serão canceladas.',
   params: idParams,
   writes: true,
   notFound: doctorProfileNotFound,
@@ -199,37 +201,20 @@ export interface AdminUserRouterDeps {
 
 export function createAdminUserRouter({ controller, requireAuth, requireAdmin }: AdminUserRouterDeps): Router {
   const adminLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
+  const adminOnly = [noStore, requireAuth, requireAdmin];
 
   const router = Router();
-  router.get('/api/admin/users', adminLimit, requireAuth, requireAdmin, controller.page);
-  router.get('/api/admin/users/:id', adminLimit, requireAuth, requireAdmin, controller.detail);
-  router.patch('/api/admin/users/:id', adminLimit, requireAuth, requireAdmin, controller.update);
-  router.get('/api/admin/users/:id/deactivation-impact', adminLimit, requireAuth, requireAdmin, controller.impact);
-  router.post('/api/admin/users/:id/deactivate', adminLimit, requireAuth, requireAdmin, controller.deactivate);
-  router.post('/api/admin/users/:id/reactivate', adminLimit, requireAuth, requireAdmin, controller.reactivate);
-  router.post('/api/admin/users/:id/password-reset', adminLimit, requireAuth, requireAdmin, controller.passwordReset);
-  router.post('/api/admin/users/:id/roles/:role', adminLimit, requireAuth, requireAdmin, controller.grantRole);
-  router.delete('/api/admin/users/:id/roles/:role', adminLimit, requireAuth, requireAdmin, controller.revokeRole);
-  router.post(
-    '/api/admin/users/:id/doctor-profile',
-    adminLimit,
-    requireAuth,
-    requireAdmin,
-    controller.createDoctorProfile,
-  );
-  router.patch(
-    '/api/admin/users/:id/doctor-profile',
-    adminLimit,
-    requireAuth,
-    requireAdmin,
-    controller.updateDoctorProfile,
-  );
-  router.delete(
-    '/api/admin/users/:id/doctor-profile',
-    adminLimit,
-    requireAuth,
-    requireAdmin,
-    controller.deleteDoctorProfile,
-  );
+  router.get('/api/admin/users', adminLimit, ...adminOnly, controller.page);
+  router.get('/api/admin/users/:id', adminLimit, ...adminOnly, controller.detail);
+  router.patch('/api/admin/users/:id', adminLimit, ...adminOnly, controller.update);
+  router.get('/api/admin/users/:id/deactivation-impact', adminLimit, ...adminOnly, controller.impact);
+  router.post('/api/admin/users/:id/deactivate', adminLimit, ...adminOnly, controller.deactivate);
+  router.post('/api/admin/users/:id/reactivate', adminLimit, ...adminOnly, controller.reactivate);
+  router.post('/api/admin/users/:id/password-reset', adminLimit, ...adminOnly, controller.passwordReset);
+  router.post('/api/admin/users/:id/roles/:role', adminLimit, ...adminOnly, controller.grantRole);
+  router.delete('/api/admin/users/:id/roles/:role', adminLimit, ...adminOnly, controller.revokeRole);
+  router.post('/api/admin/users/:id/doctor-profile', adminLimit, ...adminOnly, controller.createDoctorProfile);
+  router.patch('/api/admin/users/:id/doctor-profile', adminLimit, ...adminOnly, controller.updateDoctorProfile);
+  router.delete('/api/admin/users/:id/doctor-profile', adminLimit, ...adminOnly, controller.deleteDoctorProfile);
   return router;
 }

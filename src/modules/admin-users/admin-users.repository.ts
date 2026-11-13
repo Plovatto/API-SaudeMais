@@ -26,7 +26,6 @@ export interface LockedUser {
   roles: Role[];
   isProtected: boolean;
   deactivatedAt: Date | null;
-  hasDoctorProfile: boolean;
 }
 
 export interface ProfileRow {
@@ -47,6 +46,10 @@ function likePattern(search: string): string {
 
 export class AdminUserRepository {
   constructor(private readonly db: Database) {}
+
+  get reader(): Pick<Database, '$count' | 'select'> {
+    return this.db;
+  }
 
   async page({ search, role, status, page, pageSize }: UsersQuery): Promise<Page<AdminUser>> {
     const filters: (SQL | undefined)[] = [
@@ -84,7 +87,8 @@ export class AdminUserRepository {
   async detail(id: string): Promise<AdminUserDetail | undefined> {
     const [row] = await this.db.select(adminUserColumns).from(users).where(eq(users.id, id));
     if (!row) return undefined;
-    return { ...toAdminUser(row), doctorProfile: (await this.profileOf(this.db, id)) ?? null };
+    const doctorProfile = row.roles.includes('doctor') ? await this.profileOf(this.db, id) : undefined;
+    return { ...toAdminUser(row), doctorProfile: doctorProfile ?? null };
   }
 
   mutate<T>(id: string, work: (tx: Transaction, user: LockedUser) => Promise<T>, adminSet = false) {
@@ -97,13 +101,29 @@ export class AdminUserRepository {
           roles: publicUserColumns.roles,
           isProtected: users.isProtected,
           deactivatedAt: users.deactivatedAt,
-          hasDoctorProfile: sql<boolean>`exists (select 1 from ${doctorProfiles} where ${doctorProfiles.userId} = ${users.id})`,
         })
         .from(users)
         .where(eq(users.id, id))
         .for('no key update');
       return user ? work(tx, user) : undefined;
     });
+  }
+
+  async isActiveAdmin(db: Pick<Database, '$count' | 'select'>, id: string): Promise<boolean> {
+    const total = await db.$count(
+      users,
+      and(
+        eq(users.id, id),
+        isNull(users.deactivatedAt),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(userRoles)
+            .where(and(eq(userRoles.userId, users.id), eq(userRoles.role, 'admin'))),
+        ),
+      ),
+    );
+    return total > 0;
   }
 
   async otherActiveAdmins(tx: Transaction, exceptId: string): Promise<number> {
@@ -157,8 +177,8 @@ export class AdminUserRepository {
     return rows.length > 0;
   }
 
-  async profileRow(tx: Transaction, userId: string): Promise<ProfileRow | undefined> {
-    const [row] = await tx
+  async profileRow(tx: Transaction, userId: string, lock = false): Promise<ProfileRow | undefined> {
+    const query = tx
       .select({
         specialtyId: doctorProfiles.specialtyId,
         council: doctorProfiles.council,
@@ -167,8 +187,8 @@ export class AdminUserRepository {
         registryUf: doctorProfiles.registryUf,
       })
       .from(doctorProfiles)
-      .where(eq(doctorProfiles.userId, userId))
-      .for('no key update');
+      .where(eq(doctorProfiles.userId, userId));
+    const [row] = await (lock ? query.for('no key update') : query);
     return row;
   }
 
@@ -177,10 +197,6 @@ export class AdminUserRepository {
       .insert(doctorProfiles)
       .values({ userId, ...profile })
       .onConflictDoUpdate({ target: doctorProfiles.userId, set: profile });
-  }
-
-  async deleteProfile(tx: Transaction, userId: string) {
-    await tx.delete(doctorProfiles).where(eq(doctorProfiles.userId, userId));
   }
 
   futureBookingCounts(_userId: string, _db: Pick<Database, 'select'> = this.db) {

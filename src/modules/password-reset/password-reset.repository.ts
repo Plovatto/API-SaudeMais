@@ -2,6 +2,7 @@ import { and, eq, gt, gte, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { passwordResetTokens } from '../../database/schema/password-reset-tokens.js';
 import { users } from '../../database/schema/users.js';
+import { recordAudit, type AuditEntry } from '../../lib/audit.js';
 import { applyNewPassword } from '../users/user.repository.js';
 
 const LOCK_NAMESPACE = 727_002;
@@ -19,6 +20,7 @@ export interface NewResetToken {
   now: Date;
   expiresAt: Date;
   dayStart: Date;
+  audit?: AuditEntry | undefined;
 }
 
 const open = and(isNull(passwordResetTokens.usedAt), isNull(passwordResetTokens.revokedAt));
@@ -29,7 +31,7 @@ export class PasswordResetRepository {
     private readonly limits: ResetLimits,
   ) {}
 
-  issue({ userId, requestedBy, tokenHash, now, expiresAt, dayStart }: NewResetToken): Promise<boolean> {
+  issue({ userId, requestedBy, tokenHash, now, expiresAt, dayStart, audit }: NewResetToken): Promise<boolean> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_NAMESPACE}, 0)`);
       const recentSince = new Date(now.getTime() - this.limits.minIntervalMs);
@@ -57,6 +59,7 @@ export class PasswordResetRepository {
       await tx
         .insert(passwordResetTokens)
         .values({ userId, requestedBy, tokenHash, createdAt: now, expiresAt, sentAt: now });
+      if (audit) await recordAudit(tx, audit);
       return true;
     });
   }

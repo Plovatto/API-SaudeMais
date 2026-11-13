@@ -8,6 +8,7 @@ import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { paginationQuery } from '../../lib/pagination.js';
 import { MINUTE } from '../../lib/time.js';
+import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { CatalogController } from './catalog.controller.js';
 import {
@@ -234,29 +235,24 @@ export interface CatalogRouterDeps {
 export function createCatalogRouter({ controller, requireAuth, requireAdmin }: CatalogRouterDeps): Router {
   const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
   const adminLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
+  const adminOnly = [noStore, requireAuth, requireAdmin];
 
   const router = Router();
   router.get('/api/specialties', readLimit, requireAuth, controller.activeSpecialties);
   router.get('/api/units', readLimit, requireAuth, controller.activeUnits);
   router.get('/api/exam-types', readLimit, requireAuth, controller.activeExamTypes);
-  router.get('/api/admin/specialties', adminLimit, requireAuth, requireAdmin, controller.specialtyPage);
-  router.post('/api/admin/specialties', adminLimit, requireAuth, requireAdmin, controller.createSpecialty);
-  router.patch('/api/admin/specialties/:id', adminLimit, requireAuth, requireAdmin, controller.updateSpecialty);
-  router.get('/api/admin/units', adminLimit, requireAuth, requireAdmin, controller.unitPage);
-  router.post('/api/admin/units', adminLimit, requireAuth, requireAdmin, controller.createUnit);
-  router.patch('/api/admin/units/:id', adminLimit, requireAuth, requireAdmin, controller.updateUnit);
-  router.get('/api/admin/exam-types', adminLimit, requireAuth, requireAdmin, controller.examTypePage);
-  router.post('/api/admin/exam-types', adminLimit, requireAuth, requireAdmin, controller.createExamType);
-  router.patch('/api/admin/exam-types/:id', adminLimit, requireAuth, requireAdmin, controller.updateExamType);
-  router.get('/api/admin/units/:id/exam-offers', adminLimit, requireAuth, requireAdmin, controller.offers);
-  router.put(
-    '/api/admin/units/:id/exam-offers/:examTypeId',
-    adminLimit,
-    requireAuth,
-    requireAdmin,
-    controller.saveOffer,
-  );
-  router.get('/api/admin/policy', adminLimit, requireAuth, requireAdmin, controller.policy);
-  router.put('/api/admin/policy', adminLimit, requireAuth, requireAdmin, controller.savePolicy);
+  router.get('/api/admin/specialties', adminLimit, ...adminOnly, controller.specialtyPage);
+  router.post('/api/admin/specialties', adminLimit, ...adminOnly, controller.createSpecialty);
+  router.patch('/api/admin/specialties/:id', adminLimit, ...adminOnly, controller.updateSpecialty);
+  router.get('/api/admin/units', adminLimit, ...adminOnly, controller.unitPage);
+  router.post('/api/admin/units', adminLimit, ...adminOnly, controller.createUnit);
+  router.patch('/api/admin/units/:id', adminLimit, ...adminOnly, controller.updateUnit);
+  router.get('/api/admin/exam-types', adminLimit, ...adminOnly, controller.examTypePage);
+  router.post('/api/admin/exam-types', adminLimit, ...adminOnly, controller.createExamType);
+  router.patch('/api/admin/exam-types/:id', adminLimit, ...adminOnly, controller.updateExamType);
+  router.get('/api/admin/units/:id/exam-offers', adminLimit, ...adminOnly, controller.offers);
+  router.put('/api/admin/units/:id/exam-offers/:examTypeId', adminLimit, ...adminOnly, controller.saveOffer);
+  router.get('/api/admin/policy', adminLimit, ...adminOnly, controller.policy);
+  router.put('/api/admin/policy', adminLimit, ...adminOnly, controller.savePolicy);
   return router;
 }

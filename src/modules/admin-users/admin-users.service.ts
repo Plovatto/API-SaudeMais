@@ -1,9 +1,10 @@
 import type { Transaction } from '../../database/pg-client.js';
 import { AppError, conflictError, type FieldConflict } from '../../lib/app-error.js';
+import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
+import { definedFields } from '../../lib/defined.js';
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
-import { isUniqueViolation } from '../../lib/pg-errors.js';
-import { protectedAccount } from '../../middleware/auth.js';
+import { forbidden, protectedAccount } from '../../middleware/auth.js';
 import type { PasswordResetService } from '../password-reset/password-reset.service.js';
 import type { UpdateProfileInput } from '../users/user.model.js';
 import { adminConflicts, doctorProfileNotFound, unavailable, userNotFound } from './admin-users.messages.js';
@@ -53,7 +54,7 @@ export class AdminUserService {
   update(actor: Actor, id: string, { fullName, phone }: UpdateProfileInput) {
     return this.change(actor, id, 'user.updated', async (tx, user) => {
       editable(user);
-      const changes = { ...(fullName !== undefined && { fullName }), ...(phone !== undefined && { phone }) };
+      const changes = definedFields({ fullName, phone });
       await this.repository.updateUser(tx, id, changes);
       return { fields: Object.keys(changes) };
     });
@@ -90,8 +91,10 @@ export class AdminUserService {
     const user = await this.detail(id);
     if (user.isProtected) throw protectedAccount();
     if (user.deactivatedAt) throw conflictError(adminConflicts.inactive);
-    if (!(await this.passwordReset.sendLink(user, actor.actorId))) throw conflictError(adminConflicts.resetNotSent);
-    await this.repository.audit({ ...actor, action: 'user.password_reset_sent', entityType: 'user', entityId: id });
+    if (!(await this.repository.isActiveAdmin(this.repository.reader, actor.actorId))) throw forbidden();
+    const audit = { ...actor, action: 'user.password_reset_sent', entityType: 'user', entityId: id };
+    if (!(await this.passwordReset.sendLink(user, actor.actorId, audit)))
+      throw conflictError(adminConflicts.resetNotSent);
   }
 
   grantAdmin(actor: Actor, id: string) {
@@ -123,7 +126,7 @@ export class AdminUserService {
   createDoctorProfile(actor: Actor, id: string, input: DoctorProfileInput) {
     return this.change(actor, id, 'doctor_profile.created', async (tx, user) => {
       active(editable(user));
-      if (user.hasDoctorProfile) throw conflictError(adminConflicts.profileExists);
+      if (user.roles.includes('doctor')) throw conflictError(adminConflicts.profileExists);
       const council = await this.availableCouncil(tx, input.specialtyId);
       await this.ensureUnitAvailable(tx, input.unitId);
       await this.repository.saveProfile(tx, id, { ...input, council });
@@ -135,29 +138,32 @@ export class AdminUserService {
   updateDoctorProfile(actor: Actor, id: string, input: UpdateDoctorProfileInput) {
     return this.change(actor, id, 'doctor_profile.updated', async (tx, user) => {
       editable(user);
-      const current = await this.repository.profileRow(tx, id);
+      if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
+      const changes = definedFields(input);
+      const council = changes.specialtyId ? await this.availableCouncil(tx, changes.specialtyId) : undefined;
+      if (changes.unitId) await this.ensureUnitAvailable(tx, changes.unitId);
+      const current = await this.repository.profileRow(tx, id, true);
       if (!current) throw notFound(doctorProfileNotFound);
-      const next = {
-        ...current,
-        ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
-      };
+      const next = { ...current, ...changes };
       const moves = next.specialtyId !== current.specialtyId || next.unitId !== current.unitId;
       if (moves && (await this.hasFutureAppointments(tx, id))) throw conflictError(adminConflicts.futureAppointments);
-      const council =
-        next.specialtyId === current.specialtyId ? current.council : await this.availableCouncil(tx, next.specialtyId);
-      if (next.unitId !== current.unitId) await this.ensureUnitAvailable(tx, next.unitId);
       const { specialtyId, unitId, registryNumber, registryUf } = next;
-      await this.repository.saveProfile(tx, id, { specialtyId, unitId, registryNumber, registryUf, council });
-      return { fields: Object.keys(input).filter((key) => input[key as keyof UpdateDoctorProfileInput] !== undefined) };
+      await this.repository.saveProfile(tx, id, {
+        specialtyId,
+        unitId,
+        registryNumber,
+        registryUf,
+        council: council ?? current.council,
+      });
+      return { fields: Object.keys(changes) };
     });
   }
 
   deleteDoctorProfile(actor: Actor, id: string) {
     return this.change(actor, id, 'doctor_profile.deleted', async (tx, user) => {
       editable(user);
-      if (!user.hasDoctorProfile) throw notFound(doctorProfileNotFound);
+      if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
       await this.repository.cancelFutureBookings(tx, id, 'doctor');
-      await this.repository.deleteProfile(tx, id);
       await this.repository.revokeRole(tx, id, 'doctor');
       return {};
     });
@@ -170,29 +176,23 @@ export class AdminUserService {
     work: (tx: Transaction, user: LockedUser) => Promise<Record<string, unknown> | undefined>,
     adminSet = false,
   ): Promise<AdminUserDetail> {
-    const applied = await this.translated(() =>
-      this.repository.mutate(
-        id,
-        async (tx, user) => {
-          const metadata = await work(tx, user);
-          if (metadata)
-            await this.repository.audit({ ...actor, action, entityType: 'user', entityId: id, metadata }, tx);
-          return true;
-        },
-        adminSet,
-      ),
+    const applied = await withConstraintConflicts(
+      () =>
+        this.repository.mutate(
+          id,
+          async (tx, user) => {
+            if (!(await this.repository.isActiveAdmin(tx, actor.actorId))) throw forbidden();
+            const metadata = await work(tx, user);
+            if (metadata)
+              await this.repository.audit({ ...actor, action, entityType: 'user', entityId: id, metadata }, tx);
+            return true;
+          },
+          adminSet,
+        ),
+      { doctor_profiles_registry_key: adminConflicts.registryTaken },
     );
     if (!applied) throw notFound();
     return this.detail(id);
-  }
-
-  private async translated<T>(write: () => Promise<T>): Promise<T> {
-    try {
-      return await write();
-    } catch (error) {
-      if (isUniqueViolation(error, 'doctor_profiles_registry_key')) throw conflictError(adminConflicts.registryTaken);
-      throw error;
-    }
   }
 
   private async ensureAnotherAdmin(tx: Transaction, user: LockedUser): Promise<void> {
