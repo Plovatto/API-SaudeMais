@@ -2,8 +2,10 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { runMigrations } from './database/migrate.js';
-import { createPool } from './database/pg-client.js';
+import { createDb, createPool } from './database/pg-client.js';
+import { systemClock } from './lib/clock.js';
 import { createShutdown } from './lib/graceful-shutdown.js';
+import { createModules } from './modules/index.js';
 
 const SHUTDOWN_DEADLINE_MS = 20_000;
 
@@ -49,7 +51,17 @@ try {
   process.exit(1);
 }
 
-const app = createApp();
+const { routers } = createModules({
+  db: createDb(pool),
+  clock: systemClock,
+  policy: {
+    idleHours: env.SESSION_TTL_HOURS,
+    maxDays: env.SESSION_REMEMBER_DAYS,
+    maxSessionsPerUser: 10,
+  },
+});
+
+const app = createApp({ routers });
 
 const server = app.listen(env.PORT, () => {
   logger.info(`Server running on port ${env.PORT}`);
