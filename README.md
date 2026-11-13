@@ -18,6 +18,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Respostas de erro padronizadas no formato `{ message, code, fields? }`
 - Cabeçalhos de segurança com Helmet e CORS restrito à origem do front
 - Logging estruturado sem query string, cabeçalhos ou corpo das requisições, e com dados sensíveis ocultados
+- Documentação interativa (Swagger UI) gerada a partir dos schemas Zod
 - Testes automatizados com Vitest, em PostgreSQL em memória e em PostgreSQL real
 
 ## Tecnologias
@@ -27,6 +28,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - [Express](https://expressjs.com/)
 - [PostgreSQL](https://www.postgresql.org/) com [Drizzle ORM](https://orm.drizzle.team/)
 - [Zod](https://zod.dev/) - validação de requisições e variáveis de ambiente
+- [zod-to-openapi](https://github.com/asteasolutions/zod-to-openapi) + [Swagger UI](https://github.com/scottie1984/swagger-ui-express) - documentação da API em OpenAPI 3.1
 - [Helmet](https://helmetjs.github.io/) e [cors](https://github.com/expressjs/cors) - segurança HTTP
 - [Pino](https://getpino.io/) - logging estruturado
 - [Vitest](https://vitest.dev/), [Supertest](https://github.com/ladjs/supertest) e [PGlite](https://pglite.dev/) - testes automatizados
@@ -131,11 +133,23 @@ npx drizzle-kit generate --custom --name=nome_da_migration
 
 Os testes de `npm test` usam um PostgreSQL em memória (PGlite) com as mesmas migrations. O que depende de travas e concorrência reais fica em `test-pg/` e roda com `npm run test:pg`, apontando `TEST_DATABASE_URL` para um banco descartável: a suíte apaga os schemas `public` e `drizzle` desse banco.
 
+## Documentação da API
+
+A documentação é gerada a partir do código e servida pela própria API:
+
+```text
+http://localhost:3001/docs
+```
+
+O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/openapi.json`.
+
 ## Rotas
 
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/health` | Verifica se o servidor está no ar |
+| GET | `/docs` | Documentação interativa |
+| GET | `/docs/openapi.json` | Documento OpenAPI 3.1 |
 
 ## Contribuindo
 

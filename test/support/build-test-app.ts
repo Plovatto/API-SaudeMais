@@ -13,7 +13,7 @@ export function buildTestApp(overrides: Partial<AppConfig> = {}) {
     },
   });
   const logger = createLogger({ NODE_ENV: 'test', LOG_LEVEL: 'info' }, destination);
-  const config: AppConfig = { CORS_ORIGIN: TEST_CORS_ORIGIN, TRUST_PROXY_HOPS: 0, ...overrides };
+  const config: AppConfig = { NODE_ENV: 'test', CORS_ORIGIN: TEST_CORS_ORIGIN, TRUST_PROXY_HOPS: 0, ...overrides };
   const app = createApp({ config, logger });
 
   return { app, logLines };
