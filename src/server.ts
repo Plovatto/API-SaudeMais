@@ -47,6 +47,7 @@ process.on('unhandledRejection', (err) => {
 
 const { users, routers } = createModules({
   mail,
+  appUrl: env.APP_PUBLIC_URL,
   db: createDb(pool),
   clock: systemClock,
   policy: {

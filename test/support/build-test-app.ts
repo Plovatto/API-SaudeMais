@@ -38,6 +38,7 @@ export function buildTestApp(overrides: Partial<AppConfig> = {}, deps: Partial<M
   const modules = createModules({
     db: noDatabase,
     mail,
+    appUrl: 'https://app.saudemais.test',
     clock: systemClock,
     policy: { idleHours: 12, maxDays: 7, maxSessionsPerUser: 10 },
     ...deps,

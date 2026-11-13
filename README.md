@@ -98,6 +98,7 @@ SESSION_TTL_HOURS=12
 SESSION_REMEMBER_DAYS=7
 ADMIN_EMAIL=
 ADMIN_PASSWORD=
+APP_PUBLIC_URL=http://localhost:5173
 MAIL_DRIVER=console
 SMTP_USER=
 SMTP_PASS=
@@ -115,6 +116,8 @@ MAIL_FROM=
 `SESSION_TTL_HOURS` é quanto tempo uma sessão sem "Lembrar de mim" dura sem uso (padrão 12). `SESSION_REMEMBER_DAYS` é a duração de uma sessão com "Lembrar de mim" e também o teto de qualquer sessão (padrão 7).
 
 `ADMIN_EMAIL` e `ADMIN_PASSWORD` (mínimo de 12 caracteres) criam o primeiro administrador ao iniciar a API; defina as duas ou nenhuma. Se a conta já existir, ela só ganha o perfil de administrador quando a senha dela for igual a `ADMIN_PASSWORD`; caso contrário, a API não inicia, para que um cadastro feito antes com esse e-mail não vire administrador.
+
+`APP_PUBLIC_URL` é o endereço do front com o caminho (em produção, `https://plovatto.github.io/SaudeMais`), usado nos links dos e-mails; é obrigatória em produção.
 
 `MAIL_DRIVER` escolhe como os e-mails saem: `console` (padrão, só fora de produção) escreve no log; `smtp` envia pelo servidor configurado em `SMTP_HOST` (padrão `smtp.gmail.com`), `SMTP_PORT` (padrão 465), `SMTP_USER`, `SMTP_PASS` (senha de app do Gmail) e `MAIL_FROM`. Em produção, `smtp` é obrigatório. Os envios acontecem fora da requisição, e uma falha fica só no log.
 
@@ -181,6 +184,8 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | POST | `/api/users/register` | Cria uma conta de paciente |
 | POST | `/api/users/login` | Entra e recebe o token de sessão |
 | POST | `/api/users/logout` | Encerra a sessão atual |
+| POST | `/api/password-reset/request` | Envia o link para redefinir a senha |
+| POST | `/api/password-reset/confirm` | Cria uma nova senha com o link |
 | GET | `/api/me` | Dados da própria conta |
 | PATCH | `/api/me` | Altera nome ou telefone |
 | POST | `/api/me/password` | Troca a senha e encerra as outras sessões |

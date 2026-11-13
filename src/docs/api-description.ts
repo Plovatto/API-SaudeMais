@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout e o perfil da própria conta, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha e o perfil da própria conta, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
 
 ## Erros
 
@@ -46,6 +46,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`BAD_REQUEST\` | 400 ou 415 | Requisição malformada, como parâmetro de URL inválido, charset ou codificação não suportados |
 | \`UNAUTHENTICATED\` | 401 | Rota exige login e o token falta, é inválido ou expirou |
 | \`FORBIDDEN\` | 403 | A conta não tem o perfil exigido pela rota |
+| \`INVALID_RESET_TOKEN\` | 400 | Link de redefinição de senha inválido, usado ou vencido |
 | \`INVALID_CURRENT_PASSWORD\` | 422 | A senha atual informada na troca de senha está errada |
 | \`PROTECTED_ACCOUNT\` | 403 | Contas de demonstração não podem ser alteradas |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |

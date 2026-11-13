@@ -29,7 +29,7 @@ export const personName = z
   .refine((value) => [...value].length >= 2 && [...value].length <= 120, 'O nome precisa ter entre 2 e 120 caracteres.')
   .openapi({ description: 'Nome completo, de 2 a 120 caracteres.', example: 'Ana Maria Silva' });
 
-const email = z
+export const email = z
   .string()
   .transform(normalizeEmail)
   .pipe(z.email({ error: 'Informe um e-mail válido.' }).max(254, 'O e-mail pode ter até 254 caracteres.'))
@@ -52,15 +52,18 @@ const phone = z
   .optional()
   .openapi(phoneDescription);
 
-const password = z
+export const password = z
   .string()
   .min(8, 'A senha precisa ter pelo menos 8 caracteres.')
   .max(128, 'A senha pode ter até 128 caracteres.')
   .openapi({ example: 'senha-segura-123' });
 
-const confirmationMatches = (data: { password: string; passwordConfirmation: string }) =>
-  data.password === data.passwordConfirmation;
-const confirmationIssue = { path: ['passwordConfirmation'], message: 'As senhas não conferem.' };
+type Confirmation = { password: string; passwordConfirmation: string };
+
+export const passwordConfirmationMatches: [(data: Confirmation) => boolean, { path: string[]; message: string }] = [
+  (data) => data.password === data.passwordConfirmation,
+  { path: ['passwordConfirmation'], message: 'As senhas não conferem.' },
+];
 
 export const registerSchema = registry.register(
   'RegisterRequest',
@@ -79,7 +82,7 @@ export const registerSchema = registry.register(
           description: 'Aceite dos termos de uso e da política de privacidade em vigor.',
         }),
     })
-    .refine(confirmationMatches, confirmationIssue),
+    .refine(...passwordConfirmationMatches),
 );
 
 export const updateProfileSchema = registry.register(
@@ -106,7 +109,7 @@ export const changePasswordSchema = registry.register(
       password,
       passwordConfirmation: z.string().openapi({ example: 'nova-senha-segura-456' }),
     })
-    .refine(confirmationMatches, confirmationIssue),
+    .refine(...passwordConfirmationMatches),
 );
 
 export const sessionSchema = registry.register(

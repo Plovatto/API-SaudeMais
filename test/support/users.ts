@@ -9,8 +9,8 @@ export const HOUR = 3_600_000;
 export async function buildUsersApp() {
   const db = await createTestDb();
   const clock = fixedClock(START);
-  const { app, modules } = buildTestApp({}, { db, clock });
-  return { app, db, clock, modules, auth: modules.users.service };
+  const { app, modules, mailer, mail } = buildTestApp({}, { db, clock });
+  return { app, db, clock, modules, mailer, mail, auth: modules.users.service };
 }
 
 export function registration(overrides: Record<string, unknown> = {}) {

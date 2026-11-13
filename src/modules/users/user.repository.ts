@@ -13,6 +13,27 @@ const publicUserColumns = {
   >`array(select ${userRoles.role} from ${userRoles} where ${userRoles.userId} = ${users.id} order by ${userRoles.role})`,
 };
 
+type Writer = Pick<Database, 'update' | 'delete'>;
+
+export async function applyNewPassword(
+  db: Writer,
+  userId: string,
+  passwordHash: string,
+  keepSessionId: string | null,
+  now: Date,
+): Promise<void> {
+  await db.update(users).set({ passwordHash, passwordChangedAt: now }).where(eq(users.id, userId));
+  if (keepSessionId) {
+    await db
+      .update(sessions)
+      .set({ createdAt: now })
+      .where(and(eq(sessions.id, keepSessionId), gt(sessions.expiresAt, now)));
+  }
+  await db
+    .delete(sessions)
+    .where(and(eq(sessions.userId, userId), keepSessionId ? ne(sessions.id, keepSessionId) : undefined));
+}
+
 export interface NewUser {
   fullName: string;
   email: string;
@@ -110,14 +131,7 @@ export class UserRepository {
   }
 
   replacePassword(id: string, passwordHash: string, keepSessionId: string, now: Date): Promise<void> {
-    return this.db.transaction(async (tx) => {
-      await tx.update(users).set({ passwordHash, passwordChangedAt: now }).where(eq(users.id, id));
-      await tx
-        .update(sessions)
-        .set({ createdAt: now })
-        .where(and(eq(sessions.id, keepSessionId), gt(sessions.expiresAt, now)));
-      await tx.delete(sessions).where(and(eq(sessions.userId, id), ne(sessions.id, keepSessionId)));
-    });
+    return this.db.transaction((tx) => applyNewPassword(tx, id, passwordHash, keepSessionId, now));
   }
 
   async listActiveSessions(userId: string, now: Date) {
