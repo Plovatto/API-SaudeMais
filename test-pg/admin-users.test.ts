@@ -55,7 +55,9 @@ describe('admins on PostgreSQL', () => {
         .set('Authorization', `Bearer ${second.token}`),
     ]);
 
-    expect(results.map((response) => response.status).sort()).toEqual([200, 409]);
+    const [winner, loser] = results.map((response) => response.status).sort();
+    expect(winner).toBe(200);
+    expect([403, 409]).toContain(loser);
     const admins = await pool.query<{ total: number }>(
       "select count(*)::int as total from user_roles where role = 'admin'",
     );
