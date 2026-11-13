@@ -7,6 +7,8 @@ import { pinoHttp } from 'pino-http';
 import { env, type Env } from './config/env.js';
 import { logger as defaultLogger } from './config/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
+import { createDocsRouter } from './routes/docs.js';
+import { createHealthRouter } from './routes/health.js';
 
 export type AppConfig = Pick<Env, 'CORS_ORIGIN' | 'TRUST_PROXY_HOPS'>;
 
@@ -48,9 +50,8 @@ export function createApp({ config = env, logger = defaultLogger }: AppOptions =
   app.use(cors({ origin: config.CORS_ORIGIN, maxAge: 600 }));
   app.use(express.json({ limit: '100kb' }));
 
-  app.get('/health', (_req, res) => {
-    res.status(200).json({ status: 'ok' });
-  });
+  app.use(createHealthRouter());
+  app.use(createDocsRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);
