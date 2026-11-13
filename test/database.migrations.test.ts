@@ -42,6 +42,14 @@ describe('database migrations', () => {
     expect(result.rows.filter((row) => !row.covered)).toEqual([]);
   });
 
+  it('removes accents for name search', async () => {
+    const db = await createTestDb();
+
+    const result = await db.execute<{ plain: string }>(sql`select unaccent('Conceição') as plain`);
+
+    expect(result.rows[0]?.plain).toBe('Conceicao');
+  });
+
   it('compares citext values without case sensitivity', async () => {
     const db = await createTestDb();
 

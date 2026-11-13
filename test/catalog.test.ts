@@ -286,37 +286,116 @@ describe('booking policy', () => {
   });
 });
 
+const idOf = (response: { body: unknown }) => (response.body as { id: string }).id;
+
+describe('text limits', () => {
+  it.each([
+    ['a single emoji as the name', { name: '😀', council: 'CRM' }],
+    ['an astral-plane character as the name', { name: '𠀀', council: 'CRM' }],
+    ['a control character in the name', { name: 'Cardio\u0000logia', council: 'CRM' }],
+  ])('refuses %s with a 400, not a database error', async (_case, body) => {
+    const response = await adminCall('post', '/api/admin/specialties', body);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR', fields: { name: expect.any(String) as unknown } });
+  });
+
+  it('counts the address by character, not by code unit', async () => {
+    const response = await adminCall('post', '/api/admin/units', unitBody('Unidade Emoji', { address: '😀😀a' }));
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ fields: { address: expect.any(String) as unknown } });
+  });
+});
+
+describe('conflicts on change', () => {
+  it('refuses renaming a specialty to a name already used', async () => {
+    await adminCall('post', '/api/admin/specialties', { name: 'Neurologia', council: 'CRM' }).expect(201);
+    const other = await adminCall('post', '/api/admin/specialties', { name: 'Geriatria', council: 'CRM' }).expect(201);
+
+    const response = await adminCall('patch', `/api/admin/specialties/${idOf(other)}`, { name: 'NEUROLOGIA' });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ code: 'NAME_TAKEN', fields: { name: expect.any(String) as unknown } });
+  });
+
+  it('refuses changing an exam code to one already used', async () => {
+    await adminCall('post', '/api/admin/exam-types', examBody('glicemia_jejum', 'Glicemia em jejum')).expect(201);
+    const other = await adminCall('post', '/api/admin/exam-types', examBody('tsh', 'TSH')).expect(201);
+
+    const response = await adminCall('patch', `/api/admin/exam-types/${idOf(other)}`, { code: 'glicemia_jejum' });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ code: 'CODE_TAKEN' });
+  });
+
+  it('clears the preparation notes when null is sent', async () => {
+    const exam = await adminCall(
+      'post',
+      '/api/admin/exam-types',
+      examBody('colesterol_total', 'Colesterol total', { preparationNotes: 'Jejum de 12 horas.' }),
+    ).expect(201);
+
+    const response = await adminCall('patch', `/api/admin/exam-types/${idOf(exam)}`, { preparationNotes: null });
+
+    expect(response.body).toMatchObject({ preparationNotes: null });
+  });
+});
+
+describe('inactive exam types', () => {
+  it('cannot be offered and do not list the units that offered them', async () => {
+    const unit = await adminCall('post', '/api/admin/units', unitBody('Unidade Ferritina')).expect(201);
+    const exam = await adminCall('post', '/api/admin/exam-types', examBody('ferritina', 'Ferritina')).expect(201);
+    const offerPath = `/api/admin/units/${idOf(unit)}/exam-offers/${idOf(exam)}`;
+    await adminCall('put', offerPath, { capacityPerSlot: 2 }).expect(200);
+    await adminCall('patch', `/api/admin/exam-types/${idOf(exam)}`, { isActive: false }).expect(200);
+
+    const listed = await request(context.app)
+      .get(`/api/units?examTypeId=${idOf(exam)}`)
+      .set(as(context.patient));
+    const reoffered = await adminCall('put', offerPath, { capacityPerSlot: 3 });
+    const keptInactive = await adminCall('put', offerPath, { capacityPerSlot: 3, isActive: false });
+
+    expect(listed.body).toEqual([]);
+    expect(reoffered.status).toBe(409);
+    expect(reoffered.body).toMatchObject({ code: 'EXAM_TYPE_INACTIVE' });
+    expect(keptInactive.status).toBe(200);
+  });
+});
+
 describe('pagination and audit', () => {
   it('limits the page size', async () => {
+    for (const name of ['Unidade Página A', 'Unidade Página B', 'Unidade Página C']) {
+      await adminCall('post', '/api/admin/units', unitBody(name)).expect(201);
+    }
+
     expect((await adminCall('get', '/api/admin/units?pageSize=51')).status).toBe(400);
     const page = await adminCall('get', '/api/admin/units?page=1&pageSize=2');
     expect(page.body).toMatchObject({ page: 1, pageSize: 2, total: expect.any(Number) as unknown });
-    expect((page.body as { items: unknown[] }).items).toHaveLength(2);
+    expect((page.body as { items: unknown[]; total: number }).items).toHaveLength(2);
+    expect((page.body as { total: number }).total).toBeGreaterThanOrEqual(3);
   });
 
   it('records who changed each record, without personal data', async () => {
-    const rows = await context.db.execute<{
-      action: string;
-      actor_type: string;
-      has_actor: boolean;
-      metadata: object;
-    }>(sql`
-      select action, actor_type, actor_id is not null as has_actor, metadata from audit_logs order by created_at
+    const specialty = await adminCall('post', '/api/admin/specialties', { name: 'Auditoria', council: 'CRM' }).expect(
+      201,
+    );
+    await adminCall('patch', `/api/admin/specialties/${idOf(specialty)}`, { isActive: false }).expect(200);
+    const unit = await adminCall('post', '/api/admin/units', unitBody('Unidade Auditoria')).expect(201);
+    await adminCall('patch', `/api/admin/units/${idOf(unit)}`, { address: 'Avenida Paulista, 1000' }).expect(200);
+
+    const rows = await context.db.execute<{ action: string; actor_type: string; has_actor: boolean }>(sql`
+      select action, actor_type, actor_id is not null as has_actor, metadata from audit_logs
+      where entity_id in (${idOf(specialty)}, ${idOf(unit)}) order by created_at
     `);
 
-    const actions = rows.rows.map((row) => row.action);
-    expect(actions).toEqual(
-      expect.arrayContaining([
-        'specialty.created',
-        'specialty.deactivated',
-        'unit.created',
-        'unit.updated',
-        'exam_type.created',
-        'unit_exam_offer.saved',
-        'policy.updated',
-      ]),
-    );
+    expect(rows.rows.map((row) => row.action)).toEqual([
+      'specialty.created',
+      'specialty.deactivated',
+      'unit.created',
+      'unit.updated',
+    ]);
     expect(rows.rows.every((row) => row.actor_type === 'user' && row.has_actor)).toBe(true);
-    expect(JSON.stringify(rows.rows)).not.toContain('Rua das Flores');
+    expect(JSON.stringify(rows.rows)).not.toContain('Paulista');
   });
 });
