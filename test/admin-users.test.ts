@@ -124,6 +124,7 @@ describe('GET /api/admin/users', () => {
     const response = await call(context, context.admin.token, 'get', '/api/admin/users');
 
     expect(JSON.stringify(response.body)).not.toMatch(/password|scrypt/i);
+    expect(response.headers['cache-control']).toBe('no-store');
   });
 });
 
@@ -202,6 +203,23 @@ describe('admins (RN-06)', () => {
     const response = await call(context, context.admin.token, 'post', `/api/admin/users/${id}/roles/doctor`);
 
     expect(response.status).toBe(400);
+  });
+});
+
+describe('acting admin', () => {
+  it('refuses a change from someone who is no longer an active admin', async () => {
+    const context = await withAdmin();
+    const targetId = await register(context);
+    const formerAdminId = await register(context, { email: 'ex.admin@email.com' });
+
+    await expect(
+      context.modules.adminUsers.service.update({ actorId: formerAdminId, ip: null }, targetId, {
+        fullName: 'Outro Nome',
+      }),
+    ).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
+    await expect(
+      context.modules.adminUsers.service.sendPasswordReset({ actorId: formerAdminId, ip: null }, targetId),
+    ).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
   });
 });
 
@@ -302,6 +320,34 @@ describe('doctor profile', () => {
     expect(updated.body).toMatchObject({ doctorProfile: { registryNumber: '654321' } });
     expect(removed.body).toMatchObject({ roles: ['patient'], doctorProfile: null });
     expect((await call(context, context.admin.token, 'delete', path)).status).toBe(404);
+    expect((await call(context, context.admin.token, 'patch', path, { registryUf: 'RJ' })).status).toBe(404);
+  });
+
+  it('keeps the profile of a removed doctor for history and brings it back with the role', async () => {
+    const context = await withAdmin();
+    const id = await register(context);
+    const otherId = await register(context, { email: 'bruno@email.com' });
+    const { specialtyId, unitId } = await catalog(context, context.admin.token);
+    const profile = { specialtyId, unitId, registryNumber: '123456', registryUf: 'SP' };
+    const path = `/api/admin/users/${id}/doctor-profile`;
+    await call(context, context.admin.token, 'post', path, profile).expect(201);
+    await call(context, context.admin.token, 'delete', path).expect(200);
+
+    const stillReserved = await call(
+      context,
+      context.admin.token,
+      'post',
+      `/api/admin/users/${otherId}/doctor-profile`,
+      profile,
+    );
+    const restored = await call(context, context.admin.token, 'post', path, { ...profile, registryUf: 'RJ' });
+    const rows = await context.db.execute<{ total: number }>(sql`select count(*)::int as total from doctor_profiles`);
+
+    expect(stillReserved.status).toBe(409);
+    expect(stillReserved.body).toMatchObject({ code: 'REGISTRY_TAKEN' });
+    expect(restored.status).toBe(201);
+    expect(restored.body).toMatchObject({ roles: ['doctor', 'patient'], doctorProfile: { registryUf: 'RJ' } });
+    expect(rows.rows[0]?.total).toBe(1);
   });
 
   it('refuses changing the council of a specialty that has doctors', async () => {
