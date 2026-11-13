@@ -1,12 +1,11 @@
-import type { Request, RequestHandler } from 'express';
-import { clientIp } from '../../lib/client-ip.js';
+import type { RequestHandler } from 'express';
+import { idParams } from '../../lib/params.js';
 import { paginationQuery } from '../../lib/pagination.js';
-import { authOf } from '../../middleware/auth.js';
+import { actorOf } from '../../middleware/auth.js';
 import {
   createExamTypeSchema,
   createSpecialtySchema,
   createUnitSchema,
-  idParams,
   offerParams,
   policyInputSchema,
   saveOfferSchema,
@@ -15,10 +14,7 @@ import {
   updateSpecialtySchema,
   updateUnitSchema,
 } from './catalog.model.js';
-import type { Actor } from './catalog.repository.js';
 import type { CatalogService } from './catalog.service.js';
-
-const actorOf = (req: Request): Actor => ({ actorId: authOf(req).user.id, ip: clientIp(req) });
 
 export function createCatalogController(service: CatalogService) {
   return {

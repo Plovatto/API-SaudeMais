@@ -1,5 +1,6 @@
 import './zod-extend.js';
 import { z } from 'zod';
+import type { FieldConflict } from '../lib/app-error.js';
 import { registry } from './registry.js';
 
 export const errorResponseSchema = registry.register(
@@ -78,4 +79,18 @@ export function jsonResponse(description: string, schema: z.ZodType) {
 
 export function jsonBody(schema: z.ZodType) {
   return { content: { 'application/json': { schema } } };
+}
+
+export function conflictResponse(...conflicts: [FieldConflict, ...FieldConflict[]]) {
+  const [example] = conflicts;
+  const codes = [...new Set(conflicts.map(({ code }) => `\`${code}\``))].join(', ');
+  return errorResponse(`Conflito com o estado atual (${codes}).`, {
+    message: example.message,
+    code: example.code,
+    fields: { [example.field]: example.message },
+  });
+}
+
+export function notFoundResponse(message: string) {
+  return errorResponse('Registro inexistente (`NOT_FOUND`).', { message, code: 'NOT_FOUND' });
 }

@@ -1,8 +1,8 @@
 import { and, asc, eq, exists, inArray } from 'drizzle-orm';
 import type { AnyPgColumn, PgSelect, PgTable } from 'drizzle-orm/pg-core';
-import type { Database } from '../../database/pg-client.js';
+import type { Database, Transaction } from '../../database/pg-client.js';
 import { examTypes, settings, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
-import { recordAudit, type AuditEntry } from '../../lib/audit.js';
+import { recordAudit, type Actor } from '../../lib/audit.js';
 import { offsetOf, type Page, type Pagination } from '../../lib/pagination.js';
 import type {
   CreateExamTypeInput,
@@ -21,7 +21,7 @@ import type {
 } from './catalog.model.js';
 import type { CatalogEntity } from './catalog.messages.js';
 
-export type Actor = Omit<AuditEntry, 'action' | 'entityType' | 'entityId' | 'metadata'>;
+export type { Actor };
 export type ExamTypeStatus = 'missing' | 'inactive' | 'active';
 
 export class InUseError extends Error {
@@ -30,8 +30,6 @@ export class InUseError extends Error {
     this.name = 'InUseError';
   }
 }
-
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 const specialtyColumns = {
   id: specialties.id,

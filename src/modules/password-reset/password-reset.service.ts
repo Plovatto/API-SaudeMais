@@ -1,3 +1,4 @@
+import type { AuditEntry } from '../../lib/audit.js';
 import { AppError } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { MINUTE, startOfDayIn } from '../../lib/time.js';
@@ -24,17 +25,29 @@ export class PasswordResetService {
   async request({ email }: ResetRequestInput): Promise<void> {
     const user = await this.users.findLoginCandidate(email);
     if (!user || user.isProtected || user.deactivatedAt) return;
+    await this.sendLink(user, null);
+  }
+
+  async sendLink(
+    user: { id: string; email: string },
+    requestedBy: string | null,
+    audit?: AuditEntry,
+  ): Promise<boolean> {
     const now = this.clock.now();
     const { token, tokenHash } = createSessionToken();
     const issued = await this.resets.issue({
       userId: user.id,
+      requestedBy,
       tokenHash,
       now,
       expiresAt: new Date(now.getTime() + RESET_TOKEN_MINUTES * MINUTE),
       dayStart: startOfDayIn(TIME_ZONE, now),
+      audit,
     });
-    if (issued)
+    if (issued) {
       this.mail.enqueue(resetEmail(user.email, `${this.appUrl}/redefinir-senha#token=${token}`, RESET_TOKEN_MINUTES));
+    }
+    return issued;
   }
 
   async confirm({ token, password }: ResetConfirmInput): Promise<void> {

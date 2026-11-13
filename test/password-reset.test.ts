@@ -112,6 +112,7 @@ describe('POST /api/password-reset/request', () => {
       results.push(
         await resets.issue({
           userId,
+          requestedBy: null,
           tokenHash: String(index).repeat(64),
           now,
           expiresAt: new Date(now.getTime() + 30 * MINUTE),

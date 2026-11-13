@@ -6,11 +6,9 @@ export const notFoundMessages: Record<CatalogEntity, string> = {
   exam_type: 'Tipo de exame não encontrado.',
 };
 
-export interface Conflict {
-  code: string;
-  field: string;
-  message: string;
-}
+import type { FieldConflict as Conflict } from '../../lib/app-error.js';
+
+export type { Conflict };
 
 export const uniqueConflicts = {
   specialties_name_key: { code: 'NAME_TAKEN', field: 'name', message: 'Já existe uma especialidade com esse nome.' },
@@ -25,6 +23,12 @@ export const examTypeInactive: Conflict = {
   code: 'EXAM_TYPE_INACTIVE',
   field: 'isActive',
   message: 'Este tipo de exame está inativo; ative-o antes de oferecê-lo.',
+};
+
+export const councilInUse: Conflict = {
+  code: 'COUNCIL_IN_USE',
+  field: 'council',
+  message: 'Há médicos nesta especialidade; o conselho não pode ser alterado.',
 };
 
 export const inUse: Conflict = {

@@ -199,6 +199,13 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | GET | `/api/admin/units/{id}/exam-offers` | Exames oferecidos pela unidade (admin) |
 | PUT | `/api/admin/units/{id}/exam-offers/{examTypeId}` | Oferece um exame na unidade (admin) |
 | GET, PUT | `/api/admin/policy` | Política de agendamento (admin) |
+| GET | `/api/admin/users` | Lista e busca usuários (admin) |
+| GET, PATCH | `/api/admin/users/{id}` | Vê e altera nome e telefone (admin) |
+| GET | `/api/admin/users/{id}/deactivation-impact` | Agendamentos afetados por desativar (admin) |
+| POST | `/api/admin/users/{id}/deactivate`, `/reactivate` | Desativa e reativa a conta (admin) |
+| POST | `/api/admin/users/{id}/password-reset` | Envia link de redefinição de senha (admin) |
+| POST, DELETE | `/api/admin/users/{id}/roles/admin` | Concede e remove o perfil de administrador (admin) |
+| POST, PATCH, DELETE | `/api/admin/users/{id}/doctor-profile` | Cria, altera e remove o perfil médico (admin) |
 | GET | `/api/me` | Dados da própria conta |
 | PATCH | `/api/me` | Altera nome ou telefone |
 | POST | `/api/me/password` | Troca a senha e encerra as outras sessões |

@@ -10,6 +10,8 @@ export interface AuditEntry {
   ip: string | null;
 }
 
+export type Actor = Pick<AuditEntry, 'actorId' | 'ip'>;
+
 export async function recordAudit(
   db: Pick<Database, 'insert'>,
   { metadata = {}, ...entry }: AuditEntry,

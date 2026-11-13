@@ -1,4 +1,5 @@
 import '../../docs/zod-extend.js';
+import { uuidParam } from '../../lib/params.js';
 import { z } from 'zod';
 import { examKinds } from '../../database/schema/catalog.js';
 import { registry } from '../../docs/registry.js';
@@ -20,11 +21,7 @@ const nonEmpty = <T extends Record<string, unknown>>(data: T) =>
   Object.values(data).some((value) => value !== undefined);
 const nonEmptyIssue = { message: 'Envie pelo menos um campo para alterar.' };
 
-export const idParams = z.strictObject({ id: z.uuid('Identificador inválido.') });
-export const offerParams = z.strictObject({
-  id: z.uuid('Identificador inválido.'),
-  examTypeId: z.uuid('Identificador inválido.'),
-});
+export const offerParams = z.strictObject({ id: uuidParam, examTypeId: uuidParam });
 
 const specialtyFields = {
   name: catalogName.openapi({ example: 'Cardiologia' }),
