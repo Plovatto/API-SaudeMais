@@ -7,6 +7,7 @@ export const tags = {
     name: 'Contas',
     description: 'Cadastro, login e logout. A sessão é um token opaco enviado em `Authorization: Bearer <token>`.',
   },
+  profile: { name: 'Perfil', description: 'Dados, senha e sessões da própria conta. Exige login.' },
 } as const;
 
 export const tagList = Object.values(tags);

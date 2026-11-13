@@ -5,11 +5,18 @@ import type { AuthContext, UserService } from '../modules/users/user.service.js'
 
 const contexts = new WeakMap<Request, AuthContext>();
 
+export const unauthenticated = () => new AppError(401, 'UNAUTHENTICATED', 'Sua sessão expirou. Entre novamente.');
+
+export const noStore: RequestHandler = (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+};
+
 export function createRequireAuth(service: Pick<UserService, 'authenticate'>): RequestHandler {
   return async (req, _res, next) => {
     const token = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') ?? '')?.[1];
     const context = await service.authenticate(token ?? '');
-    if (!context) throw new AppError(401, 'UNAUTHENTICATED', 'Sua sessão expirou. Entre novamente.');
+    if (!context) throw unauthenticated();
     contexts.set(req, context);
     next();
   };

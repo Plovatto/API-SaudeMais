@@ -1,6 +1,6 @@
 import type { Database } from '../../database/pg-client.js';
 import type { Clock } from '../../lib/clock.js';
-import { createRequireAuth } from '../../middleware/auth.js';
+import { createRequireAuth, createRequireWritable } from '../../middleware/auth.js';
 import { createUserController } from './user.controller.js';
 import { DEMO_ACCOUNTS } from './user.demo.js';
 import { UserRepository } from './user.repository.js';
@@ -28,6 +28,7 @@ export function createUsersModule({ db, clock, policy }: UsersModuleDeps) {
   const router = createUserRouter({
     controller: createUserController(service),
     requireAuth,
+    requireWritable: createRequireWritable(),
   });
   const bootstrap = async (admin: InitialAdmin | undefined) => {
     if (admin) {
