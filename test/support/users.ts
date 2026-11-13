@@ -10,7 +10,7 @@ export async function buildUsersApp() {
   const db = await createTestDb();
   const clock = fixedClock(START);
   const { app, modules } = buildTestApp({}, { db, clock });
-  return { app, db, clock, auth: modules.users.service };
+  return { app, db, clock, modules, auth: modules.users.service };
 }
 
 export function registration(overrides: Record<string, unknown> = {}) {

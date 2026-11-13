@@ -95,6 +95,44 @@ export class UserRepository {
     return candidate;
   }
 
+  async findPublicUser(id: string): Promise<PublicUser | undefined> {
+    const [user] = await this.db.select(publicUserColumns).from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async findPasswordHash(id: string): Promise<string | undefined> {
+    const [user] = await this.db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, id));
+    return user?.passwordHash;
+  }
+
+  async updateProfile(id: string, changes: { fullName?: string; phone?: string | null }): Promise<void> {
+    await this.db.update(users).set(changes).where(eq(users.id, id));
+  }
+
+  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.db.update(users).set({ passwordHash }).where(eq(users.id, id));
+  }
+
+  async listActiveSessions(userId: string, now: Date) {
+    return this.db
+      .select({
+        id: sessions.id,
+        userAgent: sessions.userAgent,
+        createdAt: sessions.createdAt,
+        lastUsedAt: sessions.lastUsedAt,
+        expiresAt: sessions.expiresAt,
+      })
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, now)))
+      .orderBy(sql`${sessions.lastUsedAt} desc`);
+  }
+
+  async deleteSessionsOf(userId: string, exceptId: string | null): Promise<void> {
+    await this.db
+      .delete(sessions)
+      .where(and(eq(sessions.userId, userId), exceptId ? ne(sessions.id, exceptId) : undefined));
+  }
+
   async createSession(session: NewSession): Promise<string> {
     const [created] = await this.db
       .insert(sessions)

@@ -2,7 +2,15 @@ import { AppError } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { DAY, HOUR, MINUTE } from '../../lib/time.js';
-import type { LoginInput, LoginResponse, PublicUser, RegisterInput } from './user.model.js';
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  LoginResponse,
+  PublicUser,
+  RegisterInput,
+  SessionView,
+  UpdateProfileInput,
+} from './user.model.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
 import type { SeedAccount } from './user.demo.js';
 import type { UserRepository } from './user.repository.js';
@@ -129,6 +137,46 @@ export class UserService {
     } catch (error) {
       if (!isUniqueViolation(error, 'users_email_key')) throw error;
     }
+  }
+
+  async profile(userId: string): Promise<PublicUser> {
+    const user = await this.repository.findPublicUser(userId);
+    if (!user) throw new AppError(401, 'UNAUTHENTICATED', 'Sua sessão expirou. Entre novamente.');
+    return user;
+  }
+
+  async updateProfile(userId: string, { fullName, phone }: UpdateProfileInput): Promise<PublicUser> {
+    await this.repository.updateProfile(userId, {
+      ...(fullName !== undefined && { fullName }),
+      ...(phone !== undefined && { phone }),
+    });
+    return this.profile(userId);
+  }
+
+  async changePassword({ sessionId, user }: AuthContext, { currentPassword, password }: ChangePasswordInput) {
+    const stored = await this.repository.findPasswordHash(user.id);
+    if (!stored || !(await verifyPassword(currentPassword, stored))) {
+      const message = 'A senha atual está incorreta.';
+      throw new AppError(422, 'INVALID_CURRENT_PASSWORD', message, { currentPassword: message });
+    }
+    await this.repository.updatePasswordHash(user.id, await hashPassword(password));
+    await this.repository.deleteSessionsOf(user.id, sessionId);
+  }
+
+  async listSessions({ sessionId, user }: AuthContext): Promise<SessionView[]> {
+    const rows = await this.repository.listActiveSessions(user.id, this.clock.now());
+    return rows.map((row) => ({
+      id: row.id,
+      current: row.id === sessionId,
+      userAgent: row.userAgent,
+      createdAt: row.createdAt.toISOString(),
+      lastUsedAt: row.lastUsedAt.toISOString(),
+      expiresAt: row.expiresAt.toISOString(),
+    }));
+  }
+
+  logoutEverywhere({ sessionId, isProtected, user }: AuthContext): Promise<void> {
+    return isProtected ? this.repository.deleteSession(sessionId) : this.repository.deleteSessionsOf(user.id, null);
   }
 
   logout(sessionId: string): Promise<void> {

@@ -16,7 +16,17 @@ import { MINUTE } from '../../lib/time.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { UserController } from './user.controller.js';
 import { isDemoEmail } from './user.demo.js';
-import { loginResponseSchema, loginSchema, normalizeEmail, publicUserSchema, registerSchema } from './user.model.js';
+import { z } from 'zod';
+import {
+  changePasswordSchema,
+  loginResponseSchema,
+  loginSchema,
+  normalizeEmail,
+  publicUserSchema,
+  registerSchema,
+  sessionSchema,
+  updateProfileSchema,
+} from './user.model.js';
 
 function emailOf(req: Request): string {
   const email: unknown = (req.body as { email?: unknown } | undefined)?.email;
@@ -90,12 +100,113 @@ registry.registerPath({
   },
 });
 
+const authenticated = { security: [{ [sessionAuth.name]: [] }] };
+const protectedAccountResponse = errorResponse('Conta de demonstração (`PROTECTED_ACCOUNT`); não pode ser alterada.', {
+  message: 'Esta é uma conta de demonstração e não pode ser alterada.',
+  code: 'PROTECTED_ACCOUNT',
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/me',
+  operationId: 'getProfile',
+  tags: [tags.profile.name],
+  summary: 'Ver os próprios dados',
+  description: 'Devolve os dados e os perfis da conta dona do token.',
+  ...authenticated,
+  responses: {
+    200: jsonResponse('Dados da conta.', publicUserSchema),
+    401: unauthenticatedResponse,
+    429: tooManyRequestsResponse,
+    500: internalErrorResponse,
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/api/me',
+  operationId: 'updateProfile',
+  tags: [tags.profile.name],
+  summary: 'Alterar nome ou telefone',
+  description: 'Altera só os campos enviados. O e-mail não pode ser alterado nesta versão.',
+  ...authenticated,
+  request: { body: jsonBody(updateProfileSchema) },
+  responses: {
+    200: jsonResponse('Dados atualizados.', publicUserSchema),
+    400: validationErrorResponse,
+    401: unauthenticatedResponse,
+    403: protectedAccountResponse,
+    429: tooManyRequestsResponse,
+    500: internalErrorResponse,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/me/password',
+  operationId: 'changePassword',
+  tags: [tags.profile.name],
+  summary: 'Trocar a senha',
+  description:
+    'Exige a senha atual. Depois da troca, todas as outras sessões da conta são encerradas; a sessão atual continua. Limite: 10 tentativas por IP a cada 15 minutos.',
+  ...authenticated,
+  request: { body: jsonBody(changePasswordSchema) },
+  responses: {
+    204: { description: 'Senha trocada.' },
+    400: validationErrorResponse,
+    401: unauthenticatedResponse,
+    403: protectedAccountResponse,
+    422: errorResponse('Senha atual incorreta (`INVALID_CURRENT_PASSWORD`).', {
+      message: 'A senha atual está incorreta.',
+      code: 'INVALID_CURRENT_PASSWORD',
+      fields: { currentPassword: 'A senha atual está incorreta.' },
+    }),
+    429: tooManyRequestsResponse,
+    500: internalErrorResponse,
+    503: serverBusyResponse,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/me/sessions',
+  operationId: 'listSessions',
+  tags: [tags.profile.name],
+  summary: 'Listar sessões ativas',
+  description: 'Lista as sessões que ainda valem, da usada mais recentemente para a mais antiga, marcando a atual.',
+  ...authenticated,
+  responses: {
+    200: jsonResponse('Sessões ativas.', z.array(sessionSchema)),
+    401: unauthenticatedResponse,
+    429: tooManyRequestsResponse,
+    500: internalErrorResponse,
+  },
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/api/me/sessions',
+  operationId: 'logoutEverywhere',
+  tags: [tags.profile.name],
+  summary: 'Sair de todas as sessões',
+  description:
+    'Encerra todas as sessões da conta, inclusive a atual. Na conta de demonstração, encerra só a sessão de quem pediu.',
+  ...authenticated,
+  responses: {
+    204: { description: 'Sessões encerradas.' },
+    401: unauthenticatedResponse,
+    429: tooManyRequestsResponse,
+    500: internalErrorResponse,
+  },
+});
+
 export interface UserRouterDeps {
   controller: UserController;
   requireAuth: RequestHandler;
+  requireWritable: RequestHandler;
 }
 
-export function createUserRouter({ controller, requireAuth }: UserRouterDeps): Router {
+export function createUserRouter({ controller, requireAuth, requireWritable }: UserRouterDeps): Router {
   const registerLimit = rateLimit({ ...rateLimitDefaults, windowMs: 60 * MINUTE, limit: 10 });
   const loginLimitByIp = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 30 });
   const loginLimitByEmailAndIp = rateLimit({
@@ -114,10 +225,16 @@ export function createUserRouter({ controller, requireAuth }: UserRouterDeps): R
     skip: (req) => isDemoEmail(emailOf(req)),
   });
   const sessionLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
+  const passwordLimit = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 10 });
 
   const router = Router();
   router.post('/api/users/register', registerLimit, controller.register);
   router.post('/api/users/login', loginLimitByIp, loginLimitByEmailAndIp, loginLimitByEmail, controller.login);
   router.post('/api/users/logout', sessionLimit, requireAuth, controller.logout);
+  router.get('/api/me', sessionLimit, requireAuth, controller.profile);
+  router.patch('/api/me', sessionLimit, requireAuth, requireWritable, controller.updateProfile);
+  router.post('/api/me/password', passwordLimit, requireAuth, requireWritable, controller.changePassword);
+  router.get('/api/me/sessions', sessionLimit, requireAuth, controller.sessions);
+  router.delete('/api/me/sessions', sessionLimit, requireAuth, controller.logoutEverywhere);
   return router;
 }

@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login e o logout, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout e o perfil da própria conta, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
 
 ## Erros
 
@@ -26,13 +26,14 @@ Toda resposta de erro tem o mesmo formato:
 | \`403\` | Conta desativada, sem o perfil exigido ou de demonstração |
 | \`404\` | Rota ou método inexistente |
 | \`409\` | Conflito com o estado atual, como e-mail já cadastrado |
+| \`422\` | Regra de negócio não atendida, como senha atual incorreta |
 | \`413\` | Corpo maior que 100 KB |
 | \`415\` | Charset ou codificação do corpo não suportados |
 | \`429\` | Limite de tentativas atingido; o cabeçalho \`RateLimit\` diz quando tentar de novo |
 | \`500\` | Erro interno; os detalhes ficam só nos logs |
 | \`503\` | Servidor ocupado conferindo senhas; tente de novo em instantes |
 
-Convenção para as próximas rotas: \`404\` também para recurso inexistente ou de outra pessoa, \`409\` também para horário já ocupado e \`422\` para regra de negócio não atendida.
+Convenção para as próximas rotas: \`404\` também para recurso inexistente ou de outra pessoa e \`409\` também para horário já ocupado.
 
 ## Códigos de erro
 
@@ -45,6 +46,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`BAD_REQUEST\` | 400 ou 415 | Requisição malformada, como parâmetro de URL inválido, charset ou codificação não suportados |
 | \`UNAUTHENTICATED\` | 401 | Rota exige login e o token falta, é inválido ou expirou |
 | \`FORBIDDEN\` | 403 | A conta não tem o perfil exigido pela rota |
+| \`INVALID_CURRENT_PASSWORD\` | 422 | A senha atual informada na troca de senha está errada |
 | \`PROTECTED_ACCOUNT\` | 403 | Contas de demonstração não podem ser alteradas |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |

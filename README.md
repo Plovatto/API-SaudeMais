@@ -175,6 +175,11 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | POST | `/api/users/register` | Cria uma conta de paciente |
 | POST | `/api/users/login` | Entra e recebe o token de sessão |
 | POST | `/api/users/logout` | Encerra a sessão atual |
+| GET | `/api/me` | Dados da própria conta |
+| PATCH | `/api/me` | Altera nome ou telefone |
+| POST | `/api/me/password` | Troca a senha e encerra as outras sessões |
+| GET | `/api/me/sessions` | Lista as sessões ativas |
+| DELETE | `/api/me/sessions` | Sai de todas as sessões |
 | GET | `/docs` | Documentação interativa |
 | GET | `/docs/openapi.json` | Documento OpenAPI 3.1 |
 
