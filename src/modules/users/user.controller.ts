@@ -26,7 +26,7 @@ export function createUserController(service: UserService): UserController {
         ip: req.ip && isIP(req.ip) ? req.ip : null,
         userAgent: req.get('user-agent')?.slice(0, 512) ?? null,
       });
-      res.set('Cache-Control', 'no-store').status(200).json(session);
+      res.status(200).json(session);
     },
     logout: async (req, res) => {
       await service.logout(authOf(req).sessionId);

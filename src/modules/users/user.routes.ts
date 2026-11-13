@@ -13,6 +13,7 @@ import {
 import { registry, sessionAuth } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
+import { authOf, noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { UserController } from './user.controller.js';
 import { isDemoEmail } from './user.demo.js';
@@ -34,6 +35,8 @@ function emailOf(req: Request): string {
 }
 
 const ipOf = (req: Request) => ipKeyGenerator(req.ip ?? '');
+
+const authenticated = { security: [{ [sessionAuth.name]: [] }] };
 
 registry.registerPath({
   method: 'post',
@@ -91,7 +94,7 @@ registry.registerPath({
   tags: [tags.accounts.name],
   summary: 'Sair',
   description: 'Encerra a sessão do token enviado. As outras sessões da conta continuam valendo.',
-  security: [{ [sessionAuth.name]: [] }],
+  ...authenticated,
   responses: {
     204: { description: 'Sessão encerrada.' },
     401: unauthenticatedResponse,
@@ -100,7 +103,6 @@ registry.registerPath({
   },
 });
 
-const authenticated = { security: [{ [sessionAuth.name]: [] }] };
 const protectedAccountResponse = errorResponse('Conta de demonstração (`PROTECTED_ACCOUNT`); não pode ser alterada.', {
   message: 'Esta é uma conta de demonstração e não pode ser alterada.',
   code: 'PROTECTED_ACCOUNT',
@@ -112,7 +114,7 @@ registry.registerPath({
   operationId: 'getProfile',
   tags: [tags.profile.name],
   summary: 'Ver os próprios dados',
-  description: 'Devolve os dados e os perfis da conta dona do token.',
+  description: 'Devolve os dados e os perfis da conta dona do token. Limite: 120 leituras de perfil por minuto por IP.',
   ...authenticated,
   responses: {
     200: jsonResponse('Dados da conta.', publicUserSchema),
@@ -128,7 +130,8 @@ registry.registerPath({
   operationId: 'updateProfile',
   tags: [tags.profile.name],
   summary: 'Alterar nome ou telefone',
-  description: 'Altera só os campos enviados. O e-mail não pode ser alterado nesta versão.',
+  description:
+    'Altera só os campos enviados. O e-mail não pode ser alterado nesta versão. Limite: 120 requisições de perfil por minuto por IP.',
   ...authenticated,
   request: { body: jsonBody(updateProfileSchema) },
   responses: {
@@ -148,7 +151,7 @@ registry.registerPath({
   tags: [tags.profile.name],
   summary: 'Trocar a senha',
   description:
-    'Exige a senha atual. Depois da troca, todas as outras sessões da conta são encerradas; a sessão atual continua. Limite: 10 tentativas por IP a cada 15 minutos.',
+    'Exige a senha atual. Depois da troca, todas as outras sessões da conta são encerradas; a sessão atual continua. Limites: 10 tentativas por IP e 5 senhas atuais erradas por conta a cada 15 minutos.',
   ...authenticated,
   request: { body: jsonBody(changePasswordSchema) },
   responses: {
@@ -173,7 +176,8 @@ registry.registerPath({
   operationId: 'listSessions',
   tags: [tags.profile.name],
   summary: 'Listar sessões ativas',
-  description: 'Lista as sessões que ainda valem, da usada mais recentemente para a mais antiga, marcando a atual.',
+  description:
+    'Lista as sessões que ainda valem, da usada mais recentemente para a mais antiga, marcando a atual. Limite: 120 requisições de perfil por minuto por IP.',
   ...authenticated,
   responses: {
     200: jsonResponse('Sessões ativas.', z.array(sessionSchema)),
@@ -225,16 +229,31 @@ export function createUserRouter({ controller, requireAuth, requireWritable }: U
     skip: (req) => isDemoEmail(emailOf(req)),
   });
   const sessionLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
+  const profileLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
   const passwordLimit = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 10 });
+  const passwordLimitByAccount = rateLimit({
+    ...rateLimitDefaults,
+    windowMs: 15 * MINUTE,
+    limit: 5,
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => authOf(req).user.id,
+  });
 
   const router = Router();
   router.post('/api/users/register', registerLimit, controller.register);
-  router.post('/api/users/login', loginLimitByIp, loginLimitByEmailAndIp, loginLimitByEmail, controller.login);
+  router.post('/api/users/login', noStore, loginLimitByIp, loginLimitByEmailAndIp, loginLimitByEmail, controller.login);
   router.post('/api/users/logout', sessionLimit, requireAuth, controller.logout);
-  router.get('/api/me', sessionLimit, requireAuth, controller.profile);
-  router.patch('/api/me', sessionLimit, requireAuth, requireWritable, controller.updateProfile);
-  router.post('/api/me/password', passwordLimit, requireAuth, requireWritable, controller.changePassword);
-  router.get('/api/me/sessions', sessionLimit, requireAuth, controller.sessions);
+  router.get('/api/me', noStore, profileLimit, requireAuth, controller.profile);
+  router.patch('/api/me', noStore, profileLimit, requireAuth, requireWritable, controller.updateProfile);
+  router.post(
+    '/api/me/password',
+    passwordLimit,
+    requireAuth,
+    passwordLimitByAccount,
+    requireWritable,
+    controller.changePassword,
+  );
+  router.get('/api/me/sessions', noStore, profileLimit, requireAuth, controller.sessions);
   router.delete('/api/me/sessions', sessionLimit, requireAuth, controller.logoutEverywhere);
   return router;
 }

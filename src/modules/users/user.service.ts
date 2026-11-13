@@ -1,4 +1,5 @@
 import { AppError } from '../../lib/app-error.js';
+import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { DAY, HOUR, MINUTE } from '../../lib/time.js';
@@ -141,7 +142,7 @@ export class UserService {
 
   async profile(userId: string): Promise<PublicUser> {
     const user = await this.repository.findPublicUser(userId);
-    if (!user) throw new AppError(401, 'UNAUTHENTICATED', 'Sua sessão expirou. Entre novamente.');
+    if (!user) throw unauthenticated();
     return user;
   }
 

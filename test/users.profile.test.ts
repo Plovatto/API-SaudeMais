@@ -23,13 +23,14 @@ const changePassword = (app: App, token: string, body: Record<string, unknown>) 
     });
 
 describe('GET and PATCH /api/me', () => {
-  it('returns the account of the token', async () => {
+  it('returns the account of the token without letting the browser cache it', async () => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
 
     const response = await request(app).get('/api/me').set(auth(token));
 
     expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
     expect(response.body).toMatchObject({ email: 'ana.silva@email.com', phone: '+5511987654321', roles: ['patient'] });
   });
 
@@ -84,6 +85,18 @@ describe('POST /api/me/password', () => {
     expect(await service.authenticate(other)).toBeNull();
     expect((await login(app)).status).toBe(401);
     expect((await login(app, { password: 'nova-senha-456' })).status).toBe(200);
+  });
+
+  it('blocks the account after 5 wrong current passwords, even from different addresses', async () => {
+    const { app } = await buildUsersApp();
+    const token = await registerAndLogin(app);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await changePassword(app, token, { currentPassword: 'senha-errada-000' }).expect(422);
+    }
+
+    const blocked = await changePassword(app, token, {});
+
+    expect(blocked.status).toBe(429);
   });
 
   it('rejects a confirmation that does not match', async () => {
