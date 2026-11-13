@@ -1,30 +1,36 @@
 import type { Server } from 'node:http';
 
 interface ShutdownOptions {
-  server: Server;
   pool: { end: () => Promise<void> };
   timeoutMs: number;
 }
 
-function closeServer(server: Server, timeoutMs: number): Promise<void> {
+function drain(server: Server, timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      server.closeAllConnections();
-      resolve();
-    }, timeoutMs);
-    timer.unref();
+    server.on('request', (_req, res) => res.setHeader('Connection', 'close'));
+    const idleSweep = setInterval(() => server.closeIdleConnections(), 250);
+    idleSweep.unref();
+    const deadline = setTimeout(() => server.closeAllConnections(), timeoutMs);
+    deadline.unref();
     server.close(() => {
-      clearTimeout(timer);
+      clearInterval(idleSweep);
+      clearTimeout(deadline);
       resolve();
     });
     server.closeIdleConnections();
   });
 }
 
-export function createShutdown({ server, pool, timeoutMs }: ShutdownOptions): () => Promise<void> {
+export function createShutdown({ pool, timeoutMs }: ShutdownOptions) {
+  let server: Server | undefined;
   let running: Promise<void> | undefined;
-  return () => {
-    running ??= closeServer(server, timeoutMs).then(() => pool.end());
-    return running;
+  return {
+    attach(listening: Server) {
+      server = listening;
+    },
+    run(): Promise<void> {
+      running ??= (server ? drain(server, timeoutMs) : Promise.resolve()).then(() => pool.end());
+      return running;
+    },
   };
 }
