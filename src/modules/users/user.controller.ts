@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import type { RequestHandler } from 'express';
 import { authOf } from '../../middleware/auth.js';
 import { loginSchema, registerSchema } from './user.model.js';
@@ -17,7 +18,7 @@ export function createUserController(service: UserService): UserController {
     },
     login: async (req, res) => {
       const session = await service.login(loginSchema.parse(req.body), {
-        ip: req.ip ?? null,
+        ip: req.ip && isIP(req.ip) ? req.ip : null,
         userAgent: req.get('user-agent')?.slice(0, 512) ?? null,
       });
       res.set('Cache-Control', 'no-store').status(200).json(session);

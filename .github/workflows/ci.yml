@@ -94,6 +94,7 @@ jobs:
           docker run -d --name api --network host \
             -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais_test \
             -e CORS_ORIGIN=https://plovatto.github.io \
+            -e TRUST_PROXY_HOPS=0 \
             api-saudemais:ci
           for attempt in $(seq 1 30); do
             curl -fsS http://localhost:8080/health && break

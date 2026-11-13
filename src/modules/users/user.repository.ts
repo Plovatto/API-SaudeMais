@@ -1,14 +1,13 @@
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
 import type { PublicUser } from './user.model.js';
 
+const userColumns = { id: users.id, fullName: users.fullName, email: users.email, phone: users.phone };
+
 const publicUserColumns = {
-  id: users.id,
-  fullName: users.fullName,
-  email: users.email,
-  phone: users.phone,
+  ...userColumns,
   roles: sql<
     Role[]
   >`array(select ${userRoles.role} from ${userRoles} where ${userRoles.userId} = ${users.id} order by ${userRoles.role})`,
@@ -53,12 +52,7 @@ export class UserRepository {
 
   createPatient({ fullName, email, phone, passwordHash, termsVersion, now }: NewPatient): Promise<PublicUser> {
     return this.db.transaction(async (tx) => {
-      const [user] = await tx.insert(users).values({ fullName, email, phone, passwordHash }).returning({
-        id: users.id,
-        fullName: users.fullName,
-        email: users.email,
-        phone: users.phone,
-      });
+      const [user] = await tx.insert(users).values({ fullName, email, phone, passwordHash }).returning(userColumns);
       if (!user) throw new Error('User insert returned no row');
       await tx.insert(userRoles).values({ userId: user.id, role: 'patient', grantedAt: now });
       await tx.insert(termsAcceptances).values({ userId: user.id, termsVersion, acceptedAt: now });
@@ -79,19 +73,23 @@ export class UserRepository {
     return candidate;
   }
 
-  async createSession(session: NewSession): Promise<void> {
-    await this.db.insert(sessions).values({ ...session, lastUsedAt: session.createdAt });
+  async createSession(session: NewSession): Promise<string> {
+    const [created] = await this.db
+      .insert(sessions)
+      .values({ ...session, lastUsedAt: session.createdAt })
+      .returning({ id: sessions.id });
+    if (!created) throw new Error('Session insert returned no row');
+    return created.id;
   }
 
-  async keepNewestSessions(userId: string, keep: number): Promise<void> {
+  async pruneSessions(userId: string, keepId: string, now: Date, limit: number | null): Promise<void> {
+    const overLimit =
+      limit === null
+        ? sql`false`
+        : sql`${sessions.id} not in (select ${sessions.id} from ${sessions} where ${sessions.userId} = ${userId} and ${sessions.id} <> ${keepId} order by ${sessions.lastUsedAt} desc, ${sessions.id} desc limit ${limit - 1})`;
     await this.db
       .delete(sessions)
-      .where(
-        and(
-          eq(sessions.userId, userId),
-          sql`${sessions.id} not in (select ${sessions.id} from ${sessions} where ${sessions.userId} = ${userId} order by ${sessions.lastUsedAt} desc limit ${keep})`,
-        ),
-      );
+      .where(and(eq(sessions.userId, userId), ne(sessions.id, keepId), or(lte(sessions.expiresAt, now), overLimit)));
   }
 
   async findActiveSession(tokenHash: string, now: Date): Promise<ActiveSession | undefined> {

@@ -50,6 +50,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   if ((nodeEnv ?? 'production') === 'production' && cleaned.CORS_ORIGIN === undefined) {
     problems.push('CORS_ORIGIN: Required in production');
   }
+  if ((nodeEnv ?? 'production') === 'production' && cleaned.TRUST_PROXY_HOPS === undefined) {
+    problems.push('TRUST_PROXY_HOPS: Required in production');
+  }
 
   if (!parsed.success || problems.length > 0) {
     throw new Error(`Invalid environment variables\n- ${problems.join('\n- ')}`);

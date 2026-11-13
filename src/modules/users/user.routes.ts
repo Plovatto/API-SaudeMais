@@ -3,6 +3,7 @@ import {
   errorResponse,
   internalErrorResponse,
   jsonBody,
+  serverBusyResponse,
   jsonResponse,
   tooManyRequestsResponse,
   unauthenticatedResponse,
@@ -33,6 +34,7 @@ registry.registerPath({
     }),
     429: tooManyRequestsResponse,
     500: internalErrorResponse,
+    503: serverBusyResponse,
   },
 });
 
@@ -43,7 +45,7 @@ registry.registerPath({
   tags: [tags.accounts.name],
   summary: 'Entrar',
   description:
-    'Confere e-mail e senha e devolve um token de sessão. Sem "Lembrar de mim", a sessão expira após 12 horas sem uso; com ele, dura 7 dias. Nenhuma sessão passa de 7 dias. Senha errada e e-mail inexistente recebem a mesma resposta. Limites: 30 tentativas por IP e 5 tentativas erradas por e-mail a cada 15 minutos.',
+    'Confere e-mail e senha e devolve um token de sessão. Sem "Lembrar de mim", a sessão expira após 12 horas sem uso; com ele, dura 7 dias. Nenhuma sessão passa de 7 dias. Senha errada e e-mail inexistente recebem a mesma resposta. Limites: 30 tentativas por IP e 5 senhas erradas por e-mail e IP a cada 15 minutos, e 50 senhas erradas por e-mail por hora.',
   request: { body: jsonBody(loginSchema) },
   responses: {
     200: jsonResponse('Login feito.', loginResponseSchema),
@@ -58,6 +60,7 @@ registry.registerPath({
     }),
     429: tooManyRequestsResponse,
     500: internalErrorResponse,
+    503: serverBusyResponse,
   },
 });
 
@@ -85,7 +88,13 @@ export interface UserRouterDeps {
 export function createUserRouter({ controller, requireAuth, rateLimits }: UserRouterDeps): Router {
   const router = Router();
   router.post('/api/users/register', rateLimits.register, controller.register);
-  router.post('/api/users/login', rateLimits.loginByIp, rateLimits.loginByEmail, controller.login);
+  router.post(
+    '/api/users/login',
+    rateLimits.loginByIp,
+    rateLimits.loginByEmailAndIp,
+    rateLimits.loginByEmail,
+    controller.login,
+  );
   router.post('/api/users/logout', requireAuth, controller.logout);
   return router;
 }

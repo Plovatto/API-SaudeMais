@@ -62,6 +62,11 @@ export const tooManyRequestsResponse = errorResponse(
   },
 );
 
+export const serverBusyResponse = errorResponse(
+  'Servidor ocupado conferindo outras senhas (`SERVER_BUSY`). Tente de novo em instantes.',
+  { message: 'O servidor está ocupado. Tente de novo em instantes.', code: 'SERVER_BUSY' },
+);
+
 export function jsonResponse(description: string, schema: z.ZodType) {
   return { description, content: { 'application/json': { schema } } };
 }

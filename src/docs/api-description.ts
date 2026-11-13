@@ -30,6 +30,7 @@ Toda resposta de erro tem o mesmo formato:
 | \`415\` | Charset ou codificação do corpo não suportados |
 | \`429\` | Limite de tentativas atingido; o cabeçalho \`RateLimit\` diz quando tentar de novo |
 | \`500\` | Erro interno; os detalhes ficam só nos logs |
+| \`503\` | Servidor ocupado conferindo senhas; tente de novo em instantes |
 
 Convenção para as próximas rotas: \`403\` também sem o perfil exigido, \`404\` também para recurso inexistente ou de outra pessoa, \`409\` também para horário já ocupado e \`422\` para regra de negócio não atendida.
 
@@ -47,6 +48,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |
 | \`TOO_MANY_REQUESTS\` | 429 | Muitas requisições do mesmo IP (300 por minuto) ou limite próprio da rota |
 | \`INTERNAL_ERROR\` | 500 | Erro inesperado no servidor |
+| \`SERVER_BUSY\` | 503 | Muitas senhas sendo conferidas ao mesmo tempo |
 
 ## Autenticação
 

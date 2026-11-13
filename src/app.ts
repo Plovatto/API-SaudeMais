@@ -5,8 +5,9 @@ import helmet from 'helmet';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { env, type Env } from './config/env.js';
-import { logger as defaultLogger } from './config/logger.js';
+import { logger as defaultLogger, serializeError } from './config/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
+import { MINUTE } from './lib/time.js';
 import { createRateLimit } from './middleware/rate-limit.js';
 import { createDocsRouter } from './routes/docs.js';
 import { createHealthRouter } from './routes/health.js';
@@ -49,6 +50,7 @@ export function createApp({ config = env, logger = defaultLogger, routers = [] }
           ip: req.raw?.ip ?? req.remoteAddress,
         }),
         res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
+        err: serializeError,
       },
     }),
   );
@@ -70,7 +72,7 @@ export function createApp({ config = env, logger = defaultLogger, routers = [] }
       persistAuthorization: config.NODE_ENV !== 'production',
     }),
   );
-  app.use(createRateLimit({ windowMs: 60_000, limit: 300 }));
+  app.use(createRateLimit({ windowMs: MINUTE, limit: 300 }));
   for (const router of routers) app.use(router);
 
   app.use(notFoundHandler);

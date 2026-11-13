@@ -5,7 +5,7 @@ CREATE TABLE "sessions" (
 	"remember" boolean NOT NULL,
 	"user_agent" text,
 	"ip" "inet",
-	"created_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"last_used_at" timestamp with time zone NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,
 	"absolute_expires_at" timestamp with time zone NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE "sessions" (
 CREATE TABLE "terms_acceptances" (
 	"user_id" uuid NOT NULL,
 	"terms_version" text NOT NULL,
-	"accepted_at" timestamp with time zone NOT NULL,
+	"accepted_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "terms_acceptances_pkey" PRIMARY KEY("user_id","terms_version"),
 	CONSTRAINT "terms_acceptances_terms_version_check" CHECK (char_length(terms_version) between 1 and 20)
 );

@@ -11,10 +11,27 @@ function normalizePhone(value: string): string {
   return digits.length === 10 || digits.length === 11 ? `+55${digits}` : `+${digits}`;
 }
 
-const email = z
+export function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code < 32 || code === 127;
+  });
+}
+
+export const personName = z
   .string()
   .trim()
-  .toLowerCase()
+  .refine((value) => !hasControlCharacter(value), 'O nome não pode ter caracteres de controle.')
+  .refine((value) => [...value].length >= 2 && [...value].length <= 120, 'O nome precisa ter entre 2 e 120 caracteres.')
+  .openapi({ description: 'Nome completo, de 2 a 120 caracteres.', example: 'Ana Maria Silva' });
+
+const email = z
+  .string()
+  .transform(normalizeEmail)
   .pipe(z.email({ error: 'Informe um e-mail válido.' }).max(254, 'O e-mail pode ter até 254 caracteres.'))
   .openapi({ example: 'ana.silva@email.com' });
 
@@ -33,12 +50,7 @@ export const registerSchema = registry.register(
   'RegisterRequest',
   z
     .strictObject({
-      fullName: z
-        .string()
-        .trim()
-        .min(2, 'Informe o nome completo.')
-        .max(120, 'O nome pode ter até 120 caracteres.')
-        .openapi({ example: 'Ana Maria Silva' }),
+      fullName: personName,
       email,
       phone,
       password: z

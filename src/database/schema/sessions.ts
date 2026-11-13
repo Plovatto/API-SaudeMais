@@ -12,7 +12,7 @@ export const sessions = pgTable(
     remember: boolean('remember').notNull(),
     userAgent: text('user_agent'),
     ip: inet('ip'),
-    createdAt: timestamptz('created_at').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
     lastUsedAt: timestamptz('last_used_at').notNull(),
     expiresAt: timestamptz('expires_at').notNull(),
     absoluteExpiresAt: timestamptz('absolute_expires_at').notNull(),

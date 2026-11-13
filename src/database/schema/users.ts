@@ -32,7 +32,7 @@ export const termsAcceptances = pgTable(
   {
     userId: uuid('user_id').notNull(),
     termsVersion: text('terms_version').notNull(),
-    acceptedAt: timestamptz('accepted_at').notNull(),
+    acceptedAt: timestamptz('accepted_at').notNull().defaultNow(),
   },
   (table) => [
     primaryKey({
