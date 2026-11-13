@@ -27,7 +27,7 @@ describe('logger redaction', () => {
       cause,
     });
 
-    logger.error({ err: error }, 'Unhandled error');
+    logger.error({ err: new Error('Registration failed', { cause: error }) }, 'Unhandled error');
 
     const output = lines.join('');
     expect(output).not.toContain('ana@email.com');

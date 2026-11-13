@@ -86,7 +86,7 @@ export class UserRepository {
     const overLimit =
       limit === null
         ? sql`false`
-        : sql`${sessions.id} not in (select ${sessions.id} from ${sessions} where ${sessions.userId} = ${userId} and ${sessions.id} <> ${keepId} order by ${sessions.lastUsedAt} desc, ${sessions.id} desc limit ${limit - 1})`;
+        : sql`${sessions.id} not in (select ${sessions.id} from ${sessions} where ${sessions.userId} = ${userId} and ${sessions.id} <> ${keepId} and ${sessions.expiresAt} > ${now} order by ${sessions.lastUsedAt} desc, ${sessions.id} desc limit ${limit - 1})`;
     await this.db
       .delete(sessions)
       .where(and(eq(sessions.userId, userId), ne(sessions.id, keepId), or(lte(sessions.expiresAt, now), overLimit)));
