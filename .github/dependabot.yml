@@ -34,3 +34,16 @@ updates:
       - ci
     commit-message:
       prefix: ":arrow_up: ci"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    ignore:
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
+    labels:
+      - chore
+    commit-message:
+      prefix: ":arrow_up: chore"
