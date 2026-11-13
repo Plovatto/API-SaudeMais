@@ -14,6 +14,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 ## Funcionalidades
 
 - Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash
+- Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
 - Senhas com scrypt, login em tempo constante e limites de tentativas por IP e por e-mail
 - Banco PostgreSQL com migrations em SQL aplicadas ao iniciar
 - Configuração centralizada e validada por variáveis de ambiente
@@ -95,6 +96,8 @@ CORS_ORIGIN=http://localhost:5173
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais
 SESSION_TTL_HOURS=12
 SESSION_REMEMBER_DAYS=7
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
 ```
 
 `NODE_ENV` vale `production` quando não é definida; use `development` localmente, como no `.env.example`.
@@ -106,6 +109,10 @@ SESSION_REMEMBER_DAYS=7
 `TRUST_PROXY_HOPS` é o número de proxies reversos na frente da API. Com o valor certo, os limites de requisição usam o IP de cada usuário em vez do IP do proxy. Mantenha `0` quando a API recebe as conexões diretamente.
 
 `SESSION_TTL_HOURS` é quanto tempo uma sessão sem "Lembrar de mim" dura sem uso (padrão 12). `SESSION_REMEMBER_DAYS` é a duração de uma sessão com "Lembrar de mim" e também o teto de qualquer sessão (padrão 7).
+
+`ADMIN_EMAIL` e `ADMIN_PASSWORD` (mínimo de 12 caracteres) criam o primeiro administrador ao iniciar a API; defina as duas ou nenhuma. Se a conta já existir, ela só ganha o perfil de administrador, e a senha não muda.
+
+A API também cria, ao iniciar, a conta protegida de demonstração `paciente@saudemais.test` (senha `paciente-demo-123`), exibida na tela de login.
 
 ## Scripts
 
