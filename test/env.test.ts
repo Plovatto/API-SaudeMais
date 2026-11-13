@@ -23,6 +23,8 @@ describe('parseEnv', () => {
       TRUST_PROXY_HOPS: 0,
       CORS_ORIGIN: 'http://localhost:5173',
       DATABASE_URL: DB,
+      SESSION_TTL_HOURS: 12,
+      SESSION_REMEMBER_DAYS: 7,
     });
   });
 
@@ -46,6 +48,8 @@ describe('parseEnv', () => {
       TRUST_PROXY_HOPS: 1,
       CORS_ORIGIN: 'https://plovatto.github.io',
       DATABASE_URL: DB,
+      SESSION_TTL_HOURS: 12,
+      SESSION_REMEMBER_DAYS: 7,
     });
   });
 
