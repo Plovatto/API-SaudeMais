@@ -58,7 +58,7 @@ describe('MailQueue', () => {
 });
 
 describe('mail queue limits', () => {
-  it('drops messages once too many are waiting instead of growing without bound', async () => {
+  it('drops messages once too many are waiting instead of growing without bound', () => {
     const { logger, lines } = captureLogger();
     let release: () => void = () => undefined;
     const stuck = { send: () => new Promise<void>((resolve) => (release = resolve)) };
