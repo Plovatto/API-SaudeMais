@@ -10,16 +10,3 @@ export const errorResponseSchema = registry.register(
     fields: z.record(z.string(), z.string()).optional().openapi({ example: { email: 'E-mail inválido.' } }),
   }),
 );
-
-export function errorResponse(description: string) {
-  return { description, content: { 'application/json': { schema: errorResponseSchema } } };
-}
-
-export function paginated<T extends z.ZodType>(item: T) {
-  return z.object({
-    items: z.array(item),
-    page: z.number().int().min(1),
-    pageSize: z.number().int().min(1).max(50),
-    total: z.number().int().min(0),
-  });
-}
