@@ -25,6 +25,9 @@ describe('parseEnv', () => {
       DATABASE_URL: DB,
       SESSION_TTL_HOURS: 12,
       SESSION_REMEMBER_DAYS: 7,
+      MAIL_DRIVER: 'console',
+      SMTP_HOST: 'smtp.gmail.com',
+      SMTP_PORT: 465,
     });
   });
 
@@ -53,6 +56,10 @@ describe('parseEnv', () => {
       TRUST_PROXY_HOPS: '1',
       CORS_ORIGIN: 'https://plovatto.github.io',
       DATABASE_URL: DB,
+      MAIL_DRIVER: 'smtp',
+      SMTP_USER: 'saudemais.app@gmail.com',
+      SMTP_PASS: 'app-password',
+      MAIL_FROM: 'Saúde+ <saudemais.app@gmail.com>',
     });
 
     expect(env).toEqual({
@@ -64,7 +71,27 @@ describe('parseEnv', () => {
       DATABASE_URL: DB,
       SESSION_TTL_HOURS: 12,
       SESSION_REMEMBER_DAYS: 7,
+      SMTP_HOST: 'smtp.gmail.com',
+      SMTP_PORT: 465,
+      MAIL_DRIVER: 'smtp',
+      SMTP_USER: 'saudemais.app@gmail.com',
+      SMTP_PASS: 'app-password',
+      MAIL_FROM: 'Saúde+ <saudemais.app@gmail.com>',
     });
+  });
+
+  it('requires the SMTP driver and its settings in production', () => {
+    const base = {
+      NODE_ENV: 'production',
+      CORS_ORIGIN: 'https://plovatto.github.io',
+      TRUST_PROXY_HOPS: '1',
+      DATABASE_URL: DB,
+    };
+
+    expect(captureError(() => parseEnv(base)).message).toContain('MAIL_DRIVER: Must be smtp in production');
+    expect(captureError(() => parseEnv({ ...base, MAIL_DRIVER: 'smtp' })).message).toContain(
+      'SMTP_PASS: Required when MAIL_DRIVER is smtp',
+    );
   });
 
   it('normalizes CORS_ORIGIN to an origin, dropping path and credentials', () => {

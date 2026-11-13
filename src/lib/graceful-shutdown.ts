@@ -2,6 +2,7 @@ import type { Server } from 'node:http';
 
 interface ShutdownOptions {
   pool: { end: () => Promise<void> };
+  flush?: () => Promise<void>;
   timeoutMs: number;
 }
 
@@ -21,7 +22,7 @@ function drain(server: Server, timeoutMs: number): Promise<void> {
   });
 }
 
-export function createShutdown({ pool, timeoutMs }: ShutdownOptions) {
+export function createShutdown({ pool, flush, timeoutMs }: ShutdownOptions) {
   let server: Server | undefined;
   let running: Promise<void> | undefined;
   return {
@@ -29,7 +30,7 @@ export function createShutdown({ pool, timeoutMs }: ShutdownOptions) {
       server = listening;
     },
     run(): Promise<void> {
-      running ??= (server ? drain(server, timeoutMs) : Promise.resolve()).then(() => pool.end());
+      running ??= (server ? drain(server, timeoutMs) : Promise.resolve()).then(() => flush?.()).then(() => pool.end());
       return running;
     },
   };

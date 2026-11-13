@@ -98,6 +98,10 @@ SESSION_TTL_HOURS=12
 SESSION_REMEMBER_DAYS=7
 ADMIN_EMAIL=
 ADMIN_PASSWORD=
+MAIL_DRIVER=console
+SMTP_USER=
+SMTP_PASS=
+MAIL_FROM=
 ```
 
 `NODE_ENV` vale `production` quando não é definida; use `development` localmente, como no `.env.example`.
@@ -111,6 +115,8 @@ ADMIN_PASSWORD=
 `SESSION_TTL_HOURS` é quanto tempo uma sessão sem "Lembrar de mim" dura sem uso (padrão 12). `SESSION_REMEMBER_DAYS` é a duração de uma sessão com "Lembrar de mim" e também o teto de qualquer sessão (padrão 7).
 
 `ADMIN_EMAIL` e `ADMIN_PASSWORD` (mínimo de 12 caracteres) criam o primeiro administrador ao iniciar a API; defina as duas ou nenhuma. Se a conta já existir, ela só ganha o perfil de administrador quando a senha dela for igual a `ADMIN_PASSWORD`; caso contrário, a API não inicia, para que um cadastro feito antes com esse e-mail não vire administrador.
+
+`MAIL_DRIVER` escolhe como os e-mails saem: `console` (padrão, só fora de produção) escreve no log; `smtp` envia pelo servidor configurado em `SMTP_HOST` (padrão `smtp.gmail.com`), `SMTP_PORT` (padrão 465), `SMTP_USER`, `SMTP_PASS` (senha de app do Gmail) e `MAIL_FROM`. Em produção, `smtp` é obrigatório. Os envios acontecem fora da requisição, e uma falha fica só no log.
 
 A API também cria, ao iniciar, a conta protegida de demonstração `paciente@saudemais.test` (senha `paciente-demo-123`), exibida na tela de login.
 

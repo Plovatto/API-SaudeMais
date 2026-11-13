@@ -25,6 +25,12 @@ const envSchema = z.object({
   SESSION_REMEMBER_DAYS: integer(1, 30, 7),
   ADMIN_EMAIL: z.email().optional(),
   ADMIN_PASSWORD: z.string().min(12, 'Use at least 12 characters').max(128).optional(),
+  MAIL_DRIVER: z.enum(['console', 'smtp']).default('console'),
+  SMTP_HOST: z.string().min(1).default('smtp.gmail.com'),
+  SMTP_PORT: integer(1, 65535, 465),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASS: z.string().min(1).optional(),
+  MAIL_FROM: z.string().min(3).optional(),
 });
 
 export interface Env {
@@ -38,6 +44,12 @@ export interface Env {
   SESSION_REMEMBER_DAYS: number;
   ADMIN_EMAIL?: string | undefined;
   ADMIN_PASSWORD?: string | undefined;
+  MAIL_DRIVER: 'console' | 'smtp';
+  SMTP_HOST: string;
+  SMTP_PORT: number;
+  SMTP_USER?: string | undefined;
+  SMTP_PASS?: string | undefined;
+  MAIL_FROM?: string | undefined;
 }
 
 const DEV_CORS_ORIGIN = 'http://localhost:5173';
@@ -53,6 +65,15 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   const nodeEnv = parsed.success ? parsed.data.NODE_ENV : cleaned.NODE_ENV;
   if ((nodeEnv ?? 'production') === 'production' && cleaned.CORS_ORIGIN === undefined) {
     problems.push('CORS_ORIGIN: Required in production');
+  }
+  const production = (nodeEnv ?? 'production') === 'production';
+  if (production && cleaned.MAIL_DRIVER !== 'smtp') {
+    problems.push('MAIL_DRIVER: Must be smtp in production');
+  }
+  if (cleaned.MAIL_DRIVER === 'smtp') {
+    for (const name of ['SMTP_USER', 'SMTP_PASS', 'MAIL_FROM'] as const) {
+      if (cleaned[name] === undefined) problems.push(`${name}: Required when MAIL_DRIVER is smtp`);
+    }
   }
   if ((cleaned.ADMIN_EMAIL === undefined) !== (cleaned.ADMIN_PASSWORD === undefined)) {
     problems.push('ADMIN_EMAIL and ADMIN_PASSWORD: Set both or neither');

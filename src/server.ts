@@ -4,13 +4,16 @@ import { logger } from './config/logger.js';
 import { runMigrations } from './database/migrate.js';
 import { createDb, createPool } from './database/pg-client.js';
 import { systemClock } from './lib/clock.js';
+import { createMailer, MailQueue } from './mail/index.js';
 import { createShutdown } from './lib/graceful-shutdown.js';
 import { createModules } from './modules/index.js';
 
 const SHUTDOWN_DEADLINE_MS = 20_000;
 
 const pool = createPool(env.DATABASE_URL);
-const shutdown = createShutdown({ pool, timeoutMs: 8_000 });
+
+const mail = new MailQueue(createMailer(env, logger), logger);
+const shutdown = createShutdown({ pool, flush: () => mail.drain(), timeoutMs: 8_000 });
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
@@ -43,6 +46,7 @@ process.on('unhandledRejection', (err) => {
 });
 
 const { users, routers } = createModules({
+  mail,
   db: createDb(pool),
   clock: systemClock,
   policy: {
