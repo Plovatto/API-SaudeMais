@@ -66,3 +66,46 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:pg
+
+  docker:
+    name: docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: saudemais_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d saudemais_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build -t api-saudemais:ci .
+      - name: Run the image against PostgreSQL
+        run: |
+          docker run -d --name api --network host \
+            -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais_test \
+            -e CORS_ORIGIN=https://plovatto.github.io \
+            api-saudemais:ci
+          for attempt in $(seq 1 30); do
+            curl -fsS http://localhost:8080/health && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8080/health
+          test "$(docker exec api id -u)" != "0"
+      - name: Stop gracefully
+        run: |
+          docker stop --timeout 15 api
+          test "$(docker inspect --format '{{.State.ExitCode}}' api)" = "0"
+          docker logs api | grep -q 'Shutdown complete'
+      - name: Container logs
+        if: always()
+        run: docker logs api || true
