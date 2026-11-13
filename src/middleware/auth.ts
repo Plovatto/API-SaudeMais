@@ -12,6 +12,8 @@ export const unauthenticated = () => new AppError(401, 'UNAUTHENTICATED', 'Sua s
 export const protectedAccount = () =>
   new AppError(403, 'PROTECTED_ACCOUNT', 'Esta é uma conta de demonstração e não pode ser alterada.');
 
+export const forbidden = () => new AppError(403, 'FORBIDDEN', 'Você não tem acesso a esta área.');
+
 export const noStore: RequestHandler = (_req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
@@ -30,7 +32,7 @@ export function createRequireAuth(service: Pick<UserService, 'authenticate'>): R
 export function createRequireRole(role: Role): RequestHandler {
   return (req, _res, next) => {
     if (!authOf(req).user.roles.includes(role)) {
-      throw new AppError(403, 'FORBIDDEN', 'Você não tem acesso a esta área.');
+      throw forbidden();
     }
     next();
   };

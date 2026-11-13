@@ -1,6 +1,6 @@
 import { AppError, conflictError } from '../../lib/app-error.js';
+import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import type { Pagination } from '../../lib/pagination.js';
-import { isForeignKeyViolation, uniqueConstraintOf } from '../../lib/pg-errors.js';
 import type {
   CreateExamTypeInput,
   CreateSpecialtyInput,
@@ -26,21 +26,16 @@ function notFound(entity: CatalogEntity): AppError {
   return new AppError(404, 'NOT_FOUND', notFoundMessages[entity]);
 }
 
-function uniqueConflictOf(error: unknown): Conflict | undefined {
-  const constraint = uniqueConstraintOf(error);
-  return constraint && constraint in uniqueConflicts
-    ? uniqueConflicts[constraint as keyof typeof uniqueConflicts]
-    : undefined;
-}
+const constraintConflicts: Record<string, Conflict> = {
+  ...uniqueConflicts,
+  doctor_profiles_specialty_council_fkey: councilInUse,
+};
 
 async function translated<T>(write: () => Promise<T>): Promise<T> {
   try {
-    return await write();
+    return await withConstraintConflicts(write, constraintConflicts);
   } catch (error) {
     if (error instanceof InUseError) throw conflictError(inUse);
-    if (isForeignKeyViolation(error, 'doctor_profiles_specialty_council_fkey')) throw conflictError(councilInUse);
-    const conflict = uniqueConflictOf(error);
-    if (conflict) throw conflictError(conflict);
     throw error;
   }
 }

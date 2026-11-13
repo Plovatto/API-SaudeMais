@@ -27,17 +27,12 @@ function findPgError(error: unknown): PgError | undefined {
   return undefined;
 }
 
-export function uniqueConstraintOf(error: unknown): string | undefined {
-  const pgError = findPgError(error);
-  return pgError?.code === UNIQUE_VIOLATION ? pgError.constraint : undefined;
-}
-
 export function isUniqueViolation(error: unknown, constraint: string): boolean {
   const pgError = findPgError(error);
   return pgError?.code === UNIQUE_VIOLATION && pgError.constraint === constraint;
 }
 
-export function isForeignKeyViolation(error: unknown, constraint: string): boolean {
+export function violatedConstraint(error: unknown): string | undefined {
   const pgError = findPgError(error);
-  return pgError?.code === FOREIGN_KEY_VIOLATION && pgError.constraint === constraint;
+  return pgError?.code === UNIQUE_VIOLATION || pgError?.code === FOREIGN_KEY_VIOLATION ? pgError.constraint : undefined;
 }

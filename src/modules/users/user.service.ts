@@ -1,6 +1,8 @@
 import { AppError } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
+import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
+import { definedFields } from '../../lib/defined.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { DAY, HOUR, MINUTE } from '../../lib/time.js';
 import type {
@@ -16,6 +18,10 @@ import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.pa
 import type { SeedAccount } from './user.demo.js';
 import type { UserRepository } from './user.repository.js';
 import { createSessionToken, hashToken, isWellFormedToken } from './user.token.js';
+
+const emailConflicts = {
+  users_email_key: { code: 'EMAIL_TAKEN', field: 'email', message: 'Este e-mail já está cadastrado.' },
+};
 
 export const TERMS_VERSION = '2026-11-13';
 
@@ -48,24 +54,20 @@ export class UserService {
 
   async register({ fullName, email, phone, password }: RegisterInput): Promise<PublicUser> {
     const passwordHash = await hashPassword(password);
-    try {
-      return await this.repository.createUser({
-        fullName,
-        email,
-        phone,
-        passwordHash,
-        roles: ['patient'],
-        isProtected: false,
-        termsVersion: TERMS_VERSION,
-        now: this.clock.now(),
-      });
-    } catch (error) {
-      if (isUniqueViolation(error, 'users_email_key')) {
-        const message = 'Este e-mail já está cadastrado.';
-        throw new AppError(409, 'EMAIL_TAKEN', message, { email: message });
-      }
-      throw error;
-    }
+    return withConstraintConflicts(
+      () =>
+        this.repository.createUser({
+          fullName,
+          email,
+          phone,
+          passwordHash,
+          roles: ['patient'],
+          isProtected: false,
+          termsVersion: TERMS_VERSION,
+          now: this.clock.now(),
+        }),
+      emailConflicts,
+    );
   }
 
   async login({ email, password, remember }: LoginInput, client: ClientInfo): Promise<LoginResponse> {
@@ -147,10 +149,7 @@ export class UserService {
   }
 
   async updateProfile(userId: string, { fullName, phone }: UpdateProfileInput): Promise<PublicUser> {
-    await this.repository.updateProfile(userId, {
-      ...(fullName !== undefined && { fullName }),
-      ...(phone !== undefined && { phone }),
-    });
+    await this.repository.updateProfile(userId, definedFields({ fullName, phone }));
     return this.profile(userId);
   }
 
