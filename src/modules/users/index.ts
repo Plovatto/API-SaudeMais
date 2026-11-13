@@ -2,7 +2,6 @@ import type { Database } from '../../database/pg-client.js';
 import type { Clock } from '../../lib/clock.js';
 import { createRequireAuth } from '../../middleware/auth.js';
 import { createUserController } from './user.controller.js';
-import { createUserRateLimits } from './user.rate-limits.js';
 import { UserRepository } from './user.repository.js';
 import { placeholderPasswordHash } from './user.password.js';
 import { createUserRouter } from './user.routes.js';
@@ -23,7 +22,6 @@ export function createUsersModule({ db, clock, policy }: UsersModuleDeps) {
   const router = createUserRouter({
     controller: createUserController(service),
     requireAuth,
-    rateLimits: createUserRateLimits(),
   });
   return { router, requireAuth, service };
 }

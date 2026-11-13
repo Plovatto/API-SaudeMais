@@ -1,4 +1,5 @@
-import { Router, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler } from 'express';
+import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
 import {
   errorResponse,
   internalErrorResponse,
@@ -11,9 +12,17 @@ import {
 } from '../../docs/common-schemas.js';
 import { registry, sessionAuth } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
+import { MINUTE } from '../../lib/time.js';
+import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { UserController } from './user.controller.js';
-import { loginResponseSchema, loginSchema, publicUserSchema, registerSchema } from './user.model.js';
-import type { UserRateLimits } from './user.rate-limits.js';
+import { loginResponseSchema, loginSchema, normalizeEmail, publicUserSchema, registerSchema } from './user.model.js';
+
+function emailOf(req: Request): string {
+  const email: unknown = (req.body as { email?: unknown } | undefined)?.email;
+  return typeof email === 'string' ? normalizeEmail(email).slice(0, 254) : '';
+}
+
+const ipOf = (req: Request) => ipKeyGenerator(req.ip ?? '');
 
 registry.registerPath({
   method: 'post',
@@ -83,19 +92,30 @@ registry.registerPath({
 export interface UserRouterDeps {
   controller: UserController;
   requireAuth: RequestHandler;
-  rateLimits: UserRateLimits;
 }
 
-export function createUserRouter({ controller, requireAuth, rateLimits }: UserRouterDeps): Router {
+export function createUserRouter({ controller, requireAuth }: UserRouterDeps): Router {
+  const registerLimit = rateLimit({ ...rateLimitDefaults, windowMs: 60 * MINUTE, limit: 10 });
+  const loginLimitByIp = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 30 });
+  const loginLimitByEmailAndIp = rateLimit({
+    ...rateLimitDefaults,
+    windowMs: 15 * MINUTE,
+    limit: 5,
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => `${emailOf(req)}|${ipOf(req)}`,
+  });
+  const loginLimitByEmail = rateLimit({
+    ...rateLimitDefaults,
+    windowMs: 60 * MINUTE,
+    limit: 50,
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => emailOf(req) || `ip:${ipOf(req)}`,
+  });
+  const sessionLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
+
   const router = Router();
-  router.post('/api/users/register', rateLimits.register, controller.register);
-  router.post(
-    '/api/users/login',
-    rateLimits.loginByIp,
-    rateLimits.loginByEmailAndIp,
-    rateLimits.loginByEmail,
-    controller.login,
-  );
-  router.post('/api/users/logout', rateLimits.session, requireAuth, controller.logout);
+  router.post('/api/users/register', registerLimit, controller.register);
+  router.post('/api/users/login', loginLimitByIp, loginLimitByEmailAndIp, loginLimitByEmail, controller.login);
+  router.post('/api/users/logout', sessionLimit, requireAuth, controller.logout);
   return router;
 }
