@@ -28,6 +28,14 @@ describe('parseEnv', () => {
     });
   });
 
+  it('requires TRUST_PROXY_HOPS in production, so rate limits never see only the proxy address', () => {
+    const error = captureError(() =>
+      parseEnv({ NODE_ENV: 'production', CORS_ORIGIN: 'https://plovatto.github.io', DATABASE_URL: DB }),
+    );
+
+    expect(error.message).toContain('TRUST_PROXY_HOPS: Required in production');
+  });
+
   it('defaults to production, which requires CORS_ORIGIN', () => {
     expect(captureError(() => parseEnv({ DATABASE_URL: DB })).message).toContain('CORS_ORIGIN: Required in production');
   });
@@ -62,7 +70,12 @@ describe('parseEnv', () => {
   it('treats empty values as unset', () => {
     const env = parseEnv({ ...dev, PORT: '', LOG_LEVEL: '', TRUST_PROXY_HOPS: '', CORS_ORIGIN: '' });
 
-    expect(env).toMatchObject({ PORT: 3001, LOG_LEVEL: 'info', TRUST_PROXY_HOPS: 0, CORS_ORIGIN: 'http://localhost:5173' });
+    expect(env).toMatchObject({
+      PORT: 3001,
+      LOG_LEVEL: 'info',
+      TRUST_PROXY_HOPS: 0,
+      CORS_ORIGIN: 'http://localhost:5173',
+    });
   });
 
   it.each([

@@ -97,7 +97,6 @@ describe('unknown routes and bad bodies', () => {
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ message: 'Requisição inválida.', code: 'BAD_REQUEST' });
   });
-
 });
 
 describe('access log', () => {
@@ -117,7 +116,12 @@ describe('access log', () => {
       res: Record<string, unknown>;
     };
     expect(entry.level).toBe(40);
-    expect(entry.req).toEqual({ id: expect.anything() as unknown, method: 'GET', path: '/api/x/PATHVALUE', ip: expect.any(String) as unknown });
+    expect(entry.req).toEqual({
+      id: expect.anything() as unknown,
+      method: 'GET',
+      path: '/api/x/PATHVALUE',
+      ip: expect.any(String) as unknown,
+    });
     expect(entry.res).toEqual({ statusCode: 404 });
     for (const secret of ['QUERYSECRET', 'ana@example.com', 'HEADERSECRET', 'COOKIESECRET']) {
       expect(output).not.toContain(secret);

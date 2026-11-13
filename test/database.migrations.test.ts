@@ -26,10 +26,28 @@ describe('database migrations', () => {
     expect(result.rows[0]?.total).toBe(migrationFiles.length);
   });
 
+  it('keeps updated_at current on every table that has the column', async () => {
+    const db = await createTestDb();
+
+    const result = await db.execute<{ table_name: string; covered: boolean }>(sql`
+      select c.table_name, exists (
+        select 1 from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+        where t.tgrelid = c.table_name::regclass and p.proname = 'set_updated_at' and not t.tgisinternal
+      ) as covered
+      from information_schema.columns c
+      where c.table_schema = 'public' and c.column_name = 'updated_at'
+    `);
+
+    expect(result.rows.length).toBeGreaterThan(0);
+    expect(result.rows.filter((row) => !row.covered)).toEqual([]);
+  });
+
   it('compares citext values without case sensitivity', async () => {
     const db = await createTestDb();
 
-    const result = await db.execute<{ same: boolean }>(sql`select 'Ana@Example.com'::citext = 'ana@example.com' as same`);
+    const result = await db.execute<{ same: boolean }>(
+      sql`select 'Ana@Example.com'::citext = 'ana@example.com' as same`,
+    );
 
     expect(result.rows[0]?.same).toBe(true);
   });

@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { buildTestApp } from './support/build-test-app.js';
+import { createTestDb } from './support/create-test-db.js';
 import { buildUsersApp, HOUR, login, registration, START } from './support/users.js';
 
 async function withAccount() {
@@ -69,16 +71,40 @@ describe('POST /api/users/login', () => {
     expect(response.body).toMatchObject({ code: 'USER_INACTIVE' });
   });
 
-  it('keeps at most 10 sessions per account, dropping the oldest', async () => {
-    const { app, db, clock } = await withAccount();
+  it('keeps at most 10 sessions per account, never dropping the one just created', async () => {
+    const { app, db, auth } = await withAccount();
+    let token = '';
     for (let attempt = 0; attempt < 11; attempt += 1) {
-      clock.advance(60_000);
-      await login(app).expect(200);
+      token = ((await login(app).expect(200)).body as { token: string }).token;
     }
 
     const total = await db.execute<{ total: number }>(sql`select count(*)::int as total from sessions`);
 
     expect(total.rows[0]?.total).toBe(10);
+    expect(await auth.authenticate(token)).not.toBeNull();
+  });
+
+  it('removes expired sessions of the account at the next login', async () => {
+    const { app, db, clock } = await withAccount();
+    await login(app).expect(200);
+    clock.advance(13 * HOUR);
+
+    await login(app).expect(200);
+
+    const total = await db.execute<{ total: number }>(sql`select count(*)::int as total from sessions`);
+    expect(total.rows[0]?.total).toBe(1);
+  });
+
+  it('stores no address when the forwarded one is not a valid IP', async () => {
+    const db = await createTestDb();
+    const { app } = buildTestApp({ TRUST_PROXY_HOPS: 2 }, { db });
+    await request(app).post('/api/users/register').send(registration()).expect(201);
+
+    const response = await login(app).set('X-Forwarded-For', 'not-an-ip, 10.0.0.1');
+
+    expect(response.status).toBe(200);
+    const stored = await db.execute<{ ip: string | null }>(sql`select ip::text from sessions`);
+    expect(stored.rows[0]?.ip).toBeNull();
   });
 
   it('rejects a malformed body', async () => {
@@ -93,7 +119,7 @@ describe('POST /api/users/login', () => {
     });
   });
 
-  it('blocks an e-mail after 5 wrong passwords while other accounts keep working', async () => {
+  it('blocks an e-mail after 5 wrong passwords from the same address while other accounts keep working', async () => {
     const { app } = await withAccount();
     await request(app)
       .post('/api/users/register')
