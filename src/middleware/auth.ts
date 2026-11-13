@@ -7,6 +7,9 @@ const contexts = new WeakMap<Request, AuthContext>();
 
 export const unauthenticated = () => new AppError(401, 'UNAUTHENTICATED', 'Sua sessão expirou. Entre novamente.');
 
+export const protectedAccount = () =>
+  new AppError(403, 'PROTECTED_ACCOUNT', 'Esta é uma conta de demonstração e não pode ser alterada.');
+
 export const noStore: RequestHandler = (_req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
@@ -34,7 +37,7 @@ export function createRequireRole(role: Role): RequestHandler {
 export function createRequireWritable(): RequestHandler {
   return (req, _res, next) => {
     if (authOf(req).isProtected) {
-      throw new AppError(403, 'PROTECTED_ACCOUNT', 'Esta é uma conta de demonstração e não pode ser alterada.');
+      throw protectedAccount();
     }
     next();
   };

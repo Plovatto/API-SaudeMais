@@ -6,11 +6,9 @@ export const notFoundMessages: Record<CatalogEntity, string> = {
   exam_type: 'Tipo de exame não encontrado.',
 };
 
-export interface Conflict {
-  code: string;
-  field: string;
-  message: string;
-}
+import type { FieldConflict as Conflict } from '../../lib/app-error.js';
+
+export type { Conflict };
 
 export const uniqueConflicts = {
   specialties_name_key: { code: 'NAME_TAKEN', field: 'name', message: 'Já existe uma especialidade com esse nome.' },

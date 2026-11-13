@@ -1,5 +1,11 @@
 export type FieldErrors = Record<string, string>;
 
+export interface FieldConflict {
+  code: string;
+  field: string;
+  message: string;
+}
+
 export class AppError extends Error {
   readonly status: number;
   readonly code: string;
@@ -15,4 +21,8 @@ export class AppError extends Error {
     this.code = code;
     this.fields = fields;
   }
+}
+
+export function conflictError({ code, field, message }: FieldConflict): AppError {
+  return new AppError(409, code, message, { [field]: message });
 }

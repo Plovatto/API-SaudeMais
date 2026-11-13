@@ -1,4 +1,5 @@
 import type { Request, RequestHandler } from 'express';
+import { idParams } from '../../lib/params.js';
 import { clientIp } from '../../lib/client-ip.js';
 import { paginationQuery } from '../../lib/pagination.js';
 import { authOf } from '../../middleware/auth.js';
@@ -6,7 +7,6 @@ import {
   createExamTypeSchema,
   createSpecialtySchema,
   createUnitSchema,
-  idParams,
   offerParams,
   policyInputSchema,
   saveOfferSchema,

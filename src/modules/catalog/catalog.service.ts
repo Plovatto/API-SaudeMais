@@ -1,4 +1,4 @@
-import { AppError } from '../../lib/app-error.js';
+import { AppError, conflictError } from '../../lib/app-error.js';
 import type { Pagination } from '../../lib/pagination.js';
 import { uniqueConstraintOf } from '../../lib/pg-errors.js';
 import type {
@@ -23,10 +23,6 @@ import { InUseError, type Actor, type CatalogRepository } from './catalog.reposi
 
 function notFound(entity: CatalogEntity): AppError {
   return new AppError(404, 'NOT_FOUND', notFoundMessages[entity]);
-}
-
-function conflictError({ code, field, message }: Conflict): AppError {
-  return new AppError(409, code, message, { [field]: message });
 }
 
 function uniqueConflictOf(error: unknown): Conflict | undefined {
