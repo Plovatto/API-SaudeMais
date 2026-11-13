@@ -9,7 +9,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 > Projeto em desenvolvimento. O andamento está no [quadro do projeto](https://github.com/users/Plovatto/projects/2).
 
-**Front-end:** [Plovatto/SaudeMais](https://github.com/Plovatto/SaudeMais)
+**Documentação interativa no ar:** https://p01--saudemais--pgj2h2jjxzb4.code.run/docs/ · **Front-end:** [Plovatto/SaudeMais](https://github.com/Plovatto/SaudeMais)
 
 ## Funcionalidades
 
@@ -146,7 +146,7 @@ A API escuta na porta `8080` dentro do container, aplica as migrations ao inicia
 
 ## Documentação da API
 
-A documentação é gerada a partir do código e servida pela própria API:
+A documentação é gerada a partir do código e servida pela própria API. Ela explica autenticação, formato de erro, códigos de erro, datas e paginação, e cada rota traz exemplos e as respostas possíveis. Localmente:
 
 ```text
 http://localhost:3001/docs
