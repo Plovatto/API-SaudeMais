@@ -155,12 +155,13 @@ export class UserService {
   }
 
   async changePassword({ sessionId, user }: AuthContext, { currentPassword, password }: ChangePasswordInput) {
+    const now = this.clock.now();
     const stored = await this.repository.findPasswordHash(user.id);
     if (!stored || !(await verifyPassword(currentPassword, stored))) {
       const message = 'A senha atual está incorreta.';
       throw new AppError(422, 'INVALID_CURRENT_PASSWORD', message, { currentPassword: message });
     }
-    await this.repository.replacePassword(user.id, await hashPassword(password), sessionId, this.clock.now());
+    await this.repository.replacePassword(user.id, await hashPassword(password), sessionId, now);
   }
 
   async listSessions({ sessionId, user }: AuthContext): Promise<SessionView[]> {

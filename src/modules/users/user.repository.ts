@@ -112,7 +112,10 @@ export class UserRepository {
   replacePassword(id: string, passwordHash: string, keepSessionId: string, now: Date): Promise<void> {
     return this.db.transaction(async (tx) => {
       await tx.update(users).set({ passwordHash, passwordChangedAt: now }).where(eq(users.id, id));
-      await tx.update(sessions).set({ createdAt: now }).where(eq(sessions.id, keepSessionId));
+      await tx
+        .update(sessions)
+        .set({ createdAt: now })
+        .where(and(eq(sessions.id, keepSessionId), gt(sessions.expiresAt, now)));
       await tx.delete(sessions).where(and(eq(sessions.userId, id), ne(sessions.id, keepSessionId)));
     });
   }
