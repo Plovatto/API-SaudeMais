@@ -1,5 +1,5 @@
-import { isIP } from 'node:net';
 import type { RequestHandler } from 'express';
+import { clientIp } from '../../lib/client-ip.js';
 import { authOf } from '../../middleware/auth.js';
 import { changePasswordSchema, loginSchema, registerSchema, updateProfileSchema } from './user.model.js';
 import type { UserService } from './user.service.js';
@@ -23,7 +23,7 @@ export function createUserController(service: UserService): UserController {
     },
     login: async (req, res) => {
       const session = await service.login(loginSchema.parse(req.body), {
-        ip: req.ip && isIP(req.ip) ? req.ip : null,
+        ip: clientIp(req),
         userAgent: req.get('user-agent')?.slice(0, 512) ?? null,
       });
       res.status(200).json(session);

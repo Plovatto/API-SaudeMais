@@ -8,6 +8,15 @@ export const tags = {
     description: 'Cadastro, login e logout. A sessão é um token opaco enviado em `Authorization: Bearer <token>`.',
   },
   profile: { name: 'Perfil', description: 'Dados, senha e sessões da própria conta. Exige login.' },
+  catalog: {
+    name: 'Catálogo',
+    description: 'Especialidades, unidades e tipos de exame ativos, usados nos agendamentos. Exige login.',
+  },
+  administration: {
+    name: 'Administração',
+    description:
+      'Cadastro de especialidades, unidades, horários, exames, ofertas e da política de agendamento. Só administradores.',
+  },
 } as const;
 
 export const tagList = Object.values(tags);

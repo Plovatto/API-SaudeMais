@@ -11,3 +11,10 @@ export const uuidv7Id = () =>
   uuid('id')
     .primaryKey()
     .default(sql`uuidv7()`);
+
+export const isE164 = (column: string) => sql.raw(`${column} ~ '^\\+[1-9][0-9]{9,14}$'`);
+
+export const timestamps = () => ({
+  createdAt: timestamptz('created_at').notNull().defaultNow(),
+  updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+});

@@ -15,6 +15,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 - Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash
 - Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
+- Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
 - Senhas com scrypt, login em tempo constante e limites de tentativas por IP e por e-mail
 - Banco PostgreSQL com migrations em SQL aplicadas ao iniciar
 - Configuração centralizada e validada por variáveis de ambiente
@@ -186,6 +187,18 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | POST | `/api/users/logout` | Encerra a sessão atual |
 | POST | `/api/password-reset/request` | Envia o link para redefinir a senha |
 | POST | `/api/password-reset/confirm` | Cria uma nova senha com o link |
+| GET | `/api/specialties` | Especialidades ativas |
+| GET | `/api/units` | Unidades ativas com horários (filtro `examTypeId`) |
+| GET | `/api/exam-types` | Tipos de exame ativos |
+| GET, POST | `/api/admin/specialties` | Lista e cria especialidades (admin) |
+| PATCH | `/api/admin/specialties/{id}` | Altera, ativa ou desativa uma especialidade (admin) |
+| GET, POST | `/api/admin/units` | Lista e cria unidades com horários (admin) |
+| PATCH | `/api/admin/units/{id}` | Altera, ativa ou desativa uma unidade (admin) |
+| GET, POST | `/api/admin/exam-types` | Lista e cria tipos de exame (admin) |
+| PATCH | `/api/admin/exam-types/{id}` | Altera, ativa ou desativa um tipo de exame (admin) |
+| GET | `/api/admin/units/{id}/exam-offers` | Exames oferecidos pela unidade (admin) |
+| PUT | `/api/admin/units/{id}/exam-offers/{examTypeId}` | Oferece um exame na unidade (admin) |
+| GET, PUT | `/api/admin/policy` | Política de agendamento (admin) |
 | GET | `/api/me` | Dados da própria conta |
 | PATCH | `/api/me` | Altera nome ou telefone |
 | POST | `/api/me/password` | Troca a senha e encerra as outras sessões |

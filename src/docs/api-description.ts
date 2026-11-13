@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha e o perfil da própria conta, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta e o catálogo com a administração dele, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
 
 ## Erros
 
@@ -24,7 +24,7 @@ Toda resposta de erro tem o mesmo formato:
 | \`400\` | Corpo, parâmetros ou JSON inválidos |
 | \`401\` | Sem sessão, sessão expirada ou credenciais incorretas |
 | \`403\` | Conta desativada, sem o perfil exigido ou de demonstração |
-| \`404\` | Rota ou método inexistente |
+| \`404\` | Rota, método ou registro inexistente |
 | \`409\` | Conflito com o estado atual, como e-mail já cadastrado |
 | \`422\` | Regra de negócio não atendida, como senha atual incorreta |
 | \`413\` | Corpo maior que 100 KB |
@@ -49,6 +49,10 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`INVALID_RESET_TOKEN\` | 400 | Link de redefinição de senha inválido, usado ou vencido |
 | \`INVALID_CURRENT_PASSWORD\` | 422 | A senha atual informada na troca de senha está errada |
 | \`PROTECTED_ACCOUNT\` | 403 | Contas de demonstração não podem ser alteradas |
+| \`NOT_FOUND\` | 404 | O registro pedido não existe |
+| \`NAME_TAKEN\` | 409 | Já existe um cadastro com esse nome, sem distinguir maiúsculas |
+| \`CODE_TAKEN\` | 409 | Já existe um tipo de exame com esse código |
+| \`EXAM_TYPE_INACTIVE\` | 409 | O tipo de exame está inativo e não pode ter oferta ativa |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |
 | \`TOO_MANY_REQUESTS\` | 429 | Muitas requisições do mesmo IP (300 por minuto) ou limite próprio da rota |
@@ -80,7 +84,7 @@ Convenção para as próximas rotas:
 
 ## Paginação
 
-Convenção para as próximas rotas: listas recebem \`page\` (a partir de 1) e \`pageSize\` (até 50) e respondem:
+As listas administrativas recebem \`page\` (a partir de 1) e \`pageSize\` (até 50) e respondem:
 
 \`\`\`json
 { "items": [], "page": 1, "pageSize": 20, "total": 0 }
