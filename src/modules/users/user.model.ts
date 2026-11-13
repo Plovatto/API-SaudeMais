@@ -2,6 +2,7 @@ import '../../docs/zod-extend.js';
 import { z } from 'zod';
 import { roles } from '../../database/schema/users.js';
 import { registry } from '../../docs/registry.js';
+import { boundedText } from '../../lib/text.js';
 
 const E164 = /^\+[1-9][0-9]{9,14}$/;
 
@@ -15,19 +16,10 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function hasControlCharacter(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.codePointAt(0) ?? 0;
-    return code < 32 || code === 127;
-  });
-}
-
-export const personName = z
-  .string()
-  .trim()
-  .refine((value) => !hasControlCharacter(value), 'O nome não pode ter caracteres de controle.')
-  .refine((value) => [...value].length >= 2 && [...value].length <= 120, 'O nome precisa ter entre 2 e 120 caracteres.')
-  .openapi({ description: 'Nome completo, de 2 a 120 caracteres.', example: 'Ana Maria Silva' });
+export const personName = boundedText('O nome', 2, 120).openapi({
+  description: 'Nome completo, de 2 a 120 caracteres.',
+  example: 'Ana Maria Silva',
+});
 
 export const email = z
   .string()

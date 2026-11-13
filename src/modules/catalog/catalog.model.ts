@@ -3,13 +3,10 @@ import { z } from 'zod';
 import { examKinds } from '../../database/schema/catalog.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema } from '../../lib/pagination.js';
+import { boundedText } from '../../lib/text.js';
 import { phoneNumber } from '../users/user.model.js';
 
-const catalogName = z
-  .string()
-  .trim()
-  .min(2, 'O nome precisa ter pelo menos 2 caracteres.')
-  .max(80, 'O nome pode ter até 80 caracteres.');
+const catalogName = boundedText('O nome', 2, 80);
 
 const duration = (min: number, max: number) =>
   z
@@ -91,12 +88,7 @@ const unitHours = z
 
 const unitFields = {
   name: catalogName.openapi({ example: 'Unidade Central' }),
-  address: z
-    .string()
-    .trim()
-    .min(5, 'Informe o endereço completo.')
-    .max(200, 'O endereço pode ter até 200 caracteres.')
-    .openapi({ example: 'Rua das Flores, 123 - Centro' }),
+  address: boundedText('O endereço', 5, 200).openapi({ example: 'Rua das Flores, 123 - Centro' }),
   phone: phoneNumber.openapi({ example: '(11) 3333-4444' }),
   hours: unitHours,
 };
