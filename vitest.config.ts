@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    testTimeout: 15_000,
     env: {
       NODE_ENV: 'test',
       PORT: '3001',
