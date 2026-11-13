@@ -2,8 +2,9 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { startOfDayIn } from '@/lib/time.js';
+import { PasswordResetRepository } from '@/modules/password-reset/password-reset.repository.js';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
-import { buildUsersApp, login, registerAndLogin } from './support/users.js';
+import { buildUsersApp, login, registerAndLogin, registration, START } from './support/users.js';
 
 type Context = Awaited<ReturnType<typeof buildUsersApp>>;
 const MINUTE = 60_000;
@@ -78,6 +79,48 @@ describe('POST /api/password-reset/request', () => {
     await context.mail.drain();
 
     expect(context.mailer.sent).toHaveLength(3);
+  });
+
+  it('keeps the 15 minutes between links across midnight', async () => {
+    const context = await withAccount();
+    context.clock.advance(Date.parse('2026-11-21T02:55:00Z') - START.getTime());
+
+    await requestReset(context.app).expect(204);
+    context.clock.advance(10 * MINUTE);
+    await requestReset(context.app).expect(204);
+    await context.mail.drain();
+
+    expect(context.mailer.sent).toHaveLength(1);
+  });
+
+  it('stops sending once the daily total for the whole site is reached', async () => {
+    const context = await buildUsersApp();
+    const ids: string[] = [];
+    for (const email of ['a@email.com', 'b@email.com', 'c@email.com']) {
+      const created = await request(context.app).post('/api/users/register').send(registration({ email }));
+      ids.push((created.body as { id: string }).id);
+    }
+    const resets = new PasswordResetRepository(context.db, {
+      perUserPerDay: 3,
+      globalPerDay: 2,
+      minIntervalMs: 15 * MINUTE,
+    });
+    const now = context.clock.now();
+
+    const results = [];
+    for (const [index, userId] of ids.entries()) {
+      results.push(
+        await resets.issue({
+          userId,
+          tokenHash: String(index).repeat(64),
+          now,
+          expiresAt: new Date(now.getTime() + 30 * MINUTE),
+          dayStart: startOfDayIn('America/Sao_Paulo', now),
+        }),
+      );
+    }
+
+    expect(results).toEqual([true, true, false]);
   });
 
   it('invalidates the previous link when a new one is sent', async () => {

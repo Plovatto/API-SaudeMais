@@ -1,4 +1,4 @@
-import { and, count, eq, gt, gte, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { passwordResetTokens } from '../../database/schema/password-reset-tokens.js';
 import { users } from '../../database/schema/users.js';
@@ -31,14 +31,16 @@ export class PasswordResetRepository {
   issue({ userId, tokenHash, now, expiresAt, dayStart }: NewResetToken): Promise<boolean> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_NAMESPACE}, 0)`);
+      const recentSince = new Date(now.getTime() - this.limits.minIntervalMs);
+      const since = recentSince < dayStart ? recentSince : dayStart;
       const [today] = await tx
         .select({
-          total: count(),
-          forUser: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId})::int`,
-          recent: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} > ${new Date(now.getTime() - this.limits.minIntervalMs)})::int`,
+          total: sql<number>`count(*) filter (where ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
+          forUser: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
+          recent: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} > ${recentSince})::int`,
         })
         .from(passwordResetTokens)
-        .where(gte(passwordResetTokens.createdAt, dayStart));
+        .where(gte(passwordResetTokens.createdAt, since));
       if (
         !today ||
         today.total >= this.limits.globalPerDay ||
