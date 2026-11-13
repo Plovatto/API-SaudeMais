@@ -8,3 +8,5 @@ export const sessionAuth = registry.registerComponent('securitySchemes', 'sessio
   scheme: 'bearer',
   description: 'Token de sessão obtido no login, enviado como "Authorization: Bearer <token>".',
 });
+
+export const sessionSecurity = { security: [{ [sessionAuth.name]: [] }] };

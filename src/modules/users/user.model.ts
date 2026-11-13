@@ -35,7 +35,7 @@ export const email = z
   .pipe(z.email({ error: 'Informe um e-mail válido.' }).max(254, 'O e-mail pode ter até 254 caracteres.'))
   .openapi({ example: 'ana.silva@email.com' });
 
-const phoneNumber = z
+export const phoneNumber = z
   .string()
   .trim()
   .min(1, 'Informe um telefone válido com DDD.')

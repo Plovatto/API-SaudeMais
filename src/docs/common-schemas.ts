@@ -54,6 +54,11 @@ export const unauthenticatedResponse = errorResponse('Sem sessão ou com sessão
   code: 'UNAUTHENTICATED',
 });
 
+export const forbiddenResponse = errorResponse('A conta não tem o perfil exigido (`FORBIDDEN`).', {
+  message: 'Você não tem acesso a esta área.',
+  code: 'FORBIDDEN',
+});
+
 export const tooManyRequestsResponse = errorResponse(
   'Limite de tentativas atingido (`TOO_MANY_REQUESTS`). O cabeçalho `RateLimit` diz quando tentar de novo.',
   {

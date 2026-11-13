@@ -10,7 +10,7 @@ import {
   unauthenticatedResponse,
   validationErrorResponse,
 } from '../../docs/common-schemas.js';
-import { registry, sessionAuth } from '../../docs/registry.js';
+import { registry, sessionSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
 import { authOf, noStore } from '../../middleware/auth.js';
@@ -35,8 +35,6 @@ function emailOf(req: Request): string {
 }
 
 const ipOf = (req: Request) => ipKeyGenerator(req.ip ?? '');
-
-const authenticated = { security: [{ [sessionAuth.name]: [] }] };
 
 registry.registerPath({
   method: 'post',
@@ -94,7 +92,7 @@ registry.registerPath({
   tags: [tags.accounts.name],
   summary: 'Sair',
   description: 'Encerra a sessão do token enviado. As outras sessões da conta continuam valendo.',
-  ...authenticated,
+  ...sessionSecurity,
   responses: {
     204: { description: 'Sessão encerrada.' },
     401: unauthenticatedResponse,
@@ -115,7 +113,7 @@ registry.registerPath({
   tags: [tags.profile.name],
   summary: 'Ver os próprios dados',
   description: 'Devolve os dados e os perfis da conta dona do token. Limite: 120 leituras de perfil por minuto por IP.',
-  ...authenticated,
+  ...sessionSecurity,
   responses: {
     200: jsonResponse('Dados da conta.', publicUserSchema),
     401: unauthenticatedResponse,
@@ -132,7 +130,7 @@ registry.registerPath({
   summary: 'Alterar nome ou telefone',
   description:
     'Altera só os campos enviados. O e-mail não pode ser alterado nesta versão. Limite: 120 requisições de perfil por minuto por IP.',
-  ...authenticated,
+  ...sessionSecurity,
   request: { body: jsonBody(updateProfileSchema) },
   responses: {
     200: jsonResponse('Dados atualizados.', publicUserSchema),
@@ -152,7 +150,7 @@ registry.registerPath({
   summary: 'Trocar a senha',
   description:
     'Exige a senha atual. Depois da troca, todas as outras sessões da conta são encerradas; a sessão atual continua. Limites: 10 tentativas por IP e 5 senhas atuais erradas por conta a cada 15 minutos.',
-  ...authenticated,
+  ...sessionSecurity,
   request: { body: jsonBody(changePasswordSchema) },
   responses: {
     204: { description: 'Senha trocada.' },
@@ -178,7 +176,7 @@ registry.registerPath({
   summary: 'Listar sessões ativas',
   description:
     'Lista as sessões que ainda valem, da usada mais recentemente para a mais antiga, marcando a atual. Limite: 120 requisições de perfil por minuto por IP.',
-  ...authenticated,
+  ...sessionSecurity,
   responses: {
     200: jsonResponse('Sessões ativas.', z.array(sessionSchema)),
     401: unauthenticatedResponse,
@@ -195,7 +193,7 @@ registry.registerPath({
   summary: 'Sair de todas as sessões',
   description:
     'Encerra todas as sessões da conta, inclusive a atual. Na conta de demonstração, encerra só a sessão de quem pediu.',
-  ...authenticated,
+  ...sessionSecurity,
   responses: {
     204: { description: 'Sessões encerradas.' },
     401: unauthenticatedResponse,
