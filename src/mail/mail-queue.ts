@@ -1,7 +1,9 @@
 import type { Logger } from 'pino';
 import type { MailMessage, Mailer } from './mailer.js';
 
-function failureDetails(error: unknown) {
+const MAX_PENDING = 200;
+
+export function deliveryFailure(error: unknown) {
   const { code, responseCode, command } = (error ?? {}) as {
     code?: unknown;
     responseCode?: unknown;
@@ -19,10 +21,14 @@ export class MailQueue {
   ) {}
 
   enqueue(message: MailMessage): void {
+    if (this.pending.size >= MAX_PENDING) {
+      this.logger.error({ mail: { subject: message.subject } }, 'E-mail queue full; message dropped');
+      return;
+    }
     const delivery = Promise.resolve()
       .then(() => this.mailer.send(message))
       .catch((error: unknown) => {
-        this.logger.error({ mail: { subject: message.subject, ...failureDetails(error) } }, 'E-mail delivery failed');
+        this.logger.error({ mail: { subject: message.subject, ...deliveryFailure(error) } }, 'E-mail delivery failed');
       })
       .finally(() => this.pending.delete(delivery));
     this.pending.add(delivery);

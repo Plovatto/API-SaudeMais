@@ -9,7 +9,18 @@ export interface SmtpConfig {
 }
 
 export function createSmtpTransport({ host, port, user, pass }: SmtpConfig): Transporter {
-  return nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+    pool: true,
+    maxConnections: 2,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    dnsTimeout: 10_000,
+    socketTimeout: 30_000,
+  });
 }
 
 export class SmtpMailer implements Mailer {

@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 import { describe, expect, it, vi } from 'vitest';
 import { createLogger } from '@/config/logger.js';
 import { ConsoleMailer } from '@/mail/console-mailer.js';
-import { MailQueue, type MailMessage } from '@/mail/index.js';
+import { createMailer, MailQueue, type MailMessage } from '@/mail/index.js';
 import { SmtpMailer } from '@/mail/smtp-mailer.js';
 import { MemoryMailer } from './support/memory-mailer.js';
 
@@ -54,6 +54,30 @@ describe('MailQueue', () => {
     expect(output).toContain('EAUTH');
     expect(output).not.toContain(message.to);
     expect(output).not.toContain('secret');
+  });
+});
+
+describe('mail queue limits', () => {
+  it('drops messages once too many are waiting instead of growing without bound', async () => {
+    const { logger, lines } = captureLogger();
+    let release: () => void = () => undefined;
+    const stuck = { send: () => new Promise<void>((resolve) => (release = resolve)) };
+    const queue = new MailQueue(stuck, logger);
+
+    for (let index = 0; index < 201; index += 1) queue.enqueue(message);
+
+    expect(lines.join('')).toContain('E-mail queue full');
+    release();
+  });
+});
+
+describe('createMailer', () => {
+  it('refuses the smtp driver without credentials instead of falling back to the log', () => {
+    const { logger } = captureLogger();
+
+    expect(() => createMailer({ MAIL_DRIVER: 'smtp', SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: 465 }, logger)).toThrow(
+      /required for smtp/,
+    );
   });
 });
 

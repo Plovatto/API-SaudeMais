@@ -11,7 +11,9 @@ import { createModules } from './modules/index.js';
 const SHUTDOWN_DEADLINE_MS = 20_000;
 
 const pool = createPool(env.DATABASE_URL);
-const shutdown = createShutdown({ pool, timeoutMs: 8_000 });
+
+const mail = new MailQueue(createMailer(env, logger), logger);
+const shutdown = createShutdown({ pool, flush: () => mail.drain(), timeoutMs: 8_000 });
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
@@ -42,8 +44,6 @@ process.on('unhandledRejection', (err) => {
   logger.fatal({ err }, 'Unhandled rejection');
   process.exit(1);
 });
-
-const mail = new MailQueue(await createMailer(env, logger), logger);
 
 const { users, routers } = createModules({
   mail,

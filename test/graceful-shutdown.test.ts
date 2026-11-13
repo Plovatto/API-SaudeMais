@@ -28,6 +28,21 @@ function deferred() {
   return { promise, resolve };
 }
 
+describe('flush before closing the pool', () => {
+  it('waits for pending work before ending the database pool', async () => {
+    const order: string[] = [];
+    const shutdown = createShutdown({
+      pool: { end: () => Promise.resolve(void order.push('pool')) },
+      flush: () => Promise.resolve(void order.push('flush')),
+      timeoutMs: 1_000,
+    });
+
+    await shutdown.run();
+
+    expect(order).toEqual(['flush', 'pool']);
+  });
+});
+
 describe('createShutdown', () => {
   it('finishes in-flight requests, then closes the database pool', async () => {
     const order: string[] = [];
