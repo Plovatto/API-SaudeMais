@@ -1,12 +1,15 @@
 import './lib/zod-locale.js';
 import cors from 'cors';
-import express, { type Express } from 'express';
+import { rateLimit } from 'express-rate-limit';
+import express, { type Express, type Router } from 'express';
 import helmet from 'helmet';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { env, type Env } from './config/env.js';
-import { logger as defaultLogger } from './config/logger.js';
+import { logger as defaultLogger, serializeError } from './config/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
+import { MINUTE } from './lib/time.js';
+import { rateLimitDefaults } from './middleware/rate-limit.js';
 import { createDocsRouter } from './routes/docs.js';
 import { createHealthRouter } from './routes/health.js';
 
@@ -15,6 +18,7 @@ export type AppConfig = Pick<Env, 'NODE_ENV' | 'CORS_ORIGIN' | 'TRUST_PROXY_HOPS
 export interface AppOptions {
   config?: AppConfig;
   logger?: Logger;
+  routers?: Router[];
 }
 
 function pathOf(url: string | undefined): string {
@@ -25,7 +29,7 @@ function isQuietPath(path: string): boolean {
   return path === '/health' || (path.startsWith('/docs') && path !== '/docs/openapi.json');
 }
 
-export function createApp({ config = env, logger = defaultLogger }: AppOptions = {}): Express {
+export function createApp({ config = env, logger = defaultLogger, routers = [] }: AppOptions = {}): Express {
   const app = express();
   app.set('trust proxy', config.TRUST_PROXY_HOPS);
 
@@ -47,13 +51,16 @@ export function createApp({ config = env, logger = defaultLogger }: AppOptions =
           ip: req.raw?.ip ?? req.remoteAddress,
         }),
         res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
+        err: serializeError,
       },
     }),
   );
   app.use(
     helmet({
       contentSecurityPolicy: {
-        directives: { upgradeInsecureRequests: config.NODE_ENV === 'production' ? [] : null },
+        directives: {
+          upgradeInsecureRequests: config.NODE_ENV === 'production' ? [] : null,
+        },
       },
     }),
   );
@@ -61,7 +68,13 @@ export function createApp({ config = env, logger = defaultLogger }: AppOptions =
   app.use(express.json({ limit: '100kb' }));
 
   app.use(createHealthRouter());
-  app.use(createDocsRouter({ persistAuthorization: config.NODE_ENV !== 'production' }));
+  app.use(
+    createDocsRouter({
+      persistAuthorization: config.NODE_ENV !== 'production',
+    }),
+  );
+  app.use(rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 300 }));
+  for (const router of routers) app.use(router);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -14,6 +14,29 @@ function captureLogger() {
 }
 
 describe('logger redaction', () => {
+  it('keeps query text, parameters and stack out of database error logs', () => {
+    const { logger, lines } = captureLogger();
+    const cause = Object.assign(new Error('violates check constraint "users_phone_check"'), {
+      code: '23514',
+      constraint: 'users_phone_check',
+    });
+    const error = Object.assign(new Error('Failed query: insert into users\nparams: ana@email.com,scrypt$SECRETHASH'), {
+      name: 'DrizzleQueryError',
+      query: 'insert into users',
+      params: ['ana@email.com', 'scrypt$SECRETHASH'],
+      cause,
+    });
+
+    logger.error({ err: new Error('Registration failed', { cause: error }) }, 'Unhandled error');
+
+    const output = lines.join('');
+    expect(output).not.toContain('ana@email.com');
+    expect(output).not.toContain('SECRETHASH');
+    expect(JSON.parse(output)).toMatchObject({
+      err: { type: 'DrizzleQueryError', code: '23514', constraint: 'users_phone_check' },
+    });
+  });
+
   it('hides credential headers', () => {
     const { logger, lines } = captureLogger();
 

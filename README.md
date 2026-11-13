@@ -13,6 +13,8 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 ## Funcionalidades
 
+- Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash
+- Senhas com scrypt, login em tempo constante e limites de tentativas por IP e por e-mail
 - Banco PostgreSQL com migrations em SQL aplicadas ao iniciar
 - Configuração centralizada e validada por variáveis de ambiente
 - Respostas de erro padronizadas no formato `{ message, code, fields? }`
@@ -91,6 +93,8 @@ LOG_LEVEL=info
 TRUST_PROXY_HOPS=0
 CORS_ORIGIN=http://localhost:5173
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais
+SESSION_TTL_HOURS=12
+SESSION_REMEMBER_DAYS=7
 ```
 
 `NODE_ENV` vale `production` quando não é definida; use `development` localmente, como no `.env.example`.
@@ -100,6 +104,8 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais
 `DATABASE_URL` é a conexão direta com o PostgreSQL (sem pooler). As migrations pendentes são aplicadas quando a API inicia.
 
 `TRUST_PROXY_HOPS` é o número de proxies reversos na frente da API. Com o valor certo, os limites de requisição usam o IP de cada usuário em vez do IP do proxy. Mantenha `0` quando a API recebe as conexões diretamente.
+
+`SESSION_TTL_HOURS` é quanto tempo uma sessão sem "Lembrar de mim" dura sem uso (padrão 12). `SESSION_REMEMBER_DAYS` é a duração de uma sessão com "Lembrar de mim" e também o teto de qualquer sessão (padrão 7).
 
 ## Scripts
 
@@ -159,6 +165,9 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/health` | Verifica se o servidor está no ar |
+| POST | `/api/users/register` | Cria uma conta de paciente |
+| POST | `/api/users/login` | Entra e recebe o token de sessão |
+| POST | `/api/users/logout` | Encerra a sessão atual |
 | GET | `/docs` | Documentação interativa |
 | GET | `/docs/openapi.json` | Documento OpenAPI 3.1 |
 

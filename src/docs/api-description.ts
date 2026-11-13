@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficarão sob \`/api\`. Nesta versão existem apenas \`/health\` e esta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login e o logout, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
 
 ## Erros
 
@@ -22,12 +22,17 @@ Toda resposta de erro tem o mesmo formato:
 | Status | Quando acontece |
 |---|---|
 | \`400\` | Corpo, parâmetros ou JSON inválidos |
+| \`401\` | Sem sessão, sessão expirada ou credenciais incorretas |
+| \`403\` | Conta desativada |
 | \`404\` | Rota ou método inexistente |
+| \`409\` | Conflito com o estado atual, como e-mail já cadastrado |
 | \`413\` | Corpo maior que 100 KB |
 | \`415\` | Charset ou codificação do corpo não suportados |
+| \`429\` | Limite de tentativas atingido; o cabeçalho \`RateLimit\` diz quando tentar de novo |
 | \`500\` | Erro interno; os detalhes ficam só nos logs |
+| \`503\` | Servidor ocupado conferindo senhas; tente de novo em instantes |
 
-Convenção para as próximas rotas: \`401\` sem sessão ou com sessão expirada, \`403\` sem o perfil exigido, \`404\` também para recurso inexistente ou de outra pessoa, \`409\` para conflito com o estado atual (como horário já ocupado) e \`422\` para regra de negócio não atendida.
+Convenção para as próximas rotas: \`403\` também sem o perfil exigido, \`404\` também para recurso inexistente ou de outra pessoa, \`409\` também para horário já ocupado e \`422\` para regra de negócio não atendida.
 
 ## Códigos de erro
 
@@ -38,17 +43,22 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`VALIDATION_ERROR\` | 400 | Algum campo não passou na validação; veja \`fields\` |
 | \`INVALID_JSON\` | 400 | O corpo não é um JSON válido ou não é um objeto ou array |
 | \`BAD_REQUEST\` | 400 ou 415 | Requisição malformada, como parâmetro de URL inválido, charset ou codificação não suportados |
+| \`UNAUTHENTICATED\` | 401 | Rota exige login e o token falta, é inválido ou expirou |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |
+| \`TOO_MANY_REQUESTS\` | 429 | Muitas requisições do mesmo IP (300 por minuto) ou limite próprio da rota |
 | \`INTERNAL_ERROR\` | 500 | Erro inesperado no servidor |
+| \`SERVER_BUSY\` | 503 | Muitas senhas sendo conferidas ao mesmo tempo |
 
 ## Autenticação
 
-Convenção para as próximas rotas: as que exigem login mostrarão um cadeado e recebem o token de sessão no cabeçalho:
+Crie uma conta em \`POST /api/users/register\` e entre em \`POST /api/users/login\` para receber o token. As rotas que exigem login mostram um cadeado e recebem o token no cabeçalho:
 
 \`\`\`http
 Authorization: Bearer <token>
 \`\`\`
+
+Sem "Lembrar de mim", a sessão expira após 12 horas sem uso; com ele, dura 7 dias. Nenhuma sessão passa de 7 dias, e \`POST /api/users/logout\` encerra a sessão na hora. Quando a sessão não vale mais, a rota responde \`401\` com \`UNAUTHENTICATED\`.
 
 O botão **Authorize** desta página envia o token em todas as chamadas de teste. Fora de produção, o token fica salvo neste navegador até você clicar em **Logout**.
 
