@@ -133,6 +133,17 @@ npx drizzle-kit generate --custom --name=nome_da_migration
 
 Os testes de `npm test` usam um PostgreSQL em memória (PGlite) com as mesmas migrations. O que depende de travas e concorrência reais fica em `test-pg/` e roda com `npm run test:pg`, apontando `TEST_DATABASE_URL` para um banco descartável: a suíte apaga os schemas `public` e `drizzle` desse banco.
 
+## Docker
+
+A imagem de produção é gerada pelo `Dockerfile`, em dois estágios, e roda com usuário sem privilégios:
+
+```bash
+docker build -t api-saudemais .
+docker run --rm -p 8080:8080 -e DATABASE_URL=... -e CORS_ORIGIN=http://localhost:5173 api-saudemais
+```
+
+A API escuta na porta `8080` dentro do container, aplica as migrations ao iniciar e, ao receber `SIGTERM`, termina as requisições em andamento antes de encerrar. O CI constrói a imagem e a executa contra um PostgreSQL a cada pull request.
+
 ## Documentação da API
 
 A documentação é gerada a partir do código e servida pela própria API:
