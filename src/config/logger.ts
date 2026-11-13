@@ -12,6 +12,10 @@ export const redactedPaths = [
   '*.password',
   '*.token',
   'err.body',
+  'pass',
+  '*.pass',
+  'SMTP_PASS',
+  '*.SMTP_PASS',
   'err.params',
   'err.query',
 ];

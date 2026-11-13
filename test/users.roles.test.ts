@@ -8,11 +8,13 @@ import { createLogger } from '@/config/logger.js';
 import { rateLimit } from 'express-rate-limit';
 import { createRequireRole, createRequireWritable } from '@/middleware/auth.js';
 import { rateLimitDefaults } from '@/middleware/rate-limit.js';
+import { MailQueue } from '@/mail/index.js';
 import { createModules } from '@/modules/index.js';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
 import { TEST_CORS_ORIGIN } from './support/build-test-app.js';
 import { createTestDb } from './support/create-test-db.js';
 import { fixedClock } from './support/fixed-clock.js';
+import { MemoryMailer } from './support/memory-mailer.js';
 import { login, registration, START } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
@@ -21,8 +23,11 @@ if (!demo) throw new Error('A demo account is expected');
 
 async function buildRolesApp() {
   const db = await createTestDb();
+  const silent = new Writable({ write: (_chunk, _encoding, callback) => callback() });
+  const logger = createLogger({ NODE_ENV: 'test', LOG_LEVEL: 'silent' }, silent);
   const modules = createModules({
     db,
+    mail: new MailQueue(new MemoryMailer(), logger),
     clock: fixedClock(START),
     policy: { idleHours: 12, maxDays: 7, maxSessionsPerUser: 10 },
   });
@@ -34,10 +39,9 @@ async function buildRolesApp() {
   probe.post('/probe/write', probeLimit, modules.users.requireAuth, createRequireWritable(), (_req, res) => {
     res.json({ ok: true });
   });
-  const silent = new Writable({ write: (_chunk, _encoding, callback) => callback() });
   const app = createApp({
     config: { NODE_ENV: 'test', CORS_ORIGIN: TEST_CORS_ORIGIN, TRUST_PROXY_HOPS: 0 },
-    logger: createLogger({ NODE_ENV: 'test', LOG_LEVEL: 'silent' }, silent),
+    logger,
     routers: [...modules.routers, probe],
   });
   return { app, db, users: modules.users };

@@ -4,6 +4,7 @@ import { logger } from './config/logger.js';
 import { runMigrations } from './database/migrate.js';
 import { createDb, createPool } from './database/pg-client.js';
 import { systemClock } from './lib/clock.js';
+import { createMailer, MailQueue } from './mail/index.js';
 import { createShutdown } from './lib/graceful-shutdown.js';
 import { createModules } from './modules/index.js';
 
@@ -42,7 +43,10 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
+const mail = new MailQueue(await createMailer(env, logger), logger);
+
 const { users, routers } = createModules({
+  mail,
   db: createDb(pool),
   clock: systemClock,
   policy: {

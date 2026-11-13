@@ -3,6 +3,8 @@ import { createApp, type AppConfig } from '@/app.js';
 import { createLogger } from '@/config/logger.js';
 import type { Database } from '@/database/pg-client.js';
 import { systemClock } from '@/lib/clock.js';
+import { MailQueue } from '@/mail/index.js';
+import { MemoryMailer } from './memory-mailer.js';
 import { createModules, type ModulesDeps } from '@/modules/index.js';
 
 export const TEST_CORS_ORIGIN = 'http://localhost:5173';
@@ -31,13 +33,16 @@ export function buildTestApp(overrides: Partial<AppConfig> = {}, deps: Partial<M
     TRUST_PROXY_HOPS: 0,
     ...overrides,
   };
+  const mailer = new MemoryMailer();
+  const mail = new MailQueue(mailer, logger);
   const modules = createModules({
     db: noDatabase,
+    mail,
     clock: systemClock,
     policy: { idleHours: 12, maxDays: 7, maxSessionsPerUser: 10 },
     ...deps,
   });
   const app = createApp({ config, logger, routers: modules.routers });
 
-  return { app, logLines, modules };
+  return { app, logLines, modules, mailer, mail };
 }

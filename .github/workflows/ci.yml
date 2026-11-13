@@ -95,6 +95,12 @@ jobs:
             -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais_test \
             -e CORS_ORIGIN=https://plovatto.github.io \
             -e TRUST_PROXY_HOPS=0 \
+            -e MAIL_DRIVER=smtp \
+            -e SMTP_HOST=127.0.0.1 \
+            -e SMTP_PORT=2525 \
+            -e SMTP_USER=ci \
+            -e SMTP_PASS=ci \
+            -e MAIL_FROM=ci@example.com \
             api-saudemais:ci
           for attempt in $(seq 1 30); do
             curl -fsS http://localhost:8080/health && break
