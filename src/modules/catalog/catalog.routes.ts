@@ -19,6 +19,13 @@ import { MINUTE } from '../../lib/time.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { CatalogController } from './catalog.controller.js';
 import {
+  examTypeInactive,
+  notFoundMessages,
+  uniqueConflicts,
+  type CatalogEntity,
+  type Conflict,
+} from './catalog.messages.js';
+import {
   createExamTypeSchema,
   createSpecialtySchema,
   createUnitSchema,
@@ -40,19 +47,22 @@ import {
   updateUnitSchema,
 } from './catalog.model.js';
 
-const notFoundResponse = errorResponse('Registro inexistente (`NOT_FOUND`).', {
-  message: 'Unidade não encontrada.',
-  code: 'NOT_FOUND',
-});
-const nameTakenResponse = errorResponse('Nome já usado (`NAME_TAKEN`), sem distinguir maiúsculas.', {
-  message: 'Já existe uma especialidade com esse nome.',
-  code: 'NAME_TAKEN',
-  fields: { name: 'Já existe uma especialidade com esse nome.' },
-});
-const updateConflictResponse = errorResponse(
-  'Nome ou código já usado (`NAME_TAKEN`, `CODE_TAKEN`) ou desativação recusada por haver agendamentos futuros ligados (`IN_USE`).',
-  { message: 'Há agendamentos futuros ligados a este cadastro; ele não pode ser desativado.', code: 'IN_USE' },
-);
+const notFoundOf = (entity: CatalogEntity) =>
+  errorResponse('Registro inexistente (`NOT_FOUND`).', { message: notFoundMessages[entity], code: 'NOT_FOUND' });
+
+function conflictOf(...conflicts: [Conflict, ...Conflict[]]) {
+  const [example] = conflicts;
+  const codes = [...new Set(conflicts.map(({ code }) => `\`${code}\``))].join(', ');
+  return errorResponse(`Conflito com o estado atual (${codes}).`, {
+    message: example.message,
+    code: example.code,
+    fields: { [example.field]: example.message },
+  });
+}
+
+const specialtyConflict = conflictOf(uniqueConflicts.specialties_name_key);
+const unitConflict = conflictOf(uniqueConflicts.units_name_key);
+const examTypeConflict = conflictOf(uniqueConflicts.exam_types_code_key, uniqueConflicts.exam_types_name_key);
 
 interface Operation {
   method: 'get' | 'post' | 'patch' | 'put';
@@ -64,6 +74,7 @@ interface Operation {
   body?: z.ZodType;
   query?: z.ZodObject;
   params?: z.ZodObject;
+  entity?: CatalogEntity;
   success: { status: 200 | 201; description: string; schema: z.ZodType };
   conflict?: ResponseConfig;
 }
@@ -78,6 +89,7 @@ function document({
   body,
   query,
   params,
+  entity = 'unit',
   success,
   conflict,
 }: Operation) {
@@ -89,7 +101,7 @@ function document({
   };
   if (body ?? query ?? params) responses[400] = validationErrorResponse;
   if (admin) responses[403] = forbiddenResponse;
-  if (params) responses[404] = notFoundResponse;
+  if (params) responses[404] = notFoundOf(entity);
   if (conflict) responses[409] = conflict;
   registry.registerPath({
     method,
@@ -151,7 +163,7 @@ document({
   description: 'Cria uma especialidade ativa com o conselho e a duração padrão da consulta (30 minutos se omitida).',
   body: createSpecialtySchema,
   success: { status: 201, description: 'Especialidade criada.', schema: specialtySchema },
-  conflict: nameTakenResponse,
+  conflict: specialtyConflict,
 });
 document({
   method: 'patch',
@@ -160,9 +172,10 @@ document({
   summary: 'Alterar ou ativar e desativar especialidade',
   description: 'Altera só os campos enviados. A nova duração vale para agendamentos futuros criados depois da mudança.',
   params: idParams,
+  entity: 'specialty',
   body: updateSpecialtySchema,
   success: { status: 200, description: 'Especialidade atualizada.', schema: specialtySchema },
-  conflict: updateConflictResponse,
+  conflict: specialtyConflict,
 });
 document({
   method: 'get',
@@ -181,7 +194,7 @@ document({
   description: 'Cria uma unidade ativa com endereço, telefone e o horário de cada dia em que abre.',
   body: createUnitSchema,
   success: { status: 201, description: 'Unidade criada.', schema: unitSchema },
-  conflict: nameTakenResponse,
+  conflict: unitConflict,
 });
 document({
   method: 'patch',
@@ -192,7 +205,7 @@ document({
   params: idParams,
   body: updateUnitSchema,
   success: { status: 200, description: 'Unidade atualizada.', schema: unitSchema },
-  conflict: updateConflictResponse,
+  conflict: unitConflict,
 });
 document({
   method: 'get',
@@ -211,11 +224,7 @@ document({
   description: 'Cria um tipo de exame ativo, laboratorial ou de imagem, com código estável, duração e preparo.',
   body: createExamTypeSchema,
   success: { status: 201, description: 'Tipo de exame criado.', schema: examTypeSchema },
-  conflict: errorResponse('Nome ou código já usado (`NAME_TAKEN`, `CODE_TAKEN`).', {
-    message: 'Já existe um tipo de exame com esse código.',
-    code: 'CODE_TAKEN',
-    fields: { code: 'Já existe um tipo de exame com esse código.' },
-  }),
+  conflict: examTypeConflict,
 });
 document({
   method: 'patch',
@@ -224,9 +233,10 @@ document({
   summary: 'Alterar ou ativar e desativar tipo de exame',
   description: 'Altera só os campos enviados.',
   params: idParams,
+  entity: 'exam_type',
   body: updateExamTypeSchema,
   success: { status: 200, description: 'Tipo de exame atualizado.', schema: examTypeSchema },
-  conflict: updateConflictResponse,
+  conflict: examTypeConflict,
 });
 document({
   method: 'get',
@@ -242,10 +252,12 @@ document({
   path: '/api/admin/units/{id}/exam-offers/{examTypeId}',
   operationId: 'adminSaveExamOffer',
   summary: 'Oferecer um exame na unidade',
-  description: 'Cria ou altera a oferta do exame na unidade. Devolve todas as ofertas da unidade.',
+  description:
+    'Cria ou altera a oferta do exame na unidade. Um tipo de exame inativo só pode ter oferta inativa. Devolve todas as ofertas da unidade.',
   params: offerParams,
   body: saveOfferSchema,
   success: { status: 200, description: 'Ofertas da unidade.', schema: z.array(examOfferSchema) },
+  conflict: conflictOf(examTypeInactive),
 });
 document({
   method: 'get',

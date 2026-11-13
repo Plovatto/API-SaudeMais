@@ -52,7 +52,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`NOT_FOUND\` | 404 | O registro pedido não existe |
 | \`NAME_TAKEN\` | 409 | Já existe um cadastro com esse nome, sem distinguir maiúsculas |
 | \`CODE_TAKEN\` | 409 | Já existe um tipo de exame com esse código |
-| \`IN_USE\` | 409 | Há agendamentos futuros ligados ao cadastro; ele não pode ser desativado |
+| \`EXAM_TYPE_INACTIVE\` | 409 | O tipo de exame está inativo e não pode ter oferta ativa |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |
 | \`TOO_MANY_REQUESTS\` | 429 | Muitas requisições do mesmo IP (300 por minuto) ou limite próprio da rota |

@@ -1,4 +1,5 @@
 import { and, asc, eq, exists, inArray } from 'drizzle-orm';
+import type { AnyPgColumn, PgSelect, PgTable } from 'drizzle-orm/pg-core';
 import type { Database } from '../../database/pg-client.js';
 import { examTypes, settings, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { recordAudit, type AuditEntry } from '../../lib/audit.js';
@@ -18,9 +19,19 @@ import type {
   UpdateSpecialtyInput,
   UpdateUnitInput,
 } from './catalog.model.js';
+import type { CatalogEntity } from './catalog.messages.js';
 
 export type Actor = Omit<AuditEntry, 'action' | 'entityType' | 'entityId' | 'metadata'>;
-export type CatalogEntity = 'specialty' | 'unit' | 'exam_type';
+export type ExamTypeStatus = 'missing' | 'inactive' | 'active';
+
+export class InUseError extends Error {
+  constructor() {
+    super('Catalog entry is in use');
+    this.name = 'InUseError';
+  }
+}
+
+type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 const specialtyColumns = {
   id: specialties.id,
@@ -57,8 +68,15 @@ const policyColumns = {
   updatedAt: settings.updatedAt,
 };
 
+const lockable: Record<CatalogEntity, { table: PgTable; id: AnyPgColumn }> = {
+  specialty: { table: specialties, id: specialties.id },
+  unit: { table: units, id: units.id },
+  exam_type: { table: examTypes, id: examTypes.id },
+};
+
 type UnitRow = Omit<Unit, 'hours'>;
 type HourRow = Unit['hours'][number];
+type PolicyRow = Omit<Policy, 'updatedAt'> & { updatedAt: Date };
 
 export class CatalogRepository {
   constructor(private readonly db: Database) {}
@@ -85,11 +103,13 @@ export class CatalogRepository {
           this.db
             .select({ unitId: unitExamOffers.unitId })
             .from(unitExamOffers)
+            .innerJoin(examTypes, eq(examTypes.id, unitExamOffers.examTypeId))
             .where(
               and(
                 eq(unitExamOffers.unitId, units.id),
                 eq(unitExamOffers.examTypeId, examTypeId),
                 eq(unitExamOffers.isActive, true),
+                eq(examTypes.isActive, true),
               ),
             ),
         )
@@ -102,97 +122,66 @@ export class CatalogRepository {
     return this.withHours(rows);
   }
 
-  async specialtyPage(pagination: Pagination): Promise<Page<Specialty>> {
-    const items = await this.db
-      .select(specialtyColumns)
-      .from(specialties)
-      .orderBy(asc(specialties.name))
-      .limit(pagination.pageSize)
-      .offset(offsetOf(pagination));
-    return { items, ...pagination, total: await this.db.$count(specialties) };
+  specialtyPage(pagination: Pagination): Promise<Page<Specialty>> {
+    const query = this.db.select(specialtyColumns).from(specialties).orderBy(asc(specialties.name)).$dynamic();
+    return this.pageOf(specialties, pagination, query);
   }
 
   async unitPage(pagination: Pagination): Promise<Page<Unit>> {
-    const rows = await this.db
-      .select(unitColumns)
-      .from(units)
-      .orderBy(asc(units.name))
-      .limit(pagination.pageSize)
-      .offset(offsetOf(pagination));
-    return { items: await this.withHours(rows), ...pagination, total: await this.db.$count(units) };
+    const query = this.db.select(unitColumns).from(units).orderBy(asc(units.name)).$dynamic();
+    const page = await this.pageOf(units, pagination, query);
+    return { ...page, items: await this.withHours(page.items) };
   }
 
-  async examTypePage(pagination: Pagination): Promise<Page<ExamType>> {
-    const items = await this.db
-      .select(examTypeColumns)
-      .from(examTypes)
-      .orderBy(asc(examTypes.name))
-      .limit(pagination.pageSize)
-      .offset(offsetOf(pagination));
-    return { items, ...pagination, total: await this.db.$count(examTypes) };
+  examTypePage(pagination: Pagination): Promise<Page<ExamType>> {
+    const query = this.db.select(examTypeColumns).from(examTypes).orderBy(asc(examTypes.name)).$dynamic();
+    return this.pageOf(examTypes, pagination, query);
   }
 
   createSpecialty(input: CreateSpecialtyInput, actor: Actor): Promise<Specialty> {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx.insert(specialties).values(input).returning(specialtyColumns);
-      if (!row) throw new Error('Specialty insert returned no row');
-      await recordAudit(tx, { ...actor, action: 'specialty.created', entityType: 'specialty', entityId: row.id });
-      return row;
-    });
+    return this.createAudited('specialty', actor, (tx) =>
+      tx.insert(specialties).values(input).returning(specialtyColumns),
+    );
   }
 
   updateSpecialty(id: string, changes: UpdateSpecialtyInput, actor: Actor): Promise<Specialty | undefined> {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx.update(specialties).set(changes).where(eq(specialties.id, id)).returning(specialtyColumns);
-      if (row) await recordAudit(tx, { ...actor, ...changeEntry('specialty', id, changes) });
-      return row;
-    });
+    return this.updateAudited('specialty', id, changes, actor, (tx) =>
+      tx.update(specialties).set(changes).where(eq(specialties.id, id)).returning(specialtyColumns),
+    );
   }
 
   createExamType(input: CreateExamTypeInput, actor: Actor): Promise<ExamType> {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx.insert(examTypes).values(input).returning(examTypeColumns);
-      if (!row) throw new Error('Exam type insert returned no row');
-      await recordAudit(tx, { ...actor, action: 'exam_type.created', entityType: 'exam_type', entityId: row.id });
-      return row;
-    });
+    return this.createAudited('exam_type', actor, (tx) =>
+      tx.insert(examTypes).values(input).returning(examTypeColumns),
+    );
   }
 
   updateExamType(id: string, changes: UpdateExamTypeInput, actor: Actor): Promise<ExamType | undefined> {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx.update(examTypes).set(changes).where(eq(examTypes.id, id)).returning(examTypeColumns);
-      if (row) await recordAudit(tx, { ...actor, ...changeEntry('exam_type', id, changes) });
-      return row;
-    });
+    return this.updateAudited('exam_type', id, changes, actor, (tx) =>
+      tx.update(examTypes).set(changes).where(eq(examTypes.id, id)).returning(examTypeColumns),
+    );
   }
 
-  createUnit({ hours, ...input }: CreateUnitInput, actor: Actor): Promise<Unit> {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx.insert(units).values(input).returning(unitColumns);
-      if (!row) throw new Error('Unit insert returned no row');
-      if (hours.length > 0) await tx.insert(unitHours).values(hours.map((hour) => ({ ...hour, unitId: row.id })));
-      await recordAudit(tx, { ...actor, action: 'unit.created', entityType: 'unit', entityId: row.id });
-      return { ...row, hours: sortHours(hours) };
+  async createUnit({ hours, ...input }: CreateUnitInput, actor: Actor): Promise<Unit> {
+    const row = await this.createAudited('unit', actor, async (tx) => {
+      const rows = await tx.insert(units).values(input).returning(unitColumns);
+      const created = rows[0];
+      if (created) await replaceHours(tx, created.id, hours);
+      return rows;
     });
+    return { ...row, hours: sortHours(hours) };
   }
 
   updateUnit(id: string, { hours, ...changes }: UpdateUnitInput, actor: Actor): Promise<Unit | undefined> {
-    return this.db.transaction(async (tx) => {
+    const audited = { ...changes, ...(hours && { hours: hours.length }) };
+    return this.updateAudited('unit', id, audited, actor, async (tx) => {
       const [row] =
         Object.keys(changes).length > 0
           ? await tx.update(units).set(changes).where(eq(units.id, id)).returning(unitColumns)
-          : await tx.select(unitColumns).from(units).where(eq(units.id, id)).for('no key update');
-      if (!row) return undefined;
-      if (hours) {
-        await tx.delete(unitHours).where(eq(unitHours.unitId, id));
-        if (hours.length > 0) await tx.insert(unitHours).values(hours.map((hour) => ({ ...hour, unitId: id })));
-      }
-      await recordAudit(tx, {
-        ...actor,
-        ...changeEntry('unit', id, { ...changes, ...(hours && { hours: hours.length }) }),
-      });
-      const [withHours] = await this.withHours([row], tx);
-      return withHours;
+          : await tx.select(unitColumns).from(units).where(eq(units.id, id));
+      if (!row) return [];
+      if (hours) await replaceHours(tx, id, hours);
+      return this.withHours([row], tx);
     });
   }
 
@@ -200,8 +189,10 @@ export class CatalogRepository {
     return (await this.db.$count(units, eq(units.id, id))) > 0;
   }
 
-  async examTypeExists(id: string): Promise<boolean> {
-    return (await this.db.$count(examTypes, eq(examTypes.id, id))) > 0;
+  async examTypeStatus(id: string): Promise<ExamTypeStatus> {
+    const [row] = await this.db.select({ isActive: examTypes.isActive }).from(examTypes).where(eq(examTypes.id, id));
+    if (!row) return 'missing';
+    return row.isActive ? 'active' : 'inactive';
   }
 
   offersOf(unitId: string): Promise<ExamOffer[]> {
@@ -220,6 +211,8 @@ export class CatalogRepository {
 
   saveOffer(unitId: string, examTypeId: string, input: SaveOfferInput, actor: Actor): Promise<void> {
     return this.db.transaction(async (tx) => {
+      await lockRow(tx, 'unit', unitId);
+      if (await this.capacityInUseAbove(tx, unitId, examTypeId, input.capacityPerSlot)) throw new InUseError();
       await tx
         .insert(unitExamOffers)
         .values({ unitId, examTypeId, ...input })
@@ -236,8 +229,7 @@ export class CatalogRepository {
 
   async policy(): Promise<Policy> {
     const [row] = await this.db.select(policyColumns).from(settings);
-    if (!row) throw new Error('Settings row is missing');
-    return { ...row, updatedAt: row.updatedAt.toISOString() };
+    return toPolicy(row);
   }
 
   savePolicy(input: PolicyInput, actor: Actor): Promise<Policy> {
@@ -246,7 +238,6 @@ export class CatalogRepository {
         .update(settings)
         .set({ ...input, updatedBy: actor.actorId })
         .returning(policyColumns);
-      if (!row) throw new Error('Settings row is missing');
       await recordAudit(tx, {
         ...actor,
         action: 'policy.updated',
@@ -254,12 +245,50 @@ export class CatalogRepository {
         entityId: 'policy',
         metadata: input,
       });
-      return { ...row, updatedAt: row.updatedAt.toISOString() };
+      return toPolicy(row);
     });
   }
 
-  isInUse(_entity: CatalogEntity, _id: string): Promise<boolean> {
+  private isInUse(_tx: Transaction, _entity: CatalogEntity, _id: string): Promise<boolean> {
     return Promise.resolve(false);
+  }
+
+  private capacityInUseAbove(_tx: Transaction, _unitId: string, _examTypeId: string, _capacity: number) {
+    return Promise.resolve(false);
+  }
+
+  private async pageOf<Q extends PgSelect>(table: PgTable, pagination: Pagination, query: Q) {
+    const items: Awaited<Q> = await query.limit(pagination.pageSize).offset(offsetOf(pagination));
+    return { items, ...pagination, total: await this.db.$count(table) };
+  }
+
+  private createAudited<Row extends { id: string }>(
+    entity: CatalogEntity,
+    actor: Actor,
+    insert: (tx: Transaction) => Promise<Row[]>,
+  ): Promise<Row> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await insert(tx);
+      if (!row) throw new Error(`Insert into ${entity} returned no row`);
+      await recordAudit(tx, { ...actor, action: `${entity}.created`, entityType: entity, entityId: row.id });
+      return row;
+    });
+  }
+
+  private updateAudited<Row>(
+    entity: CatalogEntity,
+    id: string,
+    changes: Record<string, unknown>,
+    actor: Actor,
+    update: (tx: Transaction) => Promise<Row[]>,
+  ): Promise<Row | undefined> {
+    return this.db.transaction(async (tx) => {
+      if (!(await lockRow(tx, entity, id))) return undefined;
+      if (changes.isActive === false && (await this.isInUse(tx, entity, id))) throw new InUseError();
+      const [row] = await update(tx);
+      if (row) await recordAudit(tx, { ...actor, ...changeEntry(entity, id, changes) });
+      return row;
+    });
   }
 
   private async withHours(rows: UnitRow[], db: Pick<Database, 'select'> = this.db): Promise<Unit[]> {
@@ -283,6 +312,22 @@ export class CatalogRepository {
       hours: sortHours(hours.filter((hour) => hour.unitId === row.id).map(({ unitId: _unitId, ...hour }) => hour)),
     }));
   }
+}
+
+async function lockRow(tx: Transaction, entity: CatalogEntity, id: string): Promise<boolean> {
+  const { table, id: idColumn } = lockable[entity];
+  const rows = await tx.select({ id: idColumn }).from(table).where(eq(idColumn, id)).for('no key update');
+  return rows.length > 0;
+}
+
+async function replaceHours(tx: Transaction, unitId: string, hours: HourRow[]): Promise<void> {
+  await tx.delete(unitHours).where(eq(unitHours.unitId, unitId));
+  if (hours.length > 0) await tx.insert(unitHours).values(hours.map((hour) => ({ ...hour, unitId })));
+}
+
+function toPolicy(row: PolicyRow | undefined): Policy {
+  if (!row) throw new Error('Settings row is missing');
+  return { ...row, updatedAt: row.updatedAt.toISOString() };
 }
 
 function sortHours(hours: HourRow[]): HourRow[] {

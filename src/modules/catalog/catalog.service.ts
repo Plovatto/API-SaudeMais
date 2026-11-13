@@ -11,33 +11,45 @@ import type {
   UpdateSpecialtyInput,
   UpdateUnitInput,
 } from './catalog.model.js';
-import type { Actor, CatalogEntity, CatalogRepository } from './catalog.repository.js';
-
-const conflicts: Record<string, { code: string; field: string; message: string }> = {
-  specialties_name_key: { code: 'NAME_TAKEN', field: 'name', message: 'Já existe uma especialidade com esse nome.' },
-  units_name_key: { code: 'NAME_TAKEN', field: 'name', message: 'Já existe uma unidade com esse nome.' },
-  exam_types_name_key: { code: 'NAME_TAKEN', field: 'name', message: 'Já existe um tipo de exame com esse nome.' },
-  exam_types_code_key: { code: 'CODE_TAKEN', field: 'code', message: 'Já existe um tipo de exame com esse código.' },
-};
-
-const notFoundMessages: Record<CatalogEntity, string> = {
-  specialty: 'Especialidade não encontrada.',
-  unit: 'Unidade não encontrada.',
-  exam_type: 'Tipo de exame não encontrado.',
-};
+import {
+  examTypeInactive,
+  inUse,
+  notFoundMessages,
+  uniqueConflicts,
+  type CatalogEntity,
+  type Conflict,
+} from './catalog.messages.js';
+import { InUseError, type Actor, type CatalogRepository } from './catalog.repository.js';
 
 function notFound(entity: CatalogEntity): AppError {
   return new AppError(404, 'NOT_FOUND', notFoundMessages[entity]);
+}
+
+function conflictError({ code, field, message }: Conflict): AppError {
+  return new AppError(409, code, message, { [field]: message });
+}
+
+function uniqueConflictOf(error: unknown): Conflict | undefined {
+  const constraint = uniqueConstraintOf(error);
+  return constraint && constraint in uniqueConflicts
+    ? uniqueConflicts[constraint as keyof typeof uniqueConflicts]
+    : undefined;
 }
 
 async function translated<T>(write: () => Promise<T>): Promise<T> {
   try {
     return await write();
   } catch (error) {
-    const conflict = conflicts[uniqueConstraintOf(error) ?? ''];
-    if (conflict) throw new AppError(409, conflict.code, conflict.message, { [conflict.field]: conflict.message });
+    if (error instanceof InUseError) throw conflictError(inUse);
+    const conflict = uniqueConflictOf(error);
+    if (conflict) throw conflictError(conflict);
     throw error;
   }
+}
+
+function found<T>(entity: CatalogEntity, value: T | undefined): T {
+  if (value === undefined) throw notFound(entity);
+  return value;
 }
 
 export class CatalogService {
@@ -72,7 +84,6 @@ export class CatalogService {
   }
 
   async updateSpecialty(id: string, changes: UpdateSpecialtyInput, actor: Actor) {
-    await this.assertCanDeactivate('specialty', id, changes.isActive);
     return found('specialty', await translated(() => this.repository.updateSpecialty(id, changes, actor)));
   }
 
@@ -81,7 +92,6 @@ export class CatalogService {
   }
 
   async updateUnit(id: string, changes: UpdateUnitInput, actor: Actor) {
-    await this.assertCanDeactivate('unit', id, changes.isActive);
     return found('unit', await translated(() => this.repository.updateUnit(id, changes, actor)));
   }
 
@@ -90,7 +100,6 @@ export class CatalogService {
   }
 
   async updateExamType(id: string, changes: UpdateExamTypeInput, actor: Actor) {
-    await this.assertCanDeactivate('exam_type', id, changes.isActive);
     return found('exam_type', await translated(() => this.repository.updateExamType(id, changes, actor)));
   }
 
@@ -101,8 +110,10 @@ export class CatalogService {
 
   async saveOffer(unitId: string, examTypeId: string, input: SaveOfferInput, actor: Actor) {
     if (!(await this.repository.unitExists(unitId))) throw notFound('unit');
-    if (!(await this.repository.examTypeExists(examTypeId))) throw notFound('exam_type');
-    await this.repository.saveOffer(unitId, examTypeId, input, actor);
+    const status = await this.repository.examTypeStatus(examTypeId);
+    if (status === 'missing') throw notFound('exam_type');
+    if (status === 'inactive' && input.isActive) throw conflictError(examTypeInactive);
+    await translated(() => this.repository.saveOffer(unitId, examTypeId, input, actor));
     return this.repository.offersOf(unitId);
   }
 
@@ -113,19 +124,4 @@ export class CatalogService {
   savePolicy(input: PolicyInput, actor: Actor) {
     return this.repository.savePolicy(input, actor);
   }
-
-  private async assertCanDeactivate(entity: CatalogEntity, id: string, isActive: boolean | undefined) {
-    if (isActive === false && (await this.repository.isInUse(entity, id))) {
-      throw new AppError(
-        409,
-        'IN_USE',
-        'Há agendamentos futuros ligados a este cadastro; ele não pode ser desativado.',
-      );
-    }
-  }
-}
-
-function found<T>(entity: CatalogEntity, value: T | undefined): T {
-  if (value === undefined) throw notFound(entity);
-  return value;
 }
