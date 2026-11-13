@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
@@ -109,8 +109,12 @@ export class UserRepository {
     await this.db.update(users).set(changes).where(eq(users.id, id));
   }
 
-  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
-    await this.db.update(users).set({ passwordHash }).where(eq(users.id, id));
+  replacePassword(id: string, passwordHash: string, keepSessionId: string, now: Date): Promise<void> {
+    return this.db.transaction(async (tx) => {
+      await tx.update(users).set({ passwordHash, passwordChangedAt: now }).where(eq(users.id, id));
+      await tx.update(sessions).set({ createdAt: now }).where(eq(sessions.id, keepSessionId));
+      await tx.delete(sessions).where(and(eq(sessions.userId, id), ne(sessions.id, keepSessionId)));
+    });
   }
 
   async listActiveSessions(userId: string, now: Date) {
@@ -161,7 +165,14 @@ export class UserRepository {
       })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, now), isNull(users.deactivatedAt)));
+      .where(
+        and(
+          eq(sessions.tokenHash, tokenHash),
+          gt(sessions.expiresAt, now),
+          isNull(users.deactivatedAt),
+          or(isNull(users.passwordChangedAt), gte(sessions.createdAt, users.passwordChangedAt)),
+        ),
+      );
     return row;
   }
 

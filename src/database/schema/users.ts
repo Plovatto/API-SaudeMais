@@ -13,6 +13,7 @@ export const users = pgTable(
     email: citext('email').notNull(),
     phone: text('phone'),
     passwordHash: text('password_hash').notNull(),
+    passwordChangedAt: timestamptz('password_changed_at'),
     isProtected: boolean('is_protected').notNull().default(false),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),

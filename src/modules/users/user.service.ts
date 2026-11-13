@@ -69,12 +69,12 @@ export class UserService {
   }
 
   async login({ email, password, remember }: LoginInput, client: ClientInfo): Promise<LoginResponse> {
+    const now = this.clock.now();
     const candidate = await this.repository.findLoginCandidate(email);
     const valid = await verifyPassword(password, candidate?.passwordHash ?? (await placeholderPasswordHash()));
     if (!candidate || !valid) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos.');
     if (candidate.deactivatedAt) throw new AppError(403, 'USER_INACTIVE', 'Esta conta está desativada.');
 
-    const now = this.clock.now();
     const absoluteExpiresAt = new Date(now.getTime() + this.policy.maxDays * DAY);
     const remembered = remember && !candidate.isProtected;
     const expiresAt = remembered ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
@@ -160,8 +160,7 @@ export class UserService {
       const message = 'A senha atual está incorreta.';
       throw new AppError(422, 'INVALID_CURRENT_PASSWORD', message, { currentPassword: message });
     }
-    await this.repository.updatePasswordHash(user.id, await hashPassword(password));
-    await this.repository.deleteSessionsOf(user.id, sessionId);
+    await this.repository.replacePassword(user.id, await hashPassword(password), sessionId, this.clock.now());
   }
 
   async listSessions({ sessionId, user }: AuthContext): Promise<SessionView[]> {

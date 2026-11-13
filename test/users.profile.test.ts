@@ -1,7 +1,9 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
-import { buildUsersApp, login, registerAndLogin } from './support/users.js';
+import { createSessionToken } from '@/modules/users/user.token.js';
+import { buildUsersApp, login, registerAndLogin, START } from './support/users.js';
 
 type App = Parameters<typeof request>[0];
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -97,6 +99,23 @@ describe('POST /api/me/password', () => {
     const blocked = await changePassword(app, token, {});
 
     expect(blocked.status).toBe(429);
+  });
+
+  it('refuses a session that a login with the old password created during the change', async () => {
+    const { app, db, clock, auth: service } = await buildUsersApp();
+    const token = await registerAndLogin(app);
+    const stale = createSessionToken();
+    const [user] = (await db.execute<{ id: string }>(sql`select id from users`)).rows;
+    clock.advance(60_000);
+
+    await changePassword(app, token, {}).expect(204);
+    await db.execute(sql`
+      insert into sessions (user_id, token_hash, remember, created_at, last_used_at, expires_at, absolute_expires_at)
+      values (${user?.id}, ${stale.tokenHash}, false, ${START}, ${START}, ${new Date(START.getTime() + 3_600_000)}, ${new Date(START.getTime() + 3_600_000)})
+    `);
+
+    expect(await service.authenticate(stale.token)).toBeNull();
+    expect(await service.authenticate(token)).not.toBeNull();
   });
 
   it('rejects a confirmation that does not match', async () => {
