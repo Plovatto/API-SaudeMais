@@ -1,6 +1,6 @@
 export const swaggerTheme = `
 .swagger-ui .topbar { display: none; }
-.swagger-ui { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #142424; }
+.swagger-ui { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .swagger-ui .wrapper { max-width: 1080px; }
 .swagger-ui .info { margin: 40px 0 24px; }
 .swagger-ui .info .title { color: #0b5f5b; font-size: 34px; }

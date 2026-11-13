@@ -15,11 +15,7 @@ export function generateOpenApiDocument(): OpenApiDocument {
       contact: { name: 'Plovatto', url: 'https://github.com/Plovatto' },
       license: { name: 'MIT', identifier: 'MIT' },
     },
-    servers: [
-      { url: '/', description: 'Servidor desta página' },
-      { url: 'https://p01--saudemais--pgj2h2jjxzb4.code.run', description: 'Produção' },
-      { url: 'http://localhost:3001', description: 'Desenvolvimento local' },
-    ],
+    servers: [{ url: '/', description: 'Servidor desta página' }],
     tags: [...tagList],
     externalDocs: { description: 'Código-fonte e instruções', url: 'https://github.com/Plovatto/API-SaudeMais' },
   });

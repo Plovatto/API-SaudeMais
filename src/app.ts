@@ -61,7 +61,7 @@ export function createApp({ config = env, logger = defaultLogger }: AppOptions =
   app.use(express.json({ limit: '100kb' }));
 
   app.use(createHealthRouter());
-  app.use(createDocsRouter());
+  app.use(createDocsRouter({ persistAuthorization: config.NODE_ENV !== 'production' }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

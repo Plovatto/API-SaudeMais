@@ -4,7 +4,7 @@ import '../docs/common-schemas.js';
 import { generateOpenApiDocument } from '../docs/openapi-document.js';
 import { swaggerTheme } from '../docs/swagger-theme.js';
 
-export function createDocsRouter(): Router {
+export function createDocsRouter({ persistAuthorization }: { persistAuthorization: boolean }): Router {
   const document = generateOpenApiDocument();
   const router = Router();
   router.get('/docs/openapi.json', (_req, res) => {
@@ -20,9 +20,8 @@ export function createDocsRouter(): Router {
         docExpansion: 'list',
         filter: true,
         displayRequestDuration: true,
-        persistAuthorization: true,
+        persistAuthorization,
         defaultModelsExpandDepth: 0,
-        tryItOutEnabled: false,
       },
     }),
   );
