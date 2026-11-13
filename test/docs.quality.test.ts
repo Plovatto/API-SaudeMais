@@ -9,6 +9,7 @@ interface Operation {
   tags?: string[];
   security?: unknown[];
   requestBody?: unknown;
+  parameters?: unknown[];
   responses: Record<string, unknown>;
 }
 
@@ -17,10 +18,11 @@ interface Document {
   servers: { url: string; description?: string }[];
   tags?: { name: string; description?: string }[];
   externalDocs?: { url: string };
+  security?: Record<string, string[]>[];
   paths: Record<string, Record<string, Operation>>;
 }
 
-const httpMethods = new Set(['get', 'put', 'post', 'delete', 'patch']);
+const httpMethods = new Set(['get', 'put', 'post', 'delete', 'patch', 'head', 'options', 'trace']);
 
 async function loadDocument() {
   const { app } = buildTestApp();
@@ -38,22 +40,17 @@ describe('API documentation quality', () => {
   it('explains the conventions shared by every route', async () => {
     const { document } = await loadDocument();
 
-    for (const section of ['Autenticação', 'Erros', 'Códigos de erro', 'Datas', 'Paginação']) {
+    for (const section of ['Erros', 'Códigos de erro', 'Autenticação', 'Datas', 'Paginação']) {
       expect(document.info.description).toContain(`## ${section}`);
     }
     expect(document.info.contact).toBeDefined();
     expect(document.externalDocs?.url).toBe('https://github.com/Plovatto/API-SaudeMais');
   });
 
-  it('lists the current, production and local servers', async () => {
+  it('points requests made from the page at the server that serves it', async () => {
     const { document } = await loadDocument();
 
-    expect(document.servers.map((server) => server.url)).toEqual([
-      '/',
-      'https://p01--saudemais--pgj2h2jjxzb4.code.run',
-      'http://localhost:3001',
-    ]);
-    expect(document.servers.every((server) => server.description)).toBe(true);
+    expect(document.servers).toEqual([{ url: '/', description: 'Servidor desta página' }]);
   });
 
   it('describes every tag and uses only declared tags', async () => {
@@ -81,12 +78,16 @@ describe('API documentation quality', () => {
   });
 
   it('documents the error responses each operation can return', async () => {
-    const { operations } = await loadDocument();
+    const { document, operations } = await loadDocument();
 
     for (const { name, operation } of operations) {
-      expect(Object.keys(operation.responses), name).toContain('500');
-      if (operation.requestBody) expect(Object.keys(operation.responses), name).toContain('400');
-      if (operation.security?.length) expect(Object.keys(operation.responses), name).toContain('401');
+      const statuses = Object.keys(operation.responses);
+      const security = operation.security ?? document.security ?? [];
+      expect(statuses, name).toContain('500');
+      if (operation.requestBody || operation.parameters?.length) expect(statuses, name).toContain('400');
+      if (security.some((requirement) => Object.keys(requirement as object).length > 0)) {
+        expect(statuses, name).toContain('401');
+      }
     }
   });
 });
@@ -103,5 +104,14 @@ describe('Swagger UI presentation', () => {
     expect(init.text).toContain('"filter": true');
     expect(init.text).toContain('"displayRequestDuration": true');
     expect(init.text).toContain('"persistAuthorization": true');
+  });
+
+  it('does not keep the session token in the browser in production', async () => {
+    const { app } = buildTestApp({ NODE_ENV: 'production' });
+
+    await request(app).get('/docs/');
+    const init = await request(app).get('/docs/swagger-ui-init.js');
+
+    expect(init.text).toContain('"persistAuthorization": false');
   });
 });
