@@ -50,6 +50,13 @@
       "when": 1794610633213,
       "tag": "0006_enable_unaccent",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794611684909,
+      "tag": "0007_doctor_profiles",
+      "breakpoints": true
     }
   ]
 }
