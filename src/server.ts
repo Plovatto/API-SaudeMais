@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { runMigrations } from './database/migrate.js';
 import { createPool } from './database/pg-client.js';
+import { createShutdown } from './lib/graceful-shutdown.js';
 
 const pool = createPool(env.DATABASE_URL);
 
@@ -27,3 +28,17 @@ server.on('error', (err) => {
   logger.fatal({ err }, 'Server failed to start');
   process.exit(1);
 });
+
+const shutdown = createShutdown({ server, pool, timeoutMs: 10_000 });
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => {
+    logger.info(`${signal} received, shutting down`);
+    shutdown()
+      .then(() => process.exit(0))
+      .catch((err: unknown) => {
+        logger.error({ err }, 'Shutdown failed');
+        process.exit(1);
+      });
+  });
+}
