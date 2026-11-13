@@ -1,5 +1,7 @@
 import type { Request, RequestHandler } from 'express';
 import { AppError } from '../lib/app-error.js';
+import type { Actor } from '../lib/audit.js';
+import { clientIp } from '../lib/client-ip.js';
 import type { Role } from '../database/schema/users.js';
 import type { AuthContext, UserService } from '../modules/users/user.service.js';
 
@@ -41,6 +43,10 @@ export function createRequireWritable(): RequestHandler {
     }
     next();
   };
+}
+
+export function actorOf(req: Request): Actor {
+  return { actorId: authOf(req).user.id, ip: clientIp(req) };
 }
 
 export function authOf(req: Request): AuthContext {

@@ -14,6 +14,7 @@ export interface ResetLimits {
 
 export interface NewResetToken {
   userId: string;
+  requestedBy: string | null;
   tokenHash: string;
   now: Date;
   expiresAt: Date;
@@ -28,7 +29,7 @@ export class PasswordResetRepository {
     private readonly limits: ResetLimits,
   ) {}
 
-  issue({ userId, tokenHash, now, expiresAt, dayStart }: NewResetToken): Promise<boolean> {
+  issue({ userId, requestedBy, tokenHash, now, expiresAt, dayStart }: NewResetToken): Promise<boolean> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_NAMESPACE}, 0)`);
       const recentSince = new Date(now.getTime() - this.limits.minIntervalMs);
@@ -53,7 +54,9 @@ export class PasswordResetRepository {
         .update(passwordResetTokens)
         .set({ revokedAt: now })
         .where(and(eq(passwordResetTokens.userId, userId), open));
-      await tx.insert(passwordResetTokens).values({ userId, tokenHash, createdAt: now, expiresAt, sentAt: now });
+      await tx
+        .insert(passwordResetTokens)
+        .values({ userId, requestedBy, tokenHash, createdAt: now, expiresAt, sentAt: now });
       return true;
     });
   }

@@ -1,6 +1,6 @@
 import { AppError, conflictError } from '../../lib/app-error.js';
 import type { Pagination } from '../../lib/pagination.js';
-import { uniqueConstraintOf } from '../../lib/pg-errors.js';
+import { isForeignKeyViolation, uniqueConstraintOf } from '../../lib/pg-errors.js';
 import type {
   CreateExamTypeInput,
   CreateSpecialtyInput,
@@ -12,6 +12,7 @@ import type {
   UpdateUnitInput,
 } from './catalog.model.js';
 import {
+  councilInUse,
   examTypeInactive,
   inUse,
   notFoundMessages,
@@ -37,6 +38,7 @@ async function translated<T>(write: () => Promise<T>): Promise<T> {
     return await write();
   } catch (error) {
     if (error instanceof InUseError) throw conflictError(inUse);
+    if (isForeignKeyViolation(error, 'doctor_profiles_specialty_council_fkey')) throw conflictError(councilInUse);
     const conflict = uniqueConflictOf(error);
     if (conflict) throw conflictError(conflict);
     throw error;

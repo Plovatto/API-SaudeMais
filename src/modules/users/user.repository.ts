@@ -6,7 +6,7 @@ import type { PublicUser } from './user.model.js';
 
 const userColumns = { id: users.id, fullName: users.fullName, email: users.email, phone: users.phone };
 
-const publicUserColumns = {
+export const publicUserColumns = {
   ...userColumns,
   roles: sql<
     Role[]

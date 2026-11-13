@@ -15,7 +15,7 @@ export const tags = {
   administration: {
     name: 'Administração',
     description:
-      'Cadastro de especialidades, unidades, horários, exames, ofertas e da política de agendamento. Só administradores.',
+      'Usuários, papéis e perfis médicos; cadastro de especialidades, unidades, horários, exames, ofertas e da política de agendamento. Só administradores.',
   },
 } as const;
 

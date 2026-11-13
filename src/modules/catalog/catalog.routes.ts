@@ -10,7 +10,13 @@ import { paginationQuery } from '../../lib/pagination.js';
 import { MINUTE } from '../../lib/time.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { CatalogController } from './catalog.controller.js';
-import { examTypeInactive, notFoundMessages, uniqueConflicts, type CatalogEntity } from './catalog.messages.js';
+import {
+  councilInUse,
+  examTypeInactive,
+  notFoundMessages,
+  uniqueConflicts,
+  type CatalogEntity,
+} from './catalog.messages.js';
 import {
   createExamTypeSchema,
   createSpecialtySchema,
@@ -34,7 +40,7 @@ import {
 
 const notFoundOf = (entity: CatalogEntity) => notFoundResponse(notFoundMessages[entity]);
 
-const specialtyConflict = conflictResponse(uniqueConflicts.specialties_name_key);
+const specialtyConflict = conflictResponse(uniqueConflicts.specialties_name_key, councilInUse);
 const unitConflict = conflictResponse(uniqueConflicts.units_name_key);
 const examTypeConflict = conflictResponse(uniqueConflicts.exam_types_code_key, uniqueConflicts.exam_types_name_key);
 

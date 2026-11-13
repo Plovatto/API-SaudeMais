@@ -25,6 +25,12 @@ export const examTypeInactive: Conflict = {
   message: 'Este tipo de exame está inativo; ative-o antes de oferecê-lo.',
 };
 
+export const councilInUse: Conflict = {
+  code: 'COUNCIL_IN_USE',
+  field: 'council',
+  message: 'Há médicos nesta especialidade; o conselho não pode ser alterado.',
+};
+
 export const inUse: Conflict = {
   code: 'IN_USE',
   field: 'isActive',
