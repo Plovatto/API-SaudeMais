@@ -36,6 +36,12 @@ describe('parseEnv', () => {
     expect(error.message).toContain('TRUST_PROXY_HOPS: Required in production');
   });
 
+  it('requires ADMIN_EMAIL and ADMIN_PASSWORD together', () => {
+    expect(captureError(() => parseEnv({ ...dev, ADMIN_EMAIL: 'admin@saudemais.test' })).message).toContain(
+      'ADMIN_EMAIL and ADMIN_PASSWORD: Set both or neither',
+    );
+  });
+
   it('defaults to production, which requires CORS_ORIGIN', () => {
     expect(captureError(() => parseEnv({ DATABASE_URL: DB })).message).toContain('CORS_ORIGIN: Required in production');
   });
