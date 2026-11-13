@@ -11,6 +11,7 @@ import { createSessionToken, hashToken, isWellFormedToken } from './user.token.j
 export const TERMS_VERSION = '2026-11-13';
 
 const TOUCH_INTERVAL = 5 * MINUTE;
+const PROTECTED_SESSION_LIMIT = 500;
 
 export interface SessionPolicy {
   idleHours: number;
@@ -27,12 +28,6 @@ export interface AuthContext {
   sessionId: string;
   isProtected: boolean;
   user: PublicUser;
-}
-
-export function assertNotProtected(context: AuthContext): void {
-  if (context.isProtected) {
-    throw new AppError(403, 'PROTECTED_ACCOUNT', 'Esta é uma conta de demonstração e não pode ser alterada.');
-  }
 }
 
 export class UserService {
@@ -72,19 +67,20 @@ export class UserService {
 
     const now = this.clock.now();
     const absoluteExpiresAt = new Date(now.getTime() + this.policy.maxDays * DAY);
-    const expiresAt = remember ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
+    const remembered = remember && !candidate.isProtected;
+    const expiresAt = remembered ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
     const { token, tokenHash } = createSessionToken();
     const sessionId = await this.repository.createSession({
       userId: candidate.id,
       tokenHash,
-      remember,
+      remember: remembered,
       userAgent: client.userAgent,
       ip: client.ip,
       createdAt: now,
       expiresAt,
       absoluteExpiresAt,
     });
-    const limit = candidate.isProtected ? null : this.policy.maxSessionsPerUser;
+    const limit = candidate.isProtected ? PROTECTED_SESSION_LIMIT : this.policy.maxSessionsPerUser;
     await this.repository.pruneSessions(candidate.id, sessionId, now, limit);
 
     const { passwordHash: _hash, isProtected: _protected, deactivatedAt: _deactivated, ...user } = candidate;
@@ -105,9 +101,17 @@ export class UserService {
 
   async ensureAccount({ fullName, email, password, roles, isProtected }: SeedAccount): Promise<void> {
     const now = this.clock.now();
-    const existing = await this.repository.findIdByEmail(email);
+    const existing = await this.repository.findLoginCandidate(email);
     if (existing) {
-      await this.repository.grantRoles(existing, roles, now);
+      if (existing.isProtected !== isProtected) {
+        throw new Error(`Seed account ${email} already exists with a different protection setting`);
+      }
+      const missing = roles.filter((role) => !existing.roles.includes(role));
+      if (missing.length === 0) return;
+      if (existing.deactivatedAt || !(await verifyPassword(password, existing.passwordHash))) {
+        throw new Error(`${email} belongs to an existing account whose password does not match`);
+      }
+      await this.repository.grantRoles(existing.id, missing, now);
       return;
     }
     const passwordHash = await hashPassword(password);

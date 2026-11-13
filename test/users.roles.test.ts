@@ -5,10 +5,11 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '@/app.js';
 import { createLogger } from '@/config/logger.js';
-import { createRequireRole } from '@/middleware/auth.js';
+import { rateLimit } from 'express-rate-limit';
+import { createRequireRole, createRequireWritable } from '@/middleware/auth.js';
+import { rateLimitDefaults } from '@/middleware/rate-limit.js';
 import { createModules } from '@/modules/index.js';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
-import { assertNotProtected } from '@/modules/users/user.service.js';
 import { TEST_CORS_ORIGIN } from './support/build-test-app.js';
 import { createTestDb } from './support/create-test-db.js';
 import { fixedClock } from './support/fixed-clock.js';
@@ -26,7 +27,11 @@ async function buildRolesApp() {
     policy: { idleHours: 12, maxDays: 7, maxSessionsPerUser: 10 },
   });
   const probe = Router();
-  probe.get('/probe/admin', modules.users.requireAuth, createRequireRole('admin'), (_req, res) => {
+  const probeLimit = rateLimit({ ...rateLimitDefaults, windowMs: 60_000, limit: 100 });
+  probe.get('/probe/admin', probeLimit, modules.users.requireAuth, createRequireRole('admin'), (_req, res) => {
+    res.json({ ok: true });
+  });
+  probe.post('/probe/write', probeLimit, modules.users.requireAuth, createRequireWritable(), (_req, res) => {
     res.json({ ok: true });
   });
   const silent = new Writable({ write: (_chunk, _encoding, callback) => callback() });
@@ -86,11 +91,35 @@ describe('initial accounts', () => {
     ]);
   });
 
-  it('can run on every start without duplicating accounts, and promotes an existing account', async () => {
+  it('refuses to promote an existing account whose password does not match', async () => {
     const { app, db, users } = await buildRolesApp();
     await request(app)
       .post('/api/users/register')
       .send(registration({ email: ADMIN.email }))
+      .expect(201);
+
+    await expect(users.bootstrap(ADMIN)).rejects.toThrow(/password does not match/);
+    const rows = await db.execute<{ total: number }>(
+      sql`select count(*)::int as total from user_roles where role = 'admin'`,
+    );
+    expect(rows.rows[0]?.total).toBe(0);
+  });
+
+  it('refuses to start when the demo e-mail belongs to a regular account', async () => {
+    const { app, users } = await buildRolesApp();
+    await request(app)
+      .post('/api/users/register')
+      .send(registration({ email: demo.email }))
+      .expect(201);
+
+    await expect(users.bootstrap(undefined)).rejects.toThrow(/different protection/);
+  });
+
+  it('can run on every start without duplicating accounts, and promotes an existing account that proves its password', async () => {
+    const { app, db, users } = await buildRolesApp();
+    await request(app)
+      .post('/api/users/register')
+      .send(registration({ email: ADMIN.email, password: ADMIN.password, passwordConfirmation: ADMIN.password }))
       .expect(201);
 
     await users.bootstrap(ADMIN);
@@ -115,25 +144,37 @@ describe('initial accounts', () => {
 });
 
 describe('protected demo account', () => {
-  it('keeps every session, since many visitors share it', async () => {
+  it('keeps more than 10 sessions, since many visitors share it, but never remembers them', async () => {
     const { app, db, users } = await buildRolesApp();
     await users.bootstrap(undefined);
-    for (let attempt = 0; attempt < 11; attempt += 1) await tokenOf(app, demo.email, demo.password);
+    let expiresAt = '';
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      const response = await login(app, { email: demo.email, password: demo.password, remember: true }).expect(200);
+      expiresAt = (response.body as { expiresAt: string }).expiresAt;
+    }
 
     const total = await db.execute<{ total: number }>(sql`select count(*)::int as total from sessions`);
 
     expect(total.rows[0]?.total).toBe(11);
+    expect(expiresAt).toBe(new Date(START.getTime() + 12 * 3_600_000).toISOString());
   });
 
-  it('cannot be changed', async () => {
+  it('cannot change anything', async () => {
     const { app, users } = await buildRolesApp();
     await users.bootstrap(undefined);
     const token = await tokenOf(app, demo.email, demo.password);
-    const context = await users.service.authenticate(token);
 
-    expect(context?.isProtected).toBe(true);
-    expect(() => {
-      if (context) assertNotProtected(context);
-    }).toThrow(expect.objectContaining({ status: 403, code: 'PROTECTED_ACCOUNT' }) as Error);
+    const response = await request(app).post('/probe/write').set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
+  });
+
+  it('lets regular accounts change their data', async () => {
+    const { app } = await buildRolesApp();
+    await request(app).post('/api/users/register').send(registration()).expect(201);
+    const token = await tokenOf(app, 'ana.silva@email.com', 'senha-segura-123');
+
+    expect((await request(app).post('/probe/write').set('Authorization', `Bearer ${token}`)).status).toBe(200);
   });
 });

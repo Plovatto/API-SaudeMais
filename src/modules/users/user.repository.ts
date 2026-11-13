@@ -75,11 +75,6 @@ export class UserRepository {
     });
   }
 
-  async findIdByEmail(email: string): Promise<string | undefined> {
-    const [user] = await this.db.select({ id: users.id }).from(users).where(eq(users.email, email));
-    return user?.id;
-  }
-
   async grantRoles(userId: string, roles: Role[], now: Date): Promise<void> {
     await this.db
       .insert(userRoles)
@@ -109,11 +104,8 @@ export class UserRepository {
     return created.id;
   }
 
-  async pruneSessions(userId: string, keepId: string, now: Date, limit: number | null): Promise<void> {
-    const overLimit =
-      limit === null
-        ? sql`false`
-        : sql`${sessions.id} not in (select ${sessions.id} from ${sessions} where ${sessions.userId} = ${userId} and ${sessions.id} <> ${keepId} and ${sessions.expiresAt} > ${now} order by ${sessions.lastUsedAt} desc, ${sessions.id} desc limit ${limit - 1})`;
+  async pruneSessions(userId: string, keepId: string, now: Date, limit: number): Promise<void> {
+    const overLimit = sql`${sessions.id} not in (select ${sessions.id} from ${sessions} where ${sessions.userId} = ${userId} and ${sessions.id} <> ${keepId} and ${sessions.expiresAt} > ${now} order by ${sessions.lastUsedAt} desc, ${sessions.id} desc limit ${limit - 1})`;
     await this.db
       .delete(sessions)
       .where(and(eq(sessions.userId, userId), ne(sessions.id, keepId), or(lte(sessions.expiresAt, now), overLimit)));

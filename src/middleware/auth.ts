@@ -24,6 +24,15 @@ export function createRequireRole(role: Role): RequestHandler {
   };
 }
 
+export function createRequireWritable(): RequestHandler {
+  return (req, _res, next) => {
+    if (authOf(req).isProtected) {
+      throw new AppError(403, 'PROTECTED_ACCOUNT', 'Esta é uma conta de demonstração e não pode ser alterada.');
+    }
+    next();
+  };
+}
+
 export function authOf(req: Request): AuthContext {
   const context = contexts.get(req);
   if (!context) throw new Error('requireAuth must run before this handler');
