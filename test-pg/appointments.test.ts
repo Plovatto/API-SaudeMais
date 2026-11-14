@@ -72,6 +72,26 @@ describe('appointments on PostgreSQL', () => {
     expect(await activeBookings()).toBe(1);
   });
 
+  it('cancels a booking only once when two cancellations race', async () => {
+    const patient = await signUp(app, 'cancela@email.com');
+    const booked = (await book(patient, carlos, '2026-11-23T11:00:00.000Z').expect(201)).body as { id: string };
+    const cancel = () =>
+      request(app)
+        .post(`/api/appointments/${booked.id}/cancel`)
+        .set(as(patient))
+        .send({ startsAt: '2026-11-23T11:00:00.000Z' });
+
+    const responses = await Promise.all([cancel(), cancel()]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(responses.find((response) => response.status === 409)?.body).toMatchObject({ code: 'INVALID_STATE' });
+    const events = await pool.query<{ total: number }>(
+      "select count(*)::int as total from booking_events where booking_id = $1 and event_type = 'cancelled'",
+      [booked.id],
+    );
+    expect(events.rows[0]?.total).toBe(1);
+  });
+
   it('keeps a patient from holding two overlapping bookings with different doctors', async () => {
     const patient = await signUp(app, 'paciente@email.com');
 
