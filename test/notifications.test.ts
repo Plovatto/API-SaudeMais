@@ -7,13 +7,12 @@ import type { Role } from '@/database/schema/users.js';
 import { MINUTE } from '@/lib/time.js';
 import { UnreadCounter } from '@/modules/notifications/notifications.counter.js';
 import { NotificationsRepository } from '@/modules/notifications/notifications.repository.js';
-import { buildUsersApp, login, registration } from './support/users.js';
+import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
+import { as, buildUsersApp, login, registration } from './support/users.js';
 import { fixedClock } from './support/fixed-clock.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PATH = '/api/notifications';
-
-const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 type Context = Awaited<ReturnType<typeof withAdmin>>;
 
@@ -26,7 +25,10 @@ interface Item {
   createdAt: string;
 }
 
-async function session(context: { app: Awaited<ReturnType<typeof buildUsersApp>>['app'] }, credentials: Record<string, unknown> = {}) {
+async function session(
+  context: { app: Awaited<ReturnType<typeof buildUsersApp>>['app'] },
+  credentials: Record<string, unknown> = {},
+) {
   const body = (await login(context.app, credentials).expect(200)).body as { token: string; user: { id: string } };
   return { token: body.token, id: body.user.id };
 }
@@ -39,7 +41,10 @@ async function withAdmin() {
 
 async function register(context: Context, fullName: string, email: string) {
   context.clock.advance(MINUTE);
-  const created = await request(context.app).post('/api/users/register').send(registration({ fullName, email }));
+  const created = await request(context.app)
+    .post('/api/users/register')
+    .send(registration({ fullName, email }))
+    .expect(201);
   return (created.body as { id: string }).id;
 }
 
@@ -111,6 +116,24 @@ describe('access', () => {
     expect((await request(context.app).post(`${PATH}/read-all?role=doctor`).set(as(patient.token))).status).toBe(403);
     expect((await request(context.app).post(`${PATH}/not-a-uuid/read`).set(as(patient.token))).status).toBe(400);
   });
+
+  it('lets the demo account read notifications but never mark them read', async () => {
+    const context = await withAdmin();
+    await context.modules.users.bootstrap(undefined);
+    const [demo] = DEMO_ACCOUNTS;
+    const visitor = await session(context, { email: demo?.email, password: demo?.password });
+    await deliver(context, visitor.id, 'patient');
+    const [item] = itemsOf(await list(context, visitor.token, 'role=patient').expect(200));
+
+    const one = await request(context.app).post(`${PATH}/${item?.id}/read`).set(as(visitor.token));
+    const all = await request(context.app).post(`${PATH}/read-all?role=patient`).set(as(visitor.token));
+
+    expect(one.status).toBe(403);
+    expect(one.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
+    expect(all.status).toBe(403);
+    expect(all.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
+    expect(await unread(context, visitor.token, 'patient')).toBe(1);
+  });
 });
 
 describe('user_registered', () => {
@@ -140,7 +163,7 @@ describe('user_registered', () => {
         audience_role: 'admin',
         type: 'user_registered',
         booking_id: null,
-        params: { userId: ana, fullName: 'Ana Maria Silva' },
+        params: { userId: ana },
       })),
     );
     const others = await context.db.execute<{ total: number }>(
@@ -152,11 +175,27 @@ describe('user_registered', () => {
   it('does not notify anyone when the registration fails or a seed account is created', async () => {
     const context = await withAdmin();
     await register(context, 'Ana Maria Silva', 'ana.silva@email.com');
-    await register(context, 'Ana Maria Silva', 'ana.silva@email.com');
+    await request(context.app).post('/api/users/register').send(registration()).expect(409);
     await context.modules.users.bootstrap(undefined);
 
     const rows = await context.db.execute<{ total: number }>(sql`select count(*)::int as total from notifications`);
     expect(rows.rows[0]?.total).toBe(1);
+  });
+
+  it('rolls the registration back and keeps the cached count when the notification insert fails', async () => {
+    const context = await withAdmin();
+    expect(await unread(context, context.admin.token, 'admin')).toBe(0);
+    const counted = vi.spyOn(NotificationsRepository.prototype, 'unreadCount');
+    vi.spyOn(NotificationsRepository.prototype, 'insert').mockRejectedValueOnce(new Error('insert failed'));
+
+    await request(context.app).post('/api/users/register').send(registration()).expect(500);
+
+    const rows = await context.db.execute<{ users: number; notifications: number }>(
+      sql`select (select count(*)::int from users where email = 'ana.silva@email.com') as users, (select count(*)::int from notifications) as notifications`,
+    );
+    expect(rows.rows[0]).toEqual({ users: 0, notifications: 0 });
+    expect(await unread(context, context.admin.token, 'admin')).toBe(0);
+    expect(counted).not.toHaveBeenCalled();
   });
 });
 
@@ -188,6 +227,17 @@ describe('GET /api/notifications', () => {
     const patientArea = itemsOf(await list(context, context.admin.token, 'role=patient').expect(200));
     expect(patientArea).toEqual([
       expect.objectContaining({ type: 'appointment_confirmed', bookingId: expect.any(String) as unknown }),
+    ]);
+  });
+
+  it('shows the current name of the registered account', async () => {
+    const context = await withAdmin();
+    const ana = await register(context, 'Ana Maria Silva', 'ana.silva@email.com');
+
+    await context.db.execute(sql`update users set full_name = 'Ana Souza' where id = ${ana}`);
+
+    expect(itemsOf(await list(context, context.admin.token, 'role=admin'))).toEqual([
+      expect.objectContaining({ params: { userId: ana, fullName: 'Ana Souza' } }),
     ]);
   });
 
@@ -317,6 +367,26 @@ describe('UnreadCounter', () => {
     expect(await stale).toBe(1);
     expect(await counter.count('user:admin', () => Promise.resolve(2))).toBe(2);
     expect(await counter.count('user:admin', () => Promise.resolve(3))).toBe(2);
+  });
+
+  it('caches the next load after a failed one', async () => {
+    const counter = new UnreadCounter(fixedClock(new Date('2026-11-20T12:00:00.000Z')));
+
+    await expect(counter.count('user:admin', () => Promise.reject(new Error('offline')))).rejects.toThrow('offline');
+
+    expect(await counter.count('user:admin', () => Promise.resolve(4))).toBe(4);
+    expect(await counter.count('user:admin', () => Promise.resolve(5))).toBe(4);
+  });
+
+  it('evicts expired counts once it holds many keys', async () => {
+    const clock = fixedClock(new Date('2026-11-20T12:00:00.000Z'));
+    const counter = new UnreadCounter(clock);
+    for (let index = 0; index < 1000; index += 1) await counter.count(`old-${index}`, () => Promise.resolve(1));
+    clock.advance(10 * MINUTE);
+
+    await counter.count('fresh', () => Promise.resolve(1));
+
+    expect(counter.size).toBe(1);
   });
 });
 

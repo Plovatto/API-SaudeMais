@@ -2,11 +2,9 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
-import { buildUsersApp, login, registration } from './support/users.js';
+import { as, buildUsersApp, login, registration } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
-
-const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 async function adminSession(context: Awaited<ReturnType<typeof buildUsersApp>>, credentials = ADMIN) {
   const body = (await login(context.app, credentials).expect(200)).body as { token: string; user: { id: string } };

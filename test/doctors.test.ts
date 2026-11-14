@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DEMO_ACCOUNTS, DEMO_DOCTOR } from '@/modules/users/user.demo.js';
-import { buildUsersApp, login, registerAndLogin, registration } from './support/users.js';
+import { as, buildUsersApp, login, registerAndLogin, registration } from './support/users.js';
 
 type Context = Awaited<ReturnType<typeof buildUsersApp>>;
 
@@ -27,7 +27,6 @@ interface Availability {
 
 const SAMPLE_NAMES = ['Dr. Carlos Mendes', 'Dr. Rafael Costa', 'Dra. Ana Ferreira', 'Dra. Beatriz Lima'];
 const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
-const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 async function setup() {
   const context = await buildUsersApp();

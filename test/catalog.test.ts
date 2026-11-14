@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { buildUsersApp, login, registerAndLogin } from './support/users.js';
+import { as, buildUsersApp, login, registerAndLogin } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 
@@ -14,8 +14,6 @@ async function setup() {
   const patient = await registerAndLogin(context.app);
   return { ...context, admin, patient };
 }
-
-const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 let context: Context;
 

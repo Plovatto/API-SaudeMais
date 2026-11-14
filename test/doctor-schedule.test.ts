@@ -5,7 +5,7 @@ import { WEEKDAYS, WORKDAYS } from '@/lib/week.js';
 import { DoctorScheduleRepository } from '@/modules/doctor-schedule/doctor-schedule.repository.js';
 import { DEFAULT_SCHEDULE, DoctorScheduleService } from '@/modules/doctor-schedule/doctor-schedule.service.js';
 import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
-import { buildUsersApp, login, registerAndLogin, registration } from './support/users.js';
+import { as, buildUsersApp, login, registerAndLogin, registration } from './support/users.js';
 
 type Context = Awaited<ReturnType<typeof buildUsersApp>>;
 type Range = { startMin: number; endMin: number };
@@ -13,7 +13,6 @@ type Range = { startMin: number; endMin: number };
 const PATH = '/api/doctor/schedule';
 const MORNING = { startMin: 480, endMin: 720 };
 const AFTERNOON = { startMin: 780, endMin: 1020 };
-const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 function week(ranges: Partial<Record<number, Range[]>>, inactive: number[] = []) {
   return {
