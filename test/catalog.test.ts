@@ -176,6 +176,7 @@ describe('units and hours', () => {
       },
     ],
     ['a weekday out of range', { hours: [{ weekday: 7, openMin: 480, closeMin: 600 }] }],
+    ['minutes that are not multiples of 5', { hours: [{ weekday: 1, openMin: 482, closeMin: 600 }] }],
     ['an invalid phone', { phone: '123' }],
   ])('rejects %s', async (_case, overrides) => {
     expect((await adminCall('post', '/api/admin/units', unitBody('Unidade Inválida', overrides))).status).toBe(400);

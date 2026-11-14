@@ -1,11 +1,11 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { WEEKDAYS, WORKDAYS } from '@/lib/week.js';
 import { DoctorScheduleRepository } from '@/modules/doctor-schedule/doctor-schedule.repository.js';
 import { DEFAULT_SCHEDULE, DoctorScheduleService } from '@/modules/doctor-schedule/doctor-schedule.service.js';
 import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
-import { fixedClock } from './support/fixed-clock.js';
-import { buildUsersApp, login, registerAndLogin, registration, START } from './support/users.js';
+import { buildUsersApp, login, registerAndLogin, registration } from './support/users.js';
 
 type Context = Awaited<ReturnType<typeof buildUsersApp>>;
 type Range = { startMin: number; endMin: number };
@@ -17,7 +17,7 @@ const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 function week(ranges: Partial<Record<number, Range[]>>, inactive: number[] = []) {
   return {
-    days: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+    days: WEEKDAYS.map((weekday) => ({
       weekday,
       isActive: Boolean(ranges[weekday]?.length) && !inactive.includes(weekday),
       ranges: ranges[weekday] ?? [],
@@ -62,6 +62,7 @@ describe('access', () => {
     const patient = ((await login(context.app, { email: 'paulo@email.com' })).body as { token: string }).token;
 
     expect((await request(context.app).get(PATH)).status).toBe(401);
+    expect((await request(context.app).put(PATH).send(week({}))).status).toBe(401);
     expect((await request(context.app).get(PATH).set(as(patient))).status).toBe(403);
     expect((await request(context.app).put(PATH).set(as(patient)).send(week({}))).status).toBe(403);
     expect((await read(context)).status).toBe(200);
@@ -105,9 +106,10 @@ describe('GET /api/doctor/schedule', () => {
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.body).toEqual({
       ...week({}),
-      unitHours: [1, 2, 3, 4, 5]
-        .map((weekday) => ({ weekday, openMin: 420, closeMin: 1140 }))
-        .concat({ weekday: 6, openMin: 480, closeMin: 720 }),
+      unitHours: [
+        ...WORKDAYS.map((weekday) => ({ weekday, openMin: 420, closeMin: 1140 })),
+        { weekday: 6, openMin: 480, closeMin: 720 },
+      ],
     });
   });
 });
@@ -150,6 +152,24 @@ describe('PUT /api/doctor/schedule', () => {
     });
   });
 
+  it('flags every range that overlaps an earlier one, not only the next', async () => {
+    const context = await withDoctor();
+
+    const response = await save(
+      context,
+      week({
+        1: [
+          { startMin: 0, endMin: 600 },
+          { startMin: 100, endMin: 200 },
+          { startMin: 300, endMin: 400 },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(422);
+    expect(Object.keys((response.body as { fields: object }).fields)).toEqual(['days.1.ranges.1', 'days.1.ranges.2']);
+  });
+
   it.each([
     ['before the unit opens', 1, { startMin: 360, endMin: 600 }],
     ['after the unit closes', 5, { startMin: 1080, endMin: 1200 }],
@@ -179,6 +199,12 @@ describe('PUT /api/doctor/schedule', () => {
     ['a range past midnight', week({ 1: [{ startMin: 1200, endMin: 1441 }] })],
     ['a range that ends before it starts', week({ 1: [{ startMin: 600, endMin: 600 }] })],
     ['a negative start', week({ 1: [{ startMin: -10, endMin: 600 }] })],
+    ['minutes that are not multiples of 5', week({ 1: [{ startMin: 481, endMin: 600 }] })],
+    ['non-integer minutes', week({ 1: [{ startMin: 480.5, endMin: 600 }] })],
+    ['a weekday past Saturday', { days: [...week({}).days.slice(1), { weekday: 7, isActive: false, ranges: [] }] }],
+    ['an unknown key at the root', { ...week({}), note: 'x' }],
+    ['an unknown key in a day', { days: week({}).days.map((day) => ({ ...day, note: 'x' })) }],
+    ['an unknown key in a range', week({ 1: [{ ...MORNING, note: 'x' } as Range] })],
     ['six days', { days: week({}).days.slice(1) }],
     ['a repeated day', { days: [...week({}).days.slice(1), { weekday: 1, isActive: false, ranges: [] }] }],
     [
@@ -219,7 +245,7 @@ describe('atomic replace', () => {
       constraint: 'doctor_schedule_ranges_no_overlap_excl',
     });
     const repository = { replace: () => Promise.reject(violation) } as unknown as DoctorScheduleRepository;
-    const service = new DoctorScheduleService(repository, fixedClock(START));
+    const service = new DoctorScheduleService(repository);
 
     await expect(service.save('id', week({}), { actorId: 'id', ip: null })).rejects.toMatchObject({
       status: 422,

@@ -2,13 +2,14 @@ import type pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
+import { WEEKDAYS } from '@/lib/week.js';
 import { DoctorScheduleRepository } from '@/modules/doctor-schedule/doctor-schedule.repository.js';
 import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { createCleanPool } from './support/pg-test-pool.js';
 
 const week = (weekday: number, ranges: { startMin: number; endMin: number }[]) =>
-  [0, 1, 2, 3, 4, 5, 6].map((day) => ({
+  WEEKDAYS.map((day) => ({
     weekday: day,
     isActive: day === weekday,
     ranges: day === weekday ? ranges : [],
