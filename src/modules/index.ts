@@ -5,6 +5,7 @@ import { createAdminHomeModule } from './admin-home/index.js';
 import { createAdminUsersModule } from './admin-users/index.js';
 import { createCatalogModule } from './catalog/index.js';
 import { createDoctorScheduleModule } from './doctor-schedule/index.js';
+import { createDoctorsModule } from './doctors/index.js';
 import { createDemoModule } from './demo/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
 import { createUsersModule, type SessionPolicy } from './users/index.js';
@@ -34,6 +35,7 @@ export function createModules(deps: ModulesDeps) {
     schedules: doctorSchedule.service,
     clock: deps.clock,
   });
+  const doctors = createDoctorsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   return {
     users,
@@ -43,6 +45,7 @@ export function createModules(deps: ModulesDeps) {
     demo,
     adminHome,
     doctorSchedule,
+    doctors,
     routers: [
       users.router,
       passwordReset.router,
@@ -50,6 +53,7 @@ export function createModules(deps: ModulesDeps) {
       adminUsers.router,
       adminHome.router,
       doctorSchedule.router,
+      doctors.router,
     ],
   };
 }
