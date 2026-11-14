@@ -33,7 +33,12 @@ export const notifications = pgTable(
     foreignKey({ name: 'notifications_user_id_fkey', columns: [table.userId], foreignColumns: [users.id] }).onDelete(
       'cascade',
     ),
-    index('notifications_user_role_created_at_idx').on(table.userId, table.audienceRole, table.createdAt.desc()),
+    index('notifications_user_role_created_at_idx').on(
+      table.userId,
+      table.audienceRole,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
     index('notifications_user_role_unread_idx')
       .on(table.userId, table.audienceRole)
       .where(sql`read_at is null`),

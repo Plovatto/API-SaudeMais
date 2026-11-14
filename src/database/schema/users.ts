@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, foreignKey, pgTable, primaryKey, text, unique, uuid } from 'drizzle-orm/pg-core';
-import { citext, isE164, timestamptz, uuidv7Id } from './columns.js';
+import { citext, isE164, isOneOf, timestamptz, uuidv7Id } from './columns.js';
 
 export const roles = ['patient', 'doctor', 'admin'] as const;
 export type Role = (typeof roles)[number];
@@ -72,6 +72,6 @@ export const userRoles = pgTable(
       columns: [table.grantedBy],
       foreignColumns: [users.id],
     }).onDelete('set null'),
-    check('user_roles_role_check', sql`role in ('patient', 'doctor', 'admin')`),
+    check('user_roles_role_check', isOneOf('role', roles)),
   ],
 );

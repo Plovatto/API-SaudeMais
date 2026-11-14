@@ -14,5 +14,5 @@ CREATE TABLE "notifications" (
 );
 --> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "notifications_user_role_created_at_idx" ON "notifications" USING btree ("user_id","audience_role","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "notifications_user_role_created_at_idx" ON "notifications" USING btree ("user_id","audience_role","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "notifications_user_role_unread_idx" ON "notifications" USING btree ("user_id","audience_role") WHERE read_at is null;

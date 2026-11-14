@@ -19,5 +19,5 @@ export const timestamps = () => ({
   updatedAt: timestamptz('updated_at').notNull().defaultNow(),
 });
 
-export const isOneOf = (column: string, values: readonly string[]) =>
+export const isOneOf = <const T extends readonly [string, ...string[]]>(column: string, values: T) =>
   sql.raw(`${column} in (${values.map((value) => `'${value}'`).join(', ')})`);

@@ -12,7 +12,7 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { citext, isE164, timestamps, timestamptz, uuidv7Id } from './columns.js';
+import { citext, isE164, isOneOf, timestamps, timestamptz, uuidv7Id } from './columns.js';
 import { users } from './users.js';
 
 export const examKinds = ['lab', 'imaging'] as const;
@@ -93,7 +93,7 @@ export const examTypes = pgTable(
     unique('exam_types_name_key').on(table.name),
     check('exam_types_code_check', sql`code ~ '^[a-z][a-z0-9_]{1,39}$'`),
     check('exam_types_name_check', sql`char_length(name) between 2 and 80`),
-    check('exam_types_kind_check', sql`kind in ('lab', 'imaging')`),
+    check('exam_types_kind_check', isOneOf('kind', examKinds)),
     check('exam_types_duration_min_check', sql`duration_min between 5 and 240 and duration_min % 5 = 0`),
     check('exam_types_preparation_notes_check', sql`char_length(preparation_notes) <= 1000`),
   ],
