@@ -78,6 +78,7 @@ describe('POST /api/users/register', () => {
     ['a short name', { fullName: 'A' }, 'fullName'],
     ['a single emoji as the name', { fullName: '😀' }, 'fullName'],
     ['a control character in the name', { fullName: 'Ana\u0000Silva' }, 'fullName'],
+    ['a line break in the name', { fullName: 'Ana\nSilva' }, 'fullName'],
     ['an invalid e-mail', { email: 'ana' }, 'email'],
     ['an invalid phone', { phone: '123' }, 'phone'],
     ['a short password', { password: 'curta', passwordConfirmation: 'curta' }, 'password'],
