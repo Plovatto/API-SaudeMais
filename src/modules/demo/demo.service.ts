@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Clock } from '../../lib/clock.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
+import type { DoctorScheduleService } from '../doctor-schedule/doctor-schedule.service.js';
 import { DEMO_DOCTOR, type SeedAccount } from '../users/user.demo.js';
 import { SeedAccountConflictError, type UserService } from '../users/user.service.js';
 import {
@@ -21,6 +22,7 @@ export class DemoService {
   constructor(
     private readonly repository: DemoRepository,
     private readonly users: UserService,
+    private readonly schedules: DoctorScheduleService,
     private readonly clock: Clock,
   ) {}
 
@@ -32,8 +34,12 @@ export class DemoService {
       throw error;
     }
     const userId = await this.repository.userIdByEmail(DEMO_DOCTOR.email);
-    if (!userId || (await this.repository.hasDoctorProfile(userId))) return [];
-    return this.grantProfile(userId, DEMO_DOCTOR.email, DEMO_DOCTOR_PROFILE);
+    if (!userId) return [];
+    const warnings = (await this.repository.hasDoctorProfile(userId))
+      ? []
+      : await this.grantProfile(userId, DEMO_DOCTOR.email, DEMO_DOCTOR_PROFILE);
+    await this.schedules.ensureDefault(userId);
+    return warnings;
   }
 
   async seed(): Promise<string[]> {
@@ -51,8 +57,10 @@ export class DemoService {
       if (unit && examTypeId) await this.repository.ensureOffer(unit.id, examTypeId, offer.capacityPerSlot);
     }
     for (const { fullName, email, ...profile } of SAMPLE_DOCTORS) {
-      const userId = await this.createSampleAccount({ fullName, email });
-      if (userId) warnings.push(...(await this.grantProfile(userId, email, profile)));
+      const created = await this.createSampleAccount({ fullName, email });
+      if (created) warnings.push(...(await this.grantProfile(created, email, profile)));
+      const userId = created ?? (await this.repository.userIdByEmail(email));
+      if (userId) await this.schedules.ensureDefault(userId);
     }
     for (const patient of SAMPLE_PATIENTS) await this.createSampleAccount(patient);
     return warnings;

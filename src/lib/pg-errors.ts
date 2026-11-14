@@ -1,5 +1,6 @@
 const UNIQUE_VIOLATION = '23505';
 const FOREIGN_KEY_VIOLATION = '23503';
+const EXCLUSION_VIOLATION = '23P01';
 
 interface PgError {
   code: string;
@@ -27,10 +28,16 @@ function findPgError(error: unknown): PgError | undefined {
   return undefined;
 }
 
-export function isUniqueViolation(error: unknown, constraint: string): boolean {
+function isViolation(error: unknown, code: string, constraint: string): boolean {
   const pgError = findPgError(error);
-  return pgError?.code === UNIQUE_VIOLATION && pgError.constraint === constraint;
+  return pgError?.code === code && pgError.constraint === constraint;
 }
+
+export const isUniqueViolation = (error: unknown, constraint: string) =>
+  isViolation(error, UNIQUE_VIOLATION, constraint);
+
+export const isExclusionViolation = (error: unknown, constraint: string) =>
+  isViolation(error, EXCLUSION_VIOLATION, constraint);
 
 export function violatedConstraint(error: unknown): string | undefined {
   const pgError = findPgError(error);
