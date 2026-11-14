@@ -199,6 +199,7 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | GET | `/api/admin/units/{id}/exam-offers` | Exames oferecidos pela unidade (admin) |
 | PUT | `/api/admin/units/{id}/exam-offers/{examTypeId}` | Oferece um exame na unidade (admin) |
 | GET, PUT | `/api/admin/policy` | Política de agendamento (admin) |
+| GET | `/api/admin/home` | Números do painel do administrador |
 | GET | `/api/admin/users` | Lista e busca usuários (admin) |
 | GET, PATCH | `/api/admin/users/{id}` | Vê e altera nome e telefone (admin) |
 | GET | `/api/admin/users/{id}/deactivation-impact` | Agendamentos afetados por desativar (admin) |
