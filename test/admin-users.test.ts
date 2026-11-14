@@ -303,6 +303,8 @@ describe('doctor profile', () => {
   it('updates and removes the profile, keeping the doctor role in sync', async () => {
     const context = await withAdmin();
     const id = await register(context);
+    const session = ((await login(context.app).expect(200)).body as { token: string }).token;
+    await context.auth.authenticate(session);
     const { specialtyId, unitId } = await catalog(context, context.admin.token);
     const path = `/api/admin/users/${id}/doctor-profile`;
     await call(context, context.admin.token, 'post', path, {
@@ -311,12 +313,14 @@ describe('doctor profile', () => {
       registryNumber: '123456',
       registryUf: 'SP',
     }).expect(201);
+    expect((await context.auth.authenticate(session))?.user.roles).toEqual(['doctor', 'patient']);
 
     const updated = await call(context, context.admin.token, 'patch', path, { registryNumber: '654321' });
     const removed = await call(context, context.admin.token, 'delete', path);
 
     expect(updated.body).toMatchObject({ doctorProfile: { registryNumber: '654321' } });
     expect(removed.body).toMatchObject({ roles: ['patient'], doctorProfile: null });
+    expect((await context.auth.authenticate(session))?.user.roles).toEqual(['patient']);
     expect((await call(context, context.admin.token, 'delete', path)).status).toBe(404);
     expect((await call(context, context.admin.token, 'patch', path, { registryUf: 'RJ' })).status).toBe(404);
   });

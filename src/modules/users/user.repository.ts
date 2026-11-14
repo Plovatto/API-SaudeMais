@@ -71,6 +71,7 @@ export interface ActiveSession {
   id: string;
   remember: boolean;
   lastUsedAt: Date;
+  expiresAt: Date;
   absoluteExpiresAt: Date;
   isProtected: boolean;
   user: PublicUser;
@@ -169,11 +170,13 @@ export class UserRepository {
     return created.id;
   }
 
-  async pruneSessions(userId: string, keepId: string, now: Date, limit: number): Promise<void> {
+  async pruneSessions(userId: string, keepId: string, now: Date, limit: number): Promise<string[]> {
     const overLimit = sql`${sessions.id} not in (select ${sessions.id} from ${sessions} where ${sessions.userId} = ${userId} and ${sessions.id} <> ${keepId} and ${sessions.expiresAt} > ${now} order by ${sessions.lastUsedAt} desc, ${sessions.id} desc limit ${limit - 1})`;
-    await this.db
+    const removed = await this.db
       .delete(sessions)
-      .where(and(eq(sessions.userId, userId), ne(sessions.id, keepId), or(lte(sessions.expiresAt, now), overLimit)));
+      .where(and(eq(sessions.userId, userId), ne(sessions.id, keepId), or(lte(sessions.expiresAt, now), overLimit)))
+      .returning({ id: sessions.id });
+    return removed.map(({ id }) => id);
   }
 
   async findActiveSession(tokenHash: string, now: Date): Promise<ActiveSession | undefined> {
@@ -182,6 +185,7 @@ export class UserRepository {
         id: sessions.id,
         remember: sessions.remember,
         lastUsedAt: sessions.lastUsedAt,
+        expiresAt: sessions.expiresAt,
         absoluteExpiresAt: sessions.absoluteExpiresAt,
         isProtected: users.isProtected,
         user: publicUserColumns,
