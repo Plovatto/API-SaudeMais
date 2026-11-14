@@ -103,8 +103,8 @@ async function lockProfile(tx: Transaction, doctorId: string): Promise<string | 
   return profile?.unitId;
 }
 
-function hoursOf(tx: Transaction, unitId: string): Promise<UnitHour[]> {
-  return tx
+export function hoursOf(db: Pick<Database, 'select'>, unitId: string): Promise<UnitHour[]> {
+  return db
     .select({ weekday: unitHours.weekday, openMin: unitHours.openMin, closeMin: unitHours.closeMin })
     .from(unitHours)
     .where(eq(unitHours.unitId, unitId))

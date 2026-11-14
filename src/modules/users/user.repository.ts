@@ -13,6 +13,9 @@ export const publicUserColumns = {
   >`array(select ${userRoles.role} from ${userRoles} where ${userRoles.userId} = ${users.id} order by ${userRoles.role})`,
 };
 
+export const hasRole = (role: Role) =>
+  sql<boolean>`exists (select 1 from ${userRoles} where ${userRoles.userId} = ${users.id} and ${userRoles.role} = ${role})`;
+
 type Writer = Pick<Database, 'update' | 'delete'>;
 
 export async function applyNewPassword(

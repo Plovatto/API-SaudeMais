@@ -1,9 +1,9 @@
 import { and, asc, eq, exists, inArray } from 'drizzle-orm';
-import type { AnyPgColumn, PgSelect, PgTable } from 'drizzle-orm/pg-core';
+import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { examTypes, settings, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
-import { offsetOf, type Page, type Pagination } from '../../lib/pagination.js';
+import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import type {
   CreateExamTypeInput,
   CreateSpecialtyInput,
@@ -122,18 +122,18 @@ export class CatalogRepository {
 
   specialtyPage(pagination: Pagination): Promise<Page<Specialty>> {
     const query = this.db.select(specialtyColumns).from(specialties).orderBy(asc(specialties.name)).$dynamic();
-    return this.pageOf(specialties, pagination, query);
+    return pageOf(query, pagination, () => this.db.$count(specialties));
   }
 
   async unitPage(pagination: Pagination): Promise<Page<Unit>> {
     const query = this.db.select(unitColumns).from(units).orderBy(asc(units.name)).$dynamic();
-    const page = await this.pageOf(units, pagination, query);
+    const page = await pageOf(query, pagination, () => this.db.$count(units));
     return { ...page, items: await this.withHours(page.items) };
   }
 
   examTypePage(pagination: Pagination): Promise<Page<ExamType>> {
     const query = this.db.select(examTypeColumns).from(examTypes).orderBy(asc(examTypes.name)).$dynamic();
-    return this.pageOf(examTypes, pagination, query);
+    return pageOf(query, pagination, () => this.db.$count(examTypes));
   }
 
   createSpecialty(input: CreateSpecialtyInput, actor: Actor): Promise<Specialty> {
@@ -253,11 +253,6 @@ export class CatalogRepository {
 
   private capacityInUseAbove(_tx: Transaction, _unitId: string, _examTypeId: string, _capacity: number) {
     return Promise.resolve(false);
-  }
-
-  private async pageOf<Q extends PgSelect>(table: PgTable, pagination: Pagination, query: Q) {
-    const items: Awaited<Q> = await query.limit(pagination.pageSize).offset(offsetOf(pagination));
-    return { items, ...pagination, total: await this.db.$count(table) };
   }
 
   private createAudited<Row extends { id: string }>(
