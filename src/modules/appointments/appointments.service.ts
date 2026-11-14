@@ -1,16 +1,17 @@
 import { runAfterCommit } from '../../database/pg-client.js';
-import { AppError, unprocessableField } from '../../lib/app-error.js';
+import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import { civilDate, CLINIC_TIME_ZONE, wallClockIn } from '../../lib/time.js';
 import { slotDays } from '../../lib/time-slots.js';
 import { forbidden, unauthenticated } from '../../middleware/auth.js';
+import type { BookingsService } from '../bookings/bookings.service.js';
 import type { SlotContext } from '../doctors/doctors.repository.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import { ACTIVE_LIMIT, appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
-import type { Appointment, BookAppointmentInput } from './appointments.model.js';
+import type { Appointment, BookAppointmentInput, CancelAppointmentInput } from './appointments.model.js';
 import type { AppointmentsRepository, Viewer } from './appointments.repository.js';
 
 const exclusionConflicts = {
@@ -19,6 +20,10 @@ const exclusionConflicts = {
 };
 
 const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
+
+function ensureParty({ roles }: Viewer): void {
+  if (!roles.includes('patient') && !roles.includes('doctor')) throw forbidden();
+}
 
 function slotEnd(context: SlotContext, startsAt: Date, now: Date): Date {
   const date = civilDate(wallClockIn(CLINIC_TIME_ZONE, startsAt));
@@ -33,6 +38,7 @@ export class AppointmentsService {
   constructor(
     private readonly repository: AppointmentsRepository,
     private readonly notifications: NotificationsService,
+    private readonly bookings: BookingsService,
     private readonly clock: Clock,
   ) {}
 
@@ -48,10 +54,25 @@ export class AppointmentsService {
   }
 
   async detail(id: string, viewer: Viewer): Promise<Appointment> {
-    if (!viewer.roles.includes('patient') && !viewer.roles.includes('doctor')) throw forbidden();
+    ensureParty(viewer);
     const appointment = await this.repository.find(id, viewer, this.clock.now());
     if (!appointment) throw notFound(appointmentNotFound);
     return appointment;
+  }
+
+  async cancel(id: string, viewer: Viewer, { startsAt, reason }: CancelAppointmentInput): Promise<Appointment> {
+    ensureParty(viewer);
+    const role = await this.repository.sideOf(id, viewer);
+    if (!role) throw notFound(appointmentNotFound);
+    if (role === 'doctor' && !reason) throw unprocessableField(appointmentRules.reasonRequired);
+    const canceller = { role, userId: viewer.userId, reason: reason || null };
+    const seen = { id, startsAt: new Date(startsAt) };
+    const afterCommit = await retryOnDeadlock(() =>
+      this.repository.transaction((tx) => this.bookings.cancelSeen(tx, seen, canceller)),
+    );
+    if (!afterCommit) throw conflictError(appointmentConflicts.invalidState);
+    runAfterCommit(afterCommit);
+    return this.detail(id, viewer);
   }
 
   private create(patientId: string, { doctorId, specialtyId, visitType, notes, ...input }: BookAppointmentInput) {

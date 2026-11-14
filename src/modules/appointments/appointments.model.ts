@@ -6,11 +6,14 @@ import { uuidParam } from '../../lib/params.js';
 import { boundedText } from '../../lib/text.js';
 import { doctorSchema } from '../doctors/doctors.model.js';
 
-const visitType = z.enum(visitTypes, { error: 'Escolha o tipo de consulta.' }).openapi({
+export const visitType = z.enum(visitTypes, { error: 'Escolha o tipo de consulta.' }).openapi({
   description:
     'Tipo de consulta: primeira consulta (`first_visit`), rotina (`routine`), retorno (`follow_up`) ou avaliação de exames (`exam_review`).',
   example: 'first_visit',
 });
+
+const instant = (error: string, description: string) =>
+  z.iso.datetime({ offset: true, error }).openapi({ description, example: '2026-11-23T11:00:00.000Z' });
 
 export const bookAppointmentSchema = registry.register(
   'BookAppointmentRequest',
@@ -18,16 +21,30 @@ export const bookAppointmentSchema = registry.register(
     doctorId: uuidParam.openapi({ description: 'Médico escolhido.' }),
     specialtyId: uuidParam.openapi({ description: 'Especialidade escolhida; precisa ser a do médico.' }),
     visitType,
-    startsAt: z.iso
-      .datetime({ offset: true, error: 'Envie o startsAt de uma vaga da lista.' })
-      .openapi({ description: 'Início da vaga, como veio da lista de vagas.', example: '2026-11-23T11:00:00.000Z' }),
+    startsAt: instant('Envie o startsAt de uma vaga da lista.', 'Início da vaga, como veio da lista de vagas.'),
     notes: boundedText('O texto das observações', 0, 500)
       .optional()
       .openapi({ description: 'Observações para o médico.', example: 'Tenho alergia a dipirona.' }),
   }),
 );
 
-const person = z.object({ id: z.uuid(), fullName: z.string().openapi({ example: 'Ana Maria Silva' }) });
+export const cancelAppointmentSchema = registry.register(
+  'CancelAppointmentRequest',
+  z.strictObject({
+    startsAt: instant(
+      'Envie o startsAt da consulta como ela apareceu na tela.',
+      'Início da consulta como o cliente o exibiu. Se a consulta mudou desde então, a resposta é `INVALID_STATE`.',
+    ),
+    reason: boundedText('O motivo', 0, 500)
+      .optional()
+      .openapi({
+        description: 'Motivo do cancelamento; obrigatório para o médico.',
+        example: 'Imprevisto de trabalho.',
+      }),
+  }),
+);
+
+export const person = z.object({ id: z.uuid(), fullName: z.string().openapi({ example: 'Ana Maria Silva' }) });
 
 const eventSchema = z.object({
   type: z.enum(bookingEventTypes).openapi({ example: 'created' }),
@@ -61,4 +78,5 @@ export const appointmentSchema = registry.register(
 );
 
 export type BookAppointmentInput = z.infer<typeof bookAppointmentSchema>;
+export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
 export type Appointment = z.infer<typeof appointmentSchema>;

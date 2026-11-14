@@ -1,27 +1,46 @@
+import { sql, type SQL } from 'drizzle-orm';
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import type { Clock } from '../../lib/clock.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import {
+  asSeen,
   cancelActiveFuture,
   ofAccount,
   type BookingSide,
   type CancelledBooking,
   type Canceller,
+  type SeenBooking,
 } from './bookings.repository.js';
 
 function counterparts(booking: CancelledBooking, userId: string, canceller: Canceller) {
   const notice = {
-    type: 'appointment_cancelled' as const,
     bookingId: booking.id,
     params: { startsAt: booking.startsAt.toISOString(), cancelledByRole: canceller.role },
   };
   return [
     ...(booking.patientId === userId
       ? []
-      : [{ ...notice, userId: booking.patientId, audienceRole: 'patient' as const }]),
+      : [
+          {
+            ...notice,
+            type: 'appointment_cancelled' as const,
+            userId: booking.patientId,
+            audienceRole: 'patient' as const,
+          },
+        ]),
     ...(booking.doctorId === null || booking.doctorId === userId
       ? []
-      : [{ ...notice, userId: booking.doctorId, audienceRole: 'doctor' as const }]),
+      : [
+          {
+            ...notice,
+            type:
+              canceller.role === 'patient'
+                ? ('appointment_cancelled_by_patient' as const)
+                : ('appointment_cancelled' as const),
+            userId: booking.doctorId,
+            audienceRole: 'doctor' as const,
+          },
+        ]),
   ];
 }
 
@@ -37,10 +56,30 @@ export class BookingsService {
     sides: BookingSide[],
     canceller: Canceller,
   ): Promise<AfterCommit> {
-    const cancelled = await cancelActiveFuture(tx, ofAccount(userId, sides), canceller, this.clock.now());
-    return this.notifications.notify(
+    return (await this.cancel(tx, ofAccount(userId, sides), userId, canceller)).afterCommit;
+  }
+
+  async cancelSeen(
+    tx: Transaction,
+    seen: SeenBooking,
+    canceller: Canceller & { role: BookingSide; userId: string },
+  ): Promise<AfterCommit | undefined> {
+    const { userId, role } = canceller;
+    const { cancelled, afterCommit } = await this.cancel(
+      tx,
+      sql`${ofAccount(userId, [role])} and ${asSeen(seen)}`,
+      userId,
+      canceller,
+    );
+    return cancelled > 0 ? afterCommit : undefined;
+  }
+
+  private async cancel(tx: Transaction, scope: SQL, userId: string, canceller: Canceller) {
+    const cancelled = await cancelActiveFuture(tx, scope, canceller, this.clock.now());
+    const afterCommit = await this.notifications.notify(
       tx,
       cancelled.flatMap((booking) => counterparts(booking, userId, canceller)),
     );
+    return { cancelled: cancelled.length, afterCommit };
   }
 }

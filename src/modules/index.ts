@@ -11,6 +11,7 @@ import { createDoctorsModule } from './doctors/index.js';
 import { createDemoModule } from './demo/index.js';
 import { createNotificationsModule } from './notifications/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
+import { createPatientBookingsModule } from './patient-bookings/index.js';
 import { createUsersModule, type SessionPolicy } from './users/index.js';
 import { SessionCache } from './users/user.session-cache.js';
 
@@ -50,6 +51,13 @@ export function createModules(deps: ModulesDeps) {
     clock: deps.clock,
     requireAuth: users.requireAuth,
     notifications: notifications.service,
+    bookings: bookings.service,
+  });
+  const patientBookings = createPatientBookingsModule({
+    db: deps.db,
+    clock: deps.clock,
+    requireAuth: users.requireAuth,
+    notifications: notifications.service,
   });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   return {
@@ -72,6 +80,7 @@ export function createModules(deps: ModulesDeps) {
       doctorSchedule.router,
       doctors.router,
       appointments.router,
+      patientBookings.router,
       notifications.routerFor(users.requireAuth),
     ],
   };

@@ -4,6 +4,7 @@ import {
   bookingEvents,
   bookings,
   isActiveFuture,
+  isLateCancellation,
   type BookingStatus,
   type CancellerRole,
 } from '../../database/schema/bookings.js';
@@ -13,6 +14,7 @@ export type BookingSide = 'patient' | 'doctor';
 export interface Canceller {
   role: CancellerRole;
   userId: string | null;
+  reason?: string | null;
 }
 
 export interface CancelledBooking {
@@ -22,10 +24,19 @@ export interface CancelledBooking {
   startsAt: Date;
 }
 
+export interface SeenBooking {
+  id: string;
+  startsAt: Date;
+}
+
 const sideColumns = { patient: bookings.patientId, doctor: bookings.doctorId };
 
 export function ofAccount(userId: string, sides: BookingSide[]): SQL {
   return or(...sides.map((side) => eq(sideColumns[side], userId))) ?? sql`false`;
+}
+
+export function asSeen({ id, startsAt }: SeenBooking): SQL {
+  return sql`${eq(bookings.id, id)} and ${eq(bookings.startsAt, startsAt)}`;
 }
 
 export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
@@ -48,12 +59,19 @@ export async function futureBookingCounts(db: Pick<Database, 'select'>, userId: 
 export async function cancelActiveFuture(
   tx: Transaction,
   scope: SQL,
-  { role, userId }: Canceller,
+  { role, userId, reason = null }: Canceller,
   now: Date,
 ): Promise<CancelledBooking[]> {
   const rows = await tx
     .update(bookings)
-    .set({ status: 'cancelled', cancelledByRole: role, cancelledBy: userId, cancelledAt: now })
+    .set({
+      status: 'cancelled',
+      cancelledByRole: role,
+      cancelledBy: userId,
+      cancelledAt: now,
+      cancelReason: reason,
+      lateCancellation: role === 'patient' ? isLateCancellation(now) : false,
+    })
     .where(and(isActiveFuture(now), scope))
     .returning({
       id: bookings.id,

@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import {
@@ -11,6 +11,7 @@ import {
 import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { users, type Role } from '../../database/schema/users.js';
+import { ofAccount, type BookingSide } from '../bookings/bookings.repository.js';
 import { slotContext, type SlotContext } from '../doctors/doctors.repository.js';
 import type { Appointment } from './appointments.model.js';
 
@@ -38,6 +39,14 @@ export interface Viewer {
 const doctorUsers = alias(users, 'doctor_users');
 
 const iso = (date: Date | null) => date?.toISOString() ?? null;
+
+const visibleTo = ({ userId, roles }: Viewer) =>
+  ofAccount(
+    userId,
+    roles.filter((role): role is BookingSide => role === 'patient' || role === 'doctor'),
+  );
+
+const appointmentWith = (id: string) => and(eq(bookings.id, id), eq(bookings.kind, 'appointment'));
 
 export class AppointmentsRepository {
   constructor(private readonly db: Database) {}
@@ -106,12 +115,20 @@ export class AppointmentsRepository {
     return row.id;
   }
 
-  find(id: string, { userId, roles }: Viewer, now: Date): Promise<Appointment | undefined> {
-    const visible =
-      or(
-        roles.includes('patient') ? eq(bookings.patientId, userId) : undefined,
-        roles.includes('doctor') ? eq(bookings.doctorId, userId) : undefined,
-      ) ?? sql`false`;
+  transaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
+    return this.db.transaction(work);
+  }
+
+  async sideOf(id: string, viewer: Viewer): Promise<BookingSide | undefined> {
+    const [row] = await this.db
+      .select({ patientId: bookings.patientId })
+      .from(bookings)
+      .where(and(appointmentWith(id), visibleTo(viewer)));
+    if (!row) return undefined;
+    return row.patientId === viewer.userId ? 'patient' : 'doctor';
+  }
+
+  find(id: string, viewer: Viewer, now: Date): Promise<Appointment | undefined> {
     return this.db.transaction(
       async (tx) => {
         const [row] = await tx
@@ -133,7 +150,7 @@ export class AppointmentsRepository {
           .innerJoin(doctorUsers, eq(doctorUsers.id, bookings.doctorId))
           .innerJoin(specialties, eq(specialties.id, bookings.specialtyId))
           .innerJoin(units, eq(units.id, bookings.unitId))
-          .where(and(eq(bookings.id, id), eq(bookings.kind, 'appointment'), visible));
+          .where(and(appointmentWith(id), visibleTo(viewer)));
         if (!row) return undefined;
         const events = await tx
           .select({
