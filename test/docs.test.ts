@@ -57,6 +57,17 @@ describe('GET /docs/openapi.json', () => {
     expect(served.length).toBeGreaterThan(0);
     expect(documented.sort()).toEqual(served.sort());
   });
+
+  it('publishes the length limit of free-text fields', async () => {
+    const { document } = await fetchDocument();
+
+    expect(document.components.schemas.BookAppointmentRequest).toMatchObject({
+      properties: { notes: { maxLength: 500 } },
+    });
+    expect(document.components.schemas.CancelAppointmentRequest).toMatchObject({
+      properties: { reason: { maxLength: 500 } },
+    });
+  });
 });
 
 describe('GET /docs', () => {
