@@ -55,9 +55,7 @@ export class AppointmentsService {
 
   async detail(id: string, viewer: Viewer): Promise<Appointment> {
     ensureParty(viewer);
-    const appointment = await this.repository.find(id, viewer, this.clock.now());
-    if (!appointment) throw notFound(appointmentNotFound);
-    return appointment;
+    return this.find(id, viewer);
   }
 
   async cancel(id: string, viewer: Viewer, { startsAt, reason }: CancelAppointmentInput): Promise<Appointment> {
@@ -72,7 +70,13 @@ export class AppointmentsService {
     );
     if (!afterCommit) throw conflictError(appointmentConflicts.invalidState);
     runAfterCommit(afterCommit);
-    return this.detail(id, viewer);
+    return this.find(id, viewer);
+  }
+
+  private async find(id: string, viewer: Viewer): Promise<Appointment> {
+    const appointment = await this.repository.find(id, viewer, this.clock.now());
+    if (!appointment) throw notFound(appointmentNotFound);
+    return appointment;
   }
 
   private create(patientId: string, { doctorId, specialtyId, visitType, notes, ...input }: BookAppointmentInput) {

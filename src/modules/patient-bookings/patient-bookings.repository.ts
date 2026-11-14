@@ -6,16 +6,18 @@ import {
   effectiveStatus,
   isActiveFuture,
   isLateCancellation,
+  type BookingStatus,
   type VisitType,
 } from '../../database/schema/bookings.js';
 import { examTypes, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf } from '../../lib/pagination.js';
-import type { PatientBookingPage, PatientBookingsQuery } from './patient-bookings.model.js';
+import { cancellationColumns, cancellationOf } from '../bookings/bookings.repository.js';
+import type { BookingScope, PatientBookingPage, PatientBookingsQuery } from './patient-bookings.model.js';
 
 const doctorUsers = alias(users, 'doctor_users');
 
-const scopes = {
+const scopes: Record<BookingScope, (now: Date) => { where: SQL; order: SQL }> = {
   upcoming: (now: Date) => ({ where: isActiveFuture(now), order: asc(bookings.startsAt) }),
   past: (now: Date) => ({ where: sql`not (${isActiveFuture(now)})`, order: desc(bookings.startsAt) }),
 };
@@ -27,6 +29,11 @@ async function countsOf(tx: Transaction, patientId: string, now: Date) {
     .from(bookings)
     .where(eq(bookings.patientId, patientId));
   return row ?? { upcoming: 0, past: 0 };
+}
+
+function blockedReason(status: BookingStatus, active: boolean) {
+  if (active) return 'unavailable' as const;
+  return status === 'confirmed' ? ('started' as const) : ('closed' as const);
 }
 
 export class PatientBookingsRepository {
@@ -57,7 +64,8 @@ export class PatientBookingsRepository {
             examType: { id: examTypes.id, name: examTypes.name },
             publicCode: bookings.publicCode,
             unit: { id: units.id, name: units.name, address: units.address, phone: units.phone },
-            canCancel: sql<boolean>`${isActiveFuture(now)}`,
+            cancellation: cancellationColumns,
+            active: sql<boolean>`${isActiveFuture(now)}`,
             lateCancellation: sql<boolean>`${isLateCancellation(now)}`,
           })
           .from(bookings)
@@ -71,16 +79,20 @@ export class PatientBookingsRepository {
         const page = await pageOf(select, pagination, () => tx.$count(bookings, where));
         return {
           ...page,
-          items: page.items.map(({ startsAt, endsAt, canCancel, lateCancellation, ...row }) => ({
-            ...row,
-            startsAt: startsAt.toISOString(),
-            endsAt: endsAt.toISOString(),
-            actions: {
-              canCancel,
-              lateCancellation,
-              cancelBlockedReason: canCancel ? null : row.status === 'confirmed' ? 'started' : 'closed',
-            },
-          })),
+          items: page.items.map(({ startsAt, endsAt, active, lateCancellation, cancellation, ...row }) => {
+            const canCancel = active && row.kind === 'appointment';
+            return {
+              ...row,
+              startsAt: startsAt.toISOString(),
+              endsAt: endsAt.toISOString(),
+              cancellation: cancellationOf(cancellation),
+              actions: {
+                canCancel,
+                lateCancellation: canCancel && lateCancellation,
+                cancelBlockedReason: canCancel ? null : blockedReason(row.status, active),
+              },
+            };
+          }),
           counts: await countsOf(tx, patientId, now),
         };
       },

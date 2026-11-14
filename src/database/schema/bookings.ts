@@ -9,7 +9,7 @@ export const bookingKinds = ['appointment', 'exam'] as const;
 export const bookingStatuses = ['pending', 'confirmed', 'cancelled', 'completed', 'no_show', 'expired'] as const;
 const activeBookingStatuses = ['pending', 'confirmed'] as const;
 export const visitTypes = ['first_visit', 'routine', 'follow_up', 'exam_review'] as const;
-const cancellerRoles = ['patient', 'doctor', 'admin', 'system'] as const;
+export const cancellerRoles = ['patient', 'doctor', 'admin', 'system'] as const;
 export const bookingEventTypes = [
   'created',
   'rescheduled',

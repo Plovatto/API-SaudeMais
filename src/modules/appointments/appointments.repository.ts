@@ -11,7 +11,7 @@ import {
 import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { users, type Role } from '../../database/schema/users.js';
-import { ofAccount, type BookingSide } from '../bookings/bookings.repository.js';
+import { cancellationColumns, cancellationOf, ofAccount, type BookingSide } from '../bookings/bookings.repository.js';
 import { slotContext, type SlotContext } from '../doctors/doctors.repository.js';
 import type { Appointment } from './appointments.model.js';
 
@@ -143,6 +143,7 @@ export class AppointmentsRepository {
             doctor: { id: doctorUsers.id, fullName: doctorUsers.fullName },
             specialty: { id: specialties.id, name: specialties.name, council: specialties.council },
             unit: { id: units.id, name: units.name, address: units.address, phone: units.phone },
+            cancellation: cancellationColumns,
             createdAt: bookings.createdAt,
           })
           .from(bookings)
@@ -169,6 +170,7 @@ export class AppointmentsRepository {
           ...row,
           startsAt: row.startsAt.toISOString(),
           endsAt: row.endsAt.toISOString(),
+          cancellation: cancellationOf(row.cancellation),
           createdAt: row.createdAt.toISOString(),
           events: events.map((event) => ({
             ...event,

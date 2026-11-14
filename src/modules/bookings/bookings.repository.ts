@@ -29,6 +29,24 @@ export interface SeenBooking {
   startsAt: Date;
 }
 
+export const cancellationColumns = {
+  byRole: bookings.cancelledByRole,
+  reason: bookings.cancelReason,
+  late: bookings.lateCancellation,
+  cancelledAt: bookings.cancelledAt,
+};
+
+interface CancellationRow {
+  byRole: CancellerRole | null;
+  reason: string | null;
+  late: boolean;
+  cancelledAt: Date | null;
+}
+
+export function cancellationOf({ byRole, reason, late, cancelledAt }: CancellationRow) {
+  return byRole && cancelledAt ? { byRole, reason, late, cancelledAt: cancelledAt.toISOString() } : null;
+}
+
 const sideColumns = { patient: bookings.patientId, doctor: bookings.doctorId };
 
 export function ofAccount(userId: string, sides: BookingSide[]): SQL {

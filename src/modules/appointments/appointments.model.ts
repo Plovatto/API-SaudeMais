@@ -1,6 +1,12 @@
 import '../../docs/zod-extend.js';
 import { z } from 'zod';
-import { bookingActorTypes, bookingEventTypes, bookingStatuses, visitTypes } from '../../database/schema/bookings.js';
+import {
+  bookingActorTypes,
+  bookingEventTypes,
+  bookingStatuses,
+  cancellerRoles,
+  visitTypes,
+} from '../../database/schema/bookings.js';
 import { registry } from '../../docs/registry.js';
 import { uuidParam } from '../../lib/params.js';
 import { boundedText } from '../../lib/text.js';
@@ -35,16 +41,27 @@ export const cancelAppointmentSchema = registry.register(
       'Envie o startsAt da consulta como ela apareceu na tela.',
       'Início da consulta como o cliente o exibiu. Se a consulta mudou desde então, a resposta é `INVALID_STATE`.',
     ),
-    reason: boundedText('O motivo', 0, 500)
-      .optional()
-      .openapi({
-        description: 'Motivo do cancelamento; obrigatório para o médico.',
-        example: 'Imprevisto de trabalho.',
-      }),
+    reason: boundedText('O motivo', 0, 500).optional().openapi({
+      description: 'Motivo do cancelamento; obrigatório para o médico.',
+      example: 'Imprevisto de trabalho.',
+    }),
   }),
 );
 
 export const person = z.object({ id: z.uuid(), fullName: z.string().openapi({ example: 'Ana Maria Silva' }) });
+
+export const cancellationSchema = z
+  .object({
+    byRole: z.enum(cancellerRoles).openapi({
+      description: 'Quem cancelou: paciente, médico, administrador (desativação) ou sistema.',
+      example: 'patient',
+    }),
+    reason: z.string().nullable().openapi({ description: 'Motivo informado; obrigatório quando o médico cancela.' }),
+    late: z.boolean().openapi({ description: 'Se o paciente cancelou uma confirmada dentro da janela da política.' }),
+    cancelledAt: z.iso.datetime(),
+  })
+  .nullable()
+  .openapi({ description: 'Dados do cancelamento; nulo enquanto não foi cancelado. Só as partes veem o motivo.' });
 
 const eventSchema = z.object({
   type: z.enum(bookingEventTypes).openapi({ example: 'created' }),
@@ -72,6 +89,7 @@ export const appointmentSchema = registry.register(
     doctor: person.openapi({ example: { id: '019a8f2e-7c41-7d2a-9b1e-3f5a6c7d8e9f', fullName: 'Dr. Carlos Mendes' } }),
     specialty: doctorSchema.shape.specialty,
     unit: doctorSchema.shape.unit,
+    cancellation: cancellationSchema,
     createdAt: z.iso.datetime(),
     events: z.array(eventSchema).openapi({ description: 'Histórico da consulta, do mais antigo para o mais novo.' }),
   }),
