@@ -157,6 +157,18 @@ describe('slotDays', () => {
       '2026-11-01T09:00:00.000Z',
     ]);
   });
+
+  it('returns nothing for a window far beyond the horizon', () => {
+    const input = request({
+      from: '2099-01-01',
+      to: '2099-01-31',
+      ranges: allDay.map(({ weekday }) => ({ weekday, startMin: 0, endMin: 1440 })),
+      unitHours: allDay,
+      durationMin: 10,
+    });
+
+    expect(slotDays(input)).toEqual([]);
+  });
 });
 
 const minuteStep = (min: number, max: number) => fc.integer({ min: min / 5, max: max / 5 }).map((step) => step * 5);
@@ -275,7 +287,7 @@ describe('slotDays properties', () => {
   it('offers every free São Paulo slot that fits', () => {
     fc.assert(
       fc.property(requests, (input) => {
-        const local = { ...input, timeZone: SAO_PAULO, busy: [] };
+        const local = { ...input, timeZone: SAO_PAULO };
         const expected: string[] = [];
         for (let day = Date.parse(local.from); day <= Date.parse(local.to); day += DAY) {
           const weekday = new Date(day).getUTCDay();
@@ -287,7 +299,11 @@ describe('slotDays properties', () => {
               const open =
                 startsAt >= local.now.getTime() + local.minLeadMinutes * MINUTE &&
                 startsAt <= local.now.getTime() + local.bookingHorizonDays * DAY;
-              if (fits && open) expected.push(new Date(startsAt).toISOString());
+              const endsAt = startsAt + local.durationMin * MINUTE;
+              const free = local.busy.every(
+                (busy) => busy.startsAt.getTime() >= endsAt || startsAt >= busy.endsAt.getTime(),
+              );
+              if (fits && open && free) expected.push(new Date(startsAt).toISOString());
             }
           }
         }
