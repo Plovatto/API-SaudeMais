@@ -48,6 +48,36 @@ async function register(context: Context, fullName: string, email: string) {
   return (created.body as { id: string }).id;
 }
 
+async function newBooking(context: Context): Promise<string> {
+  const key = randomUUID();
+  const registry = String(1 + Math.floor(Math.random() * 999_999_999));
+  const result = await context.db.execute<{ id: string }>(sql`
+    with unit as (
+      insert into units (name, address, phone) values (${`Unidade ${key}`}, 'Rua das Flores, 123', '+551133334444')
+      returning id
+    ), specialty as (
+      insert into specialties (name, council) values (${`Especialidade ${key}`}, 'CRM') returning id, council
+    ), people as (
+      insert into users (full_name, email, password_hash)
+      values ('Dr. Teste', ${`medico.${key}@email.com`}, 'x'), ('Paciente Teste', ${`paciente.${key}@email.com`}, 'x')
+      returning id, full_name
+    ), doctor as (
+      insert into doctor_profiles (user_id, specialty_id, council, unit_id, registry_number, registry_uf)
+      select (select id from people where full_name = 'Dr. Teste'), specialty.id, specialty.council, unit.id, ${registry}, 'SP'
+      from specialty, unit
+      returning user_id, specialty_id, unit_id
+    )
+    insert into bookings (kind, patient_id, doctor_id, unit_id, specialty_id, visit_type, starts_at, ends_at, status)
+    select 'appointment', (select id from people where full_name = 'Paciente Teste'), user_id, unit_id, specialty_id,
+      'routine', '2026-11-23T11:00:00Z', '2026-11-23T11:30:00Z', 'completed'
+    from doctor
+    returning id
+  `);
+  const id = result.rows[0]?.id;
+  if (!id) throw new Error('Booking insert returned no row');
+  return id;
+}
+
 async function deliver(
   context: Context,
   userId: string,
@@ -55,7 +85,7 @@ async function deliver(
   type: NotificationType = 'appointment_confirmed',
 ) {
   context.clock.advance(MINUTE);
-  const bookingId = type === 'user_registered' ? null : randomUUID();
+  const bookingId = type === 'user_registered' ? null : await newBooking(context);
   const afterCommit = await context.db.transaction((tx) =>
     context.modules.notifications.service.notify(tx, [{ userId, audienceRole, type, bookingId, params: {} }]),
   );
