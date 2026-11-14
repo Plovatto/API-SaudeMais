@@ -292,6 +292,7 @@ describe('text limits', () => {
     ['a single emoji as the name', { name: '😀', council: 'CRM' }],
     ['an astral-plane character as the name', { name: '𠀀', council: 'CRM' }],
     ['a control character in the name', { name: 'Cardio\u0000logia', council: 'CRM' }],
+    ['a line break in the name', { name: 'Cardio\nlogia', council: 'CRM' }],
   ])('refuses %s with a 400, not a database error', async (_case, body) => {
     const response = await adminCall('post', '/api/admin/specialties', body);
 
@@ -332,8 +333,9 @@ describe('conflicts on change', () => {
     const exam = await adminCall(
       'post',
       '/api/admin/exam-types',
-      examBody('colesterol_total', 'Colesterol total', { preparationNotes: 'Jejum de 12 horas.' }),
+      examBody('colesterol_total', 'Colesterol total', { preparationNotes: 'Jejum de 12 horas.\nSem álcool.' }),
     ).expect(201);
+    expect(exam.body).toMatchObject({ preparationNotes: 'Jejum de 12 horas.\nSem álcool.' });
 
     const response = await adminCall('patch', `/api/admin/exam-types/${idOf(exam)}`, { preparationNotes: null });
 

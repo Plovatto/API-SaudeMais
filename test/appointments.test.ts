@@ -81,7 +81,7 @@ describe('POST /api/appointments', () => {
   it('creates a pending request on a free slot and returns its detail', async () => {
     const response = await book(
       context.patient,
-      appointment(carlos, MONDAY_FIRST_SLOT, { visitType: 'routine', notes: '  Dor no peito ao subir escadas.  ' }),
+      appointment(carlos, MONDAY_FIRST_SLOT, { visitType: 'routine', notes: '  Dor no peito\nao subir escadas.  ' }),
     );
 
     expect(response.status).toBe(201);
@@ -92,7 +92,7 @@ describe('POST /api/appointments', () => {
       visitType: 'routine',
       startsAt: MONDAY_FIRST_SLOT,
       endsAt: '2026-11-23T11:30:00.000Z',
-      notes: 'Dor no peito ao subir escadas.',
+      notes: 'Dor no peito\nao subir escadas.',
       patient: { id: expect.any(String) as unknown, fullName: 'Ana Maria Silva' },
       doctor: { id: carlos.id, fullName: 'Dr. Carlos Mendes' },
       specialty: carlos.specialty,
@@ -269,6 +269,7 @@ describe('POST /api/appointments', () => {
       { ...valid, startsAt: '2026-12-04 11:00' },
       { ...valid, notes: 'a'.repeat(501) },
       { ...valid, notes: 'linha\u0000nula' },
+      { ...valid, notes: 'alerta\u0007' },
       { ...valid, extra: true },
     ];
 

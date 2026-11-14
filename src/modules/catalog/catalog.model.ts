@@ -118,10 +118,7 @@ const examTypeFields = {
   name: catalogName.openapi({ example: 'Hemograma' }),
   kind: z.enum(examKinds).openapi({ description: '`lab` para exames laboratoriais, `imaging` para imagem.' }),
   durationMin: duration(5, 240).openapi({ example: 15 }),
-  preparationNotes: z
-    .string()
-    .trim()
-    .max(1000, 'As orientações podem ter até 1000 caracteres.')
+  preparationNotes: boundedText('O texto das orientações', 0, 1000, { multiline: true })
     .nullable()
     .openapi({ example: 'Jejum de 8 horas.' }),
 };

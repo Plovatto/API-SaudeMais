@@ -28,7 +28,7 @@ export const bookAppointmentSchema = registry.register(
     specialtyId: uuidParam.openapi({ description: 'Especialidade escolhida; precisa ser a do médico.' }),
     visitType,
     startsAt: instant('Envie o startsAt de uma vaga da lista.', 'Início da vaga, como veio da lista de vagas.'),
-    notes: boundedText('O texto das observações', 0, 500)
+    notes: boundedText('O texto das observações', 0, 500, { multiline: true })
       .optional()
       .openapi({ description: 'Observações para o médico.', example: 'Tenho alergia a dipirona.' }),
   }),
@@ -41,7 +41,7 @@ export const cancelAppointmentSchema = registry.register(
       'Envie o startsAt da consulta como ela apareceu na tela.',
       'Início da consulta como o cliente o exibiu. Se a consulta mudou desde então, a resposta é `INVALID_STATE`.',
     ),
-    reason: boundedText('O motivo', 0, 500).optional().openapi({
+    reason: boundedText('O motivo', 0, 500, { multiline: true }).optional().openapi({
       description: 'Motivo do cancelamento; obrigatório para o médico.',
       example: 'Imprevisto de trabalho.',
     }),

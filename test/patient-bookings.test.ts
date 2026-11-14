@@ -300,14 +300,22 @@ describe('POST /api/appointments/:id/cancel', () => {
     const booked = await book(patient, slot('2026-12-01', '11:00'));
     await confirm(booked.id);
 
-    const response = await cancel(patient, booked.id, { startsAt: booked.startsAt, reason: '  Viagem.  ' });
+    const response = await cancel(patient, booked.id, {
+      startsAt: booked.startsAt,
+      reason: '  Viagem\r\na trabalho.  ',
+    });
 
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.body).toMatchObject({
       id: booked.id,
       status: 'cancelled',
-      cancellation: { byRole: 'patient', reason: 'Viagem.', late: false, cancelledAt: START.toISOString() },
+      cancellation: {
+        byRole: 'patient',
+        reason: 'Viagem\r\na trabalho.',
+        late: false,
+        cancelledAt: START.toISOString(),
+      },
     });
     expect((response.body as { events: unknown[] }).events.at(-1)).toMatchObject({
       type: 'cancelled',
@@ -323,7 +331,7 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(rows.rows).toEqual([
       {
         cancelled_by_role: 'patient',
-        cancel_reason: 'Viagem.',
+        cancel_reason: 'Viagem\r\na trabalho.',
         late_cancellation: false,
         user_id: carlos.id,
         audience_role: 'doctor',
@@ -450,6 +458,7 @@ describe('POST /api/appointments/:id/cancel', () => {
       {},
       { startsAt: '2026-12-03 11:00' },
       { startsAt: booked.startsAt, reason: 'a'.repeat(501) },
+      { startsAt: booked.startsAt, reason: 'linha\u0000nula' },
       { startsAt: booked.startsAt, extra: true },
     ];
 
