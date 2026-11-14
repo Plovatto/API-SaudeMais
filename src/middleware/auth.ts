@@ -30,11 +30,13 @@ export function createRequireAuth(service: Pick<UserService, 'authenticate'>): R
   };
 }
 
+export function ensureRole(req: Request, role: Role): void {
+  if (!authOf(req).user.roles.includes(role)) throw forbidden();
+}
+
 export function createRequireRole(role: Role): RequestHandler {
   return (req, _res, next) => {
-    if (!authOf(req).user.roles.includes(role)) {
-      throw forbidden();
-    }
+    ensureRole(req, role);
     next();
   };
 }

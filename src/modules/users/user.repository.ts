@@ -1,5 +1,5 @@
 import { and, eq, gt, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
-import type { Database } from '../../database/pg-client.js';
+import type { AfterCommit, Database, Transaction } from '../../database/pg-client.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
 import type { PublicUser } from './user.model.js';
@@ -78,26 +78,23 @@ export interface ActiveSession {
 export class UserRepository {
   constructor(private readonly db: Database) {}
 
-  createUser({
-    fullName,
-    email,
-    phone,
-    passwordHash,
-    roles,
-    isProtected,
-    termsVersion,
-    now,
-  }: NewUser): Promise<PublicUser> {
-    return this.db.transaction(async (tx) => {
-      const [user] = await tx
+  async createUser(
+    { fullName, email, phone, passwordHash, roles, isProtected, termsVersion, now }: NewUser,
+    onCreated?: (tx: Transaction, user: PublicUser) => Promise<AfterCommit>,
+  ): Promise<PublicUser> {
+    const [user, afterCommit] = await this.db.transaction(async (tx) => {
+      const [row] = await tx
         .insert(users)
         .values({ fullName, email, phone, passwordHash, isProtected })
         .returning(userColumns);
-      if (!user) throw new Error('User insert returned no row');
-      await tx.insert(userRoles).values(roles.map((role) => ({ userId: user.id, role, grantedAt: now })));
-      if (termsVersion) await tx.insert(termsAcceptances).values({ userId: user.id, termsVersion, acceptedAt: now });
-      return { ...user, roles: [...roles].sort() };
+      if (!row) throw new Error('User insert returned no row');
+      await tx.insert(userRoles).values(roles.map((role) => ({ userId: row.id, role, grantedAt: now })));
+      if (termsVersion) await tx.insert(termsAcceptances).values({ userId: row.id, termsVersion, acceptedAt: now });
+      const created = { ...row, roles: [...roles].sort() };
+      return [created, await onCreated?.(tx, created)] as const;
     });
+    afterCommit?.();
+    return user;
   }
 
   async grantRoles(userId: string, roles: Role[], now: Date): Promise<void> {

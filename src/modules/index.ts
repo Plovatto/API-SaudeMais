@@ -7,6 +7,7 @@ import { createCatalogModule } from './catalog/index.js';
 import { createDoctorScheduleModule } from './doctor-schedule/index.js';
 import { createDoctorsModule } from './doctors/index.js';
 import { createDemoModule } from './demo/index.js';
+import { createNotificationsModule } from './notifications/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
 import { createUsersModule, type SessionPolicy } from './users/index.js';
 
@@ -19,7 +20,8 @@ export interface ModulesDeps {
 }
 
 export function createModules(deps: ModulesDeps) {
-  const users = createUsersModule(deps);
+  const notifications = createNotificationsModule(deps);
+  const users = createUsersModule({ ...deps, notifications: notifications.service });
   const passwordReset = createPasswordResetModule(deps);
   const catalog = createCatalogModule({ db: deps.db, requireAuth: users.requireAuth });
   const adminUsers = createAdminUsersModule({
@@ -46,6 +48,7 @@ export function createModules(deps: ModulesDeps) {
     adminHome,
     doctorSchedule,
     doctors,
+    notifications,
     routers: [
       users.router,
       passwordReset.router,
@@ -54,6 +57,7 @@ export function createModules(deps: ModulesDeps) {
       adminHome.router,
       doctorSchedule.router,
       doctors.router,
+      notifications.routerFor(users.requireAuth),
     ],
   };
 }
