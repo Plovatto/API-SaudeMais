@@ -16,6 +16,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash
 - Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
 - Lista de médicos com busca e vagas livres por período, calculadas pela agenda do médico, pelo horário da unidade e pela política de agendamento, no fuso de São Paulo
+- Pedido de consulta só em vaga gerada, com exclusion constraints que impedem horário duplicado para o médico e para o paciente, mesmo com pedidos simultâneos, e limite de 5 agendamentos ativos por paciente
 - Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
 - Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
 - Senhas com scrypt, login em tempo constante e limites de tentativas por IP e por e-mail
@@ -211,6 +212,8 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | GET | `/api/exam-types` | Tipos de exame ativos |
 | GET | `/api/doctors` | Médicos com especialidade e unidade (filtros `specialtyId`, `search`; paciente) |
 | GET | `/api/doctors/{id}/availability` | Vagas livres de um médico entre `from` e `to`, até 31 dias (paciente) |
+| POST | `/api/appointments` | Pede uma consulta em uma vaga livre; nasce pendente e avisa o médico (paciente) |
+| GET | `/api/appointments/{id}` | Detalhe e histórico da consulta (paciente dela ou médico que a atende) |
 | GET, POST | `/api/admin/specialties` | Lista e cria especialidades (admin) |
 | PATCH | `/api/admin/specialties/{id}` | Altera, ativa ou desativa uma especialidade (admin) |
 | GET, POST | `/api/admin/units` | Lista e cria unidades com horários (admin) |

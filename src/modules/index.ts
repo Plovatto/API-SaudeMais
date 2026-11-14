@@ -3,6 +3,7 @@ import type { Clock } from '../lib/clock.js';
 import type { MailQueue } from '../mail/index.js';
 import { createAdminHomeModule } from './admin-home/index.js';
 import { createAdminUsersModule } from './admin-users/index.js';
+import { createAppointmentsModule } from './appointments/index.js';
 import { createCatalogModule } from './catalog/index.js';
 import { createDoctorScheduleModule } from './doctor-schedule/index.js';
 import { createDoctorsModule } from './doctors/index.js';
@@ -38,6 +39,12 @@ export function createModules(deps: ModulesDeps) {
     clock: deps.clock,
   });
   const doctors = createDoctorsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
+  const appointments = createAppointmentsModule({
+    db: deps.db,
+    clock: deps.clock,
+    requireAuth: users.requireAuth,
+    notifications: notifications.service,
+  });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   return {
     users,
@@ -48,6 +55,7 @@ export function createModules(deps: ModulesDeps) {
     adminHome,
     doctorSchedule,
     doctors,
+    appointments,
     notifications,
     routers: [
       users.router,
@@ -57,6 +65,7 @@ export function createModules(deps: ModulesDeps) {
       adminHome.router,
       doctorSchedule.router,
       doctors.router,
+      appointments.router,
       notifications.routerFor(users.requireAuth),
     ],
   };

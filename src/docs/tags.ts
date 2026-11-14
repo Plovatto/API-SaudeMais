@@ -14,7 +14,8 @@ export const tags = {
   },
   scheduling: {
     name: 'Agendamento',
-    description: 'Médicos e vagas livres para o paciente marcar consulta. Exige o perfil de paciente.',
+    description:
+      'Médicos, vagas livres e pedidos de consulta. Exige o perfil de paciente; o detalhe de uma consulta também abre para o médico que a atende.',
   },
   doctor: {
     name: 'Médico',
