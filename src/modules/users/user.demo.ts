@@ -18,7 +18,15 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
   },
 ];
 
-const demoEmails = new Set(DEMO_ACCOUNTS.map((account) => account.email));
+export const DEMO_DOCTOR: SeedAccount = {
+  fullName: 'Dr. João Silveira',
+  email: 'medico@saudemais.test',
+  password: 'medico-demo-123',
+  roles: ['patient'],
+  isProtected: true,
+};
+
+const demoEmails = new Set([...DEMO_ACCOUNTS, DEMO_DOCTOR].map((account) => account.email));
 
 export function isDemoEmail(email: string): boolean {
   return demoEmails.has(email);

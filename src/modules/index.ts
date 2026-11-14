@@ -4,6 +4,7 @@ import type { MailQueue } from '../mail/index.js';
 import { createAdminHomeModule } from './admin-home/index.js';
 import { createAdminUsersModule } from './admin-users/index.js';
 import { createCatalogModule } from './catalog/index.js';
+import { createDemoModule } from './demo/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
 import { createUsersModule, type SessionPolicy } from './users/index.js';
 
@@ -25,12 +26,14 @@ export function createModules(deps: ModulesDeps) {
     requireAuth: users.requireAuth,
     passwordReset: passwordReset.service,
   });
+  const demo = createDemoModule({ db: deps.db, users: users.service, clock: deps.clock });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   return {
     users,
     passwordReset,
     catalog,
     adminUsers,
+    demo,
     adminHome,
     routers: [users.router, passwordReset.router, catalog.router, adminUsers.router, adminHome.router],
   };

@@ -45,7 +45,7 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-const { users, routers } = createModules({
+const { users, demo, routers } = createModules({
   mail,
   appUrl: env.APP_PUBLIC_URL,
   db: createDb(pool),
@@ -62,7 +62,9 @@ try {
   logger.info('Database migrations applied');
   const admin =
     env.ADMIN_EMAIL && env.ADMIN_PASSWORD ? { email: env.ADMIN_EMAIL, password: env.ADMIN_PASSWORD } : undefined;
-  await users.bootstrap(admin);
+  const skipped = await users.bootstrap(admin, { demoAccounts: env.DEMO_ACCOUNTS_ENABLED });
+  if (env.DEMO_ACCOUNTS_ENABLED) skipped.push(...(await demo.service.ensure()));
+  for (const warning of skipped) logger.warn(warning);
   logger.info('Initial accounts ensured');
 } catch (err) {
   logger.fatal({ err }, 'Database setup failed');
