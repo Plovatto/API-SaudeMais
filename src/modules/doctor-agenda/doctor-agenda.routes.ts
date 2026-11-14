@@ -19,7 +19,7 @@ documentOperation({
   tag: tags.doctor.name,
   summary: 'Ver o início do médico',
   description:
-    'O resumo das consultas de hoje no fuso de São Paulo, os 3 próximos pedidos a confirmar, os totais das abas da agenda e o aviso mais recente do perfil de médico. Cada pedido traz as ações permitidas, como na agenda. Limite: 120 requisições por minuto por IP.',
+    'O resumo das consultas de hoje no fuso de São Paulo, os 3 próximos pedidos a confirmar, as 3 consultas mais antigas que aguardam registro, os totais das abas da agenda e o aviso mais recente do perfil de médico. Cada consulta traz as ações permitidas, como na agenda. Os totais e as listas saem de uma mesma leitura consistente. Limite: 120 requisições por minuto por IP.',
   success: { status: 200, description: 'Início do médico.', schema: doctorHomeSchema },
   errors,
 });

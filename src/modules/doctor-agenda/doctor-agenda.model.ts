@@ -6,21 +6,22 @@ import { appointmentSchema, person } from '../appointments/appointments.model.js
 import { civilDay } from '../doctors/doctors.model.js';
 import { notificationSchema } from '../notifications/notifications.model.js';
 
-export const agendaTabs = ['pending', 'confirmed', 'history'] as const;
+export const agendaTabs = ['pending', 'confirmed', 'awaiting', 'history'] as const;
 
 const total = (description: string, example: number) => z.int().nonnegative().openapi({ description, example });
 
 export const doctorAppointmentsQuery = paginationQuery.extend({
-  tab: z.enum(agendaTabs, { error: 'Escolha entre a confirmar, confirmadas e histórico.' }).default('pending').openapi({
-    description:
-      'Aba da agenda: a confirmar (`pending`, pedidos pendentes que ainda não começaram) e confirmadas (`confirmed`, confirmadas que ainda não começaram), das mais próximas para as mais distantes; histórico (`history`, todo o resto, inclusive as confirmadas que já começaram e aguardam registro), das mais recentes para as mais antigas.',
-  }),
-  from: civilDay
-    .optional()
+  tab: z
+    .enum(agendaTabs, { error: 'Escolha entre a confirmar, confirmadas, aguardando registro e histórico.' })
+    .default('pending')
     .openapi({
-      description: 'Só consultas que começam neste dia ou depois, no fuso de São Paulo.',
-      example: '2026-11-23',
+      description:
+        'Aba da agenda: a confirmar (`pending`, pedidos pendentes que ainda não começaram) e confirmadas (`confirmed`, confirmadas que ainda não começaram) e aguardando registro (`awaiting`, confirmadas que já começaram), das mais próximas para as mais distantes; histórico (`history`, todo o resto, inclusive as confirmadas que já começaram e aguardam registro), das mais recentes para as mais antigas.',
     }),
+  from: civilDay.optional().openapi({
+    description: 'Só consultas que começam neste dia ou depois, no fuso de São Paulo.',
+    example: '2026-11-23',
+  }),
 });
 
 export const doctorAppointmentSchema = registry.register(
@@ -42,15 +43,17 @@ export const doctorAppointmentSchema = registry.register(
           'Situação da consulta. Pedido pendente cujo horário já chegou aparece como `expired`; consulta `confirmed` no histórico já começou e aguarda o registro do médico.',
       }),
       patient: person.extend({
-        phone: z.string().nullable().openapi({ description: 'Telefone do paciente.', example: '+5511987654321' }),
+        phone: z.string().nullable().openapi({
+          description:
+            'Telefone do paciente; só em consultas pendentes, confirmadas, concluídas ou com falta registrada, e nulo nas canceladas e nas não confirmadas a tempo.',
+          example: '+5511987654321',
+        }),
       }),
       actions: z.object({
-        canConfirm: z
-          .boolean()
-          .openapi({
-            description: 'Se o médico pode confirmar: pedido pendente que ainda não começou.',
-            example: true,
-          }),
+        canConfirm: z.boolean().openapi({
+          description: 'Se o médico pode confirmar: pedido pendente que ainda não começou.',
+          example: true,
+        }),
         canCancel: z.boolean().openapi({
           description: 'Se o médico pode cancelar, com motivo: pendente ou confirmada que ainda não começou.',
           example: true,
@@ -63,8 +66,8 @@ const countsSchema = z
   .object({
     pending: total('Pedidos a confirmar.', 2),
     confirmed: total('Confirmadas que ainda não começaram.', 5),
+    awaiting: total('Confirmadas que já começaram e aguardam registro; também contam no histórico.', 1),
     history: total('Consultas no histórico.', 12),
-    awaitingRecord: total('Confirmadas que já começaram e aguardam registro; também contam no histórico.', 1),
   })
   .openapi({ description: 'Totais das abas da agenda, sem os filtros.' });
 
@@ -92,6 +95,9 @@ export const doctorHomeSchema = registry.register(
     pending: z
       .array(doctorAppointmentSchema)
       .openapi({ description: 'Os próximos pedidos a confirmar, do mais próximo para o mais distante.' }),
+    awaitingRecord: z
+      .array(doctorAppointmentSchema)
+      .openapi({ description: 'As consultas mais antigas que aguardam registro, da mais antiga para a mais recente.' }),
     counts: countsSchema,
     lastNotification: notificationSchema
       .nullable()
