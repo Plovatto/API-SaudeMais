@@ -102,3 +102,7 @@ export function conflictResponse(...conflicts: [FieldConflict, ...FieldConflict[
 export function notFoundResponse(message: string) {
   return errorResponse('Registro inexistente (`NOT_FOUND`).', { message, code: 'NOT_FOUND' });
 }
+
+export function nullableRef<T extends z.ZodType>(schema: T) {
+  return z.union([schema, z.null()]);
+}

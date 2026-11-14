@@ -1,5 +1,6 @@
 import '../../docs/zod-extend.js';
 import { z } from 'zod';
+import { nullableRef } from '../../docs/common-schemas.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
 import { appointmentSchema, person } from '../appointments/appointments.model.js';
@@ -99,9 +100,9 @@ export const doctorHomeSchema = registry.register(
       .array(doctorAppointmentSchema)
       .openapi({ description: 'As consultas mais antigas que aguardam registro, da mais antiga para a mais recente.' }),
     counts: countsSchema,
-    lastNotification: notificationSchema
-      .nullable()
-      .openapi({ description: 'O aviso mais recente do perfil de médico, lido ou não.' }),
+    lastNotification: nullableRef(notificationSchema).openapi({
+      description: 'O aviso mais recente do perfil de médico, lido ou não.',
+    }),
   }),
 );
 

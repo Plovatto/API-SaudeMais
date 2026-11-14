@@ -1,6 +1,7 @@
 import '../../docs/zod-extend.js';
 import { z } from 'zod';
 import { roles } from '../../database/schema/users.js';
+import { nullableRef } from '../../docs/common-schemas.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
 import { uuidParam } from '../../lib/params.js';
@@ -105,7 +106,7 @@ export const adminUserSchema = registry.register(
 
 export const adminUserDetailSchema = registry.register(
   'AdminUserDetail',
-  adminUserSchema.extend({ doctorProfile: doctorProfileSchema.nullable() }),
+  adminUserSchema.extend({ doctorProfile: nullableRef(doctorProfileSchema) }),
 );
 
 export const adminUserPageSchema = registry.register('AdminUserPage', paginatedSchema(adminUserSchema));

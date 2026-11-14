@@ -68,6 +68,29 @@ describe('GET /docs/openapi.json', () => {
       properties: { reason: { maxLength: 500 } },
     });
   });
+
+  it('describes nullable references as a union with null', async () => {
+    const { document } = await fetchDocument();
+    const nullableNotification = {
+      anyOf: [{ $ref: '#/components/schemas/Notification' }, { type: 'null' }],
+    };
+
+    expect(document.components.schemas.PatientHome).toMatchObject({
+      properties: { lastNotification: nullableNotification },
+    });
+    expect(document.components.schemas.DoctorHome).toMatchObject({
+      properties: { lastNotification: nullableNotification },
+    });
+    expect(document.components.schemas.AdminUserDetail).toMatchObject({
+      allOf: [
+        {},
+        {
+          properties: { doctorProfile: { anyOf: [{ $ref: '#/components/schemas/DoctorProfile' }, { type: 'null' }] } },
+        },
+      ],
+    });
+    expect(JSON.stringify(document.components.schemas)).not.toMatch(/"allOf":\[\{"\$ref":"[^"]+"\},\{"type":\[/);
+  });
 });
 
 describe('GET /docs', () => {

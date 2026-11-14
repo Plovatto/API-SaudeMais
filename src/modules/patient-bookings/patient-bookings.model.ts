@@ -1,6 +1,7 @@
 import '../../docs/zod-extend.js';
 import { z } from 'zod';
 import { bookingKinds, bookingStatuses } from '../../database/schema/bookings.js';
+import { nullableRef } from '../../docs/common-schemas.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
 import { cancellationSchema, person, visitType } from '../appointments/appointments.model.js';
@@ -90,9 +91,9 @@ export const patientHomeSchema = registry.register(
       .array(patientBookingSchema)
       .openapi({ description: 'Os próximos agendamentos, do mais próximo para o mais distante.' }),
     counts: countsSchema,
-    lastNotification: notificationSchema
-      .nullable()
-      .openapi({ description: 'O aviso mais recente do perfil de paciente, lido ou não.' }),
+    lastNotification: nullableRef(notificationSchema).openapi({
+      description: 'O aviso mais recente do perfil de paciente, lido ou não.',
+    }),
   }),
 );
 
