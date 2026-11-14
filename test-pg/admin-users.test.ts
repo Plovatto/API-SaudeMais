@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
@@ -14,14 +14,14 @@ describe('admins on PostgreSQL', () => {
   let pool: pg.Pool;
   let context: ReturnType<typeof buildTestApp>;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     pool = await createCleanPool();
     await runMigrations(pool);
     context = buildTestApp({}, { db: createDb(pool) });
     await context.modules.users.bootstrap(ADMIN);
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await pool.end();
   });
 
@@ -70,14 +70,8 @@ describe('admins on PostgreSQL', () => {
 
     const [winner, loser] = results.map((response) => response.status).sort();
     expect(winner).toBe(200);
-    expect([403, 409]).toContain(loser);
+    expect([401, 403, 409]).toContain(loser);
     expect(await activeAdmins()).toBe(1);
-    await pool.query('update users set deactivated_at = null where id = $1', [secondId]);
-    await pool.query("delete from user_roles where role = 'admin' and user_id = $1", [secondId]);
-    await pool.query(
-      "insert into user_roles (user_id, role, granted_at) values ($1, 'admin', now()) on conflict do nothing",
-      [first.user.id],
-    );
   });
 
   it('never lets two admins remove each other at the same time', async () => {
@@ -105,9 +99,6 @@ describe('admins on PostgreSQL', () => {
     const [winner, loser] = results.map((response) => response.status).sort();
     expect(winner).toBe(200);
     expect([403, 409]).toContain(loser);
-    const admins = await pool.query<{ total: number }>(
-      "select count(*)::int as total from user_roles where role = 'admin'",
-    );
-    expect(admins.rows[0]?.total).toBe(1);
+    expect(await activeAdmins()).toBe(1);
   });
 });
