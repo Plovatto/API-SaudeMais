@@ -20,6 +20,11 @@ export const tags = {
     name: 'Médico',
     description: 'Agenda e rotina do médico logado. Exige o perfil de médico.',
   },
+  notifications: {
+    name: 'Notificações',
+    description:
+      'Avisos da conta logada, separados pelo perfil da área aberta (`role`). O cliente monta o texto a partir de `type` e `params`. Exige login.',
+  },
   administration: {
     name: 'Administração',
     description:

@@ -6,6 +6,8 @@ import { fixedClock } from './fixed-clock.js';
 export const START = new Date('2026-11-20T12:00:00.000Z');
 export const HOUR = 3_600_000;
 
+export const as = (token: string) => ({ Authorization: `Bearer ${token}` });
+
 export async function buildUsersApp() {
   const db = await createTestDb();
   const clock = fixedClock(START);

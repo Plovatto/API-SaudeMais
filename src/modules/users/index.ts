@@ -1,6 +1,7 @@
 import type { Database } from '../../database/pg-client.js';
 import type { Clock } from '../../lib/clock.js';
 import { createRequireAuth, createRequireWritable } from '../../middleware/auth.js';
+import type { NotificationsService } from '../notifications/notifications.service.js';
 import { createUserController } from './user.controller.js';
 import { DEMO_ACCOUNTS } from './user.demo.js';
 import { UserRepository } from './user.repository.js';
@@ -19,11 +20,12 @@ export interface UsersModuleDeps {
   db: Database;
   clock: Clock;
   policy: SessionPolicy;
+  notifications: NotificationsService;
 }
 
-export function createUsersModule({ db, clock, policy }: UsersModuleDeps) {
+export function createUsersModule({ db, clock, policy, notifications }: UsersModuleDeps) {
   placeholderPasswordHash().catch(() => undefined);
-  const service = new UserService(new UserRepository(db), clock, policy);
+  const service = new UserService(new UserRepository(db), clock, policy, notifications);
   const requireAuth = createRequireAuth(service);
   const router = createUserRouter({
     controller: createUserController(service),

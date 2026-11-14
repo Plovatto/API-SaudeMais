@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários, a agenda semanal do médico e a lista de médicos com as vagas livres de cada um, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários, a agenda semanal do médico, a lista de médicos com as vagas livres de cada um e as notificações, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
 
 ## Erros
 

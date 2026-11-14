@@ -5,6 +5,7 @@ import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { DAY, HOUR, MINUTE } from '../../lib/time.js';
+import type { NotificationsService } from '../notifications/notifications.service.js';
 import type {
   ChangePasswordInput,
   LoginInput,
@@ -57,6 +58,7 @@ export class UserService {
     private readonly repository: UserRepository,
     private readonly clock: Clock,
     private readonly policy: SessionPolicy,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async register({ fullName, email, phone, password }: RegisterInput): Promise<PublicUser> {
@@ -64,16 +66,19 @@ export class UserService {
     if (isDemoEmail(email)) throw conflictError(emailConflicts.users_email_key);
     return withConstraintConflicts(
       () =>
-        this.repository.createUser({
-          fullName,
-          email,
-          phone,
-          passwordHash,
-          roles: ['patient'],
-          isProtected: false,
-          termsVersion: TERMS_VERSION,
-          now: this.clock.now(),
-        }),
+        this.repository.createUser(
+          {
+            fullName,
+            email,
+            phone,
+            passwordHash,
+            roles: ['patient'],
+            isProtected: false,
+            termsVersion: TERMS_VERSION,
+            now: this.clock.now(),
+          },
+          (tx, user) => this.notifications.notifyAdmins(tx, { type: 'user_registered', params: { userId: user.id } }),
+        ),
       emailConflicts,
     );
   }

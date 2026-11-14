@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, index, inet, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
-import { timestamptz, uuidv7Id } from './columns.js';
+import { isOneOf, timestamptz, uuidv7Id } from './columns.js';
 
 export const actorTypes = ['user', 'integration', 'system'] as const;
 export type ActorType = (typeof actorTypes)[number];
@@ -20,7 +20,7 @@ export const auditLogs = pgTable(
   },
   (table) => [
     index('audit_logs_created_at_idx').on(table.createdAt),
-    check('audit_logs_actor_type_check', sql`actor_type in ('user', 'integration', 'system')`),
+    check('audit_logs_actor_type_check', isOneOf('actor_type', actorTypes)),
     check('audit_logs_actor_check', sql`(actor_type = 'system') = (actor_id is null)`),
     check('audit_logs_action_check', sql`char_length(action) between 1 and 80`),
     check('audit_logs_entity_type_check', sql`char_length(entity_type) <= 40`),
