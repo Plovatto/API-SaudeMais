@@ -45,7 +45,7 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-const { users, routers } = createModules({
+const { users, demo, routers } = createModules({
   mail,
   appUrl: env.APP_PUBLIC_URL,
   db: createDb(pool),
@@ -63,6 +63,7 @@ try {
   const admin =
     env.ADMIN_EMAIL && env.ADMIN_PASSWORD ? { email: env.ADMIN_EMAIL, password: env.ADMIN_PASSWORD } : undefined;
   await users.bootstrap(admin);
+  await demo.service.ensure();
   logger.info('Initial accounts ensured');
 } catch (err) {
   logger.fatal({ err }, 'Database setup failed');
