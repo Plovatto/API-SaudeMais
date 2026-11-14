@@ -6,6 +6,7 @@ import {
   jsonBody,
   serverBusyResponse,
   jsonResponse,
+  protectedAccountResponse,
   tooManyRequestsResponse,
   unauthenticatedResponse,
   validationErrorResponse,
@@ -101,11 +102,6 @@ registry.registerPath({
   },
 });
 
-const protectedAccountResponse = errorResponse('Conta de demonstração (`PROTECTED_ACCOUNT`); não pode ser alterada.', {
-  message: 'Esta é uma conta de demonstração e não pode ser alterada.',
-  code: 'PROTECTED_ACCOUNT',
-});
-
 registry.registerPath({
   method: 'get',
   path: '/api/me',
@@ -136,7 +132,7 @@ registry.registerPath({
     200: jsonResponse('Dados atualizados.', publicUserSchema),
     400: validationErrorResponse,
     401: unauthenticatedResponse,
-    403: protectedAccountResponse,
+    403: protectedAccountResponse(),
     429: tooManyRequestsResponse,
     500: internalErrorResponse,
   },
@@ -156,7 +152,7 @@ registry.registerPath({
     204: { description: 'Senha trocada.' },
     400: validationErrorResponse,
     401: unauthenticatedResponse,
-    403: protectedAccountResponse,
+    403: protectedAccountResponse(),
     422: errorResponse('Senha atual incorreta (`INVALID_CURRENT_PASSWORD`).', {
       message: 'A senha atual está incorreta.',
       code: 'INVALID_CURRENT_PASSWORD',

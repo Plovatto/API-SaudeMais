@@ -27,7 +27,7 @@ export function createModules(deps: ModulesDeps) {
     requireAuth: users.requireAuth,
     passwordReset: passwordReset.service,
   });
-  const doctorSchedule = createDoctorScheduleModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
+  const doctorSchedule = createDoctorScheduleModule({ db: deps.db, requireAuth: users.requireAuth });
   const demo = createDemoModule({
     db: deps.db,
     users: users.service,

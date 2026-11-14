@@ -1,6 +1,11 @@
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
+import {
+  errorResponse,
+  forbiddenResponse,
+  notFoundResponse,
+  protectedAccountResponse,
+} from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
@@ -36,10 +41,7 @@ documentOperation({
   body: saveScheduleSchema,
   success: { status: 200, description: 'Agenda salva.', schema: savedScheduleSchema },
   errors: {
-    403: errorResponse('Sem perfil de médico (`FORBIDDEN`) ou conta de demonstração (`PROTECTED_ACCOUNT`).', {
-      message: 'Esta é uma conta de demonstração e não pode ser alterada.',
-      code: 'PROTECTED_ACCOUNT',
-    }),
+    403: protectedAccountResponse('médico'),
     404: profileMissing,
     422: errorResponse('Faixas sobrepostas (`OVERLAP`) ou fora do horário da unidade (`OUTSIDE_UNIT_HOURS`).', {
       message: scheduleMessages.overlap.message,

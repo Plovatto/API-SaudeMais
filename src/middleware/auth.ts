@@ -9,8 +9,9 @@ const contexts = new WeakMap<Request, AuthContext>();
 
 export const unauthenticated = () => new AppError(401, 'UNAUTHENTICATED', 'Sua sessão expirou. Entre novamente.');
 
-export const protectedAccount = () =>
-  new AppError(403, 'PROTECTED_ACCOUNT', 'Esta é uma conta de demonstração e não pode ser alterada.');
+export const PROTECTED_ACCOUNT_MESSAGE = 'Esta é uma conta de demonstração e não pode ser alterada.';
+
+export const protectedAccount = () => new AppError(403, 'PROTECTED_ACCOUNT', PROTECTED_ACCOUNT_MESSAGE);
 
 export const forbidden = () => new AppError(403, 'FORBIDDEN', 'Você não tem acesso a esta área.');
 

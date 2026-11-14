@@ -4,9 +4,8 @@ import { unitHours, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { doctorScheduleDays, doctorScheduleRanges } from '../../database/schema/doctor-schedule.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
-import type { Schedule, ScheduleDay, ScheduleWarning, UnitHour } from './doctor-schedule.model.js';
-
-const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+import { WEEKDAYS } from '../../lib/week.js';
+import type { Schedule, ScheduleDay, UnitHour } from './doctor-schedule.model.js';
 
 export interface ReplaceRequest {
   doctorId: string;
@@ -18,38 +17,41 @@ export interface ReplaceRequest {
 export class DoctorScheduleRepository {
   constructor(private readonly db: Database) {}
 
-  async find(doctorId: string): Promise<Schedule | undefined> {
-    const [profile] = await this.db
-      .select({ unitId: doctorProfiles.unitId })
-      .from(doctorProfiles)
-      .where(eq(doctorProfiles.userId, doctorId));
-    if (!profile) return undefined;
-    const [days, ranges, hours] = await Promise.all([
-      this.db
-        .select({ weekday: doctorScheduleDays.weekday, isActive: doctorScheduleDays.isActive })
-        .from(doctorScheduleDays)
-        .where(eq(doctorScheduleDays.doctorId, doctorId)),
-      this.db
-        .select({
-          weekday: doctorScheduleRanges.weekday,
-          startMin: doctorScheduleRanges.startMin,
-          endMin: doctorScheduleRanges.endMin,
-        })
-        .from(doctorScheduleRanges)
-        .where(eq(doctorScheduleRanges.doctorId, doctorId))
-        .orderBy(asc(doctorScheduleRanges.startMin)),
-      hoursOf(this.db, profile.unitId),
-    ]);
-    return {
-      days: WEEKDAYS.map((weekday) => ({
-        weekday,
-        isActive: days.some((day) => day.weekday === weekday && day.isActive),
-        ranges: ranges
-          .filter((range) => range.weekday === weekday)
-          .map(({ startMin, endMin }) => ({ startMin, endMin })),
-      })),
-      unitHours: hours,
-    };
+  find(doctorId: string): Promise<Schedule | undefined> {
+    return this.db.transaction(
+      async (tx) => {
+        const [profile] = await tx
+          .select({ unitId: doctorProfiles.unitId })
+          .from(doctorProfiles)
+          .where(eq(doctorProfiles.userId, doctorId));
+        if (!profile) return undefined;
+        const days = await tx
+          .select({ weekday: doctorScheduleDays.weekday, isActive: doctorScheduleDays.isActive })
+          .from(doctorScheduleDays)
+          .where(eq(doctorScheduleDays.doctorId, doctorId));
+        const ranges = await tx
+          .select({
+            weekday: doctorScheduleRanges.weekday,
+            startMin: doctorScheduleRanges.startMin,
+            endMin: doctorScheduleRanges.endMin,
+          })
+          .from(doctorScheduleRanges)
+          .where(eq(doctorScheduleRanges.doctorId, doctorId))
+          .orderBy(asc(doctorScheduleRanges.startMin));
+        const hours = await hoursOf(tx, profile.unitId);
+        return {
+          days: WEEKDAYS.map((weekday) => ({
+            weekday,
+            isActive: days.some((day) => day.weekday === weekday && day.isActive),
+            ranges: ranges
+              .filter((range) => range.weekday === weekday)
+              .map(({ startMin, endMin }) => ({ startMin, endMin })),
+          })),
+          unitHours: hours,
+        };
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
   }
 
   replace({ doctorId, days, actor, check }: ReplaceRequest): Promise<UnitHour[] | undefined> {
@@ -90,10 +92,6 @@ export class DoctorScheduleRepository {
       if (ranges.length > 0) await tx.insert(doctorScheduleRanges).values(ranges);
     });
   }
-
-  futureAppointmentsOutside(_doctorId: string, _days: ScheduleDay[], _from: Date): Promise<ScheduleWarning[]> {
-    return Promise.resolve([]);
-  }
 }
 
 async function lockProfile(tx: Transaction, doctorId: string): Promise<string | undefined> {
@@ -105,8 +103,8 @@ async function lockProfile(tx: Transaction, doctorId: string): Promise<string | 
   return profile?.unitId;
 }
 
-function hoursOf(db: Database | Transaction, unitId: string): Promise<UnitHour[]> {
-  return db
+function hoursOf(tx: Transaction, unitId: string): Promise<UnitHour[]> {
+  return tx
     .select({ weekday: unitHours.weekday, openMin: unitHours.openMin, closeMin: unitHours.closeMin })
     .from(unitHours)
     .where(eq(unitHours.unitId, unitId))

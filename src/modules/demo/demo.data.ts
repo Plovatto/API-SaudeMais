@@ -1,4 +1,5 @@
 import type { ExamKind } from '../../database/schema/catalog.js';
+import { WORKDAYS } from '../../lib/week.js';
 
 export interface SpecialtySeed {
   name: string;
@@ -28,8 +29,7 @@ export interface DoctorProfileTarget {
   registryUf: string;
 }
 
-const weekdays = (openMin: number, closeMin: number) =>
-  [1, 2, 3, 4, 5].map((weekday) => ({ weekday, openMin, closeMin }));
+const weekdays = (openMin: number, closeMin: number) => WORKDAYS.map((weekday) => ({ weekday, openMin, closeMin }));
 
 export const SPECIALTIES: readonly SpecialtySeed[] = [
   { name: 'Clínica Geral', council: 'CRM', appointmentDurationMin: 30 },

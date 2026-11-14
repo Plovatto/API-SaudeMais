@@ -1,7 +1,7 @@
-import { AppError, type FieldErrors } from '../../lib/app-error.js';
+import { AppError, unprocessable, type FieldErrors } from '../../lib/app-error.js';
 import type { Actor } from '../../lib/audit.js';
-import type { Clock } from '../../lib/clock.js';
 import { isExclusionViolation } from '../../lib/pg-errors.js';
+import { WEEKDAYS, WORKDAYS } from '../../lib/week.js';
 import { scheduleMessages } from './doctor-schedule.messages.js';
 import type { SaveScheduleInput, SavedSchedule, Schedule, ScheduleDay, UnitHour } from './doctor-schedule.model.js';
 import type { DoctorScheduleRepository } from './doctor-schedule.repository.js';
@@ -11,28 +11,29 @@ const DEFAULT_RANGES = [
   { startMin: 13 * 60, endMin: 17 * 60 },
 ];
 
-export const DEFAULT_SCHEDULE: ScheduleDay[] = [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
-  const isActive = weekday >= 1 && weekday <= 5;
+export const DEFAULT_SCHEDULE: ScheduleDay[] = WEEKDAYS.map((weekday) => {
+  const isActive = (WORKDAYS as readonly number[]).includes(weekday);
   return { weekday, isActive, ranges: isActive ? DEFAULT_RANGES : [] };
 });
 
 const rangeField = (dayIndex: number, rangeIndex: number) => `days.${dayIndex}.ranges.${rangeIndex}`;
 
-const unprocessable = ({ code, message }: { code: string; message: string }, fields?: FieldErrors) =>
-  new AppError(422, code, message, fields);
+const rejection = ({ code, message }: { code: string; message: string }, fields?: FieldErrors) =>
+  unprocessable(code, message, fields);
 
 const profileMissing = () => new AppError(404, 'NOT_FOUND', scheduleMessages.profileMissing);
 
 function overlaps(days: ScheduleDay[]): FieldErrors {
   const fields: FieldErrors = {};
   days.forEach((day, dayIndex) => {
-    const sorted = day.ranges.map((range, index) => ({ ...range, index })).sort((a, b) => a.startMin - b.startMin);
-    sorted.slice(1).forEach((range, position) => {
-      const previous = sorted[position];
-      if (previous && range.startMin < previous.endMin) {
-        fields[rangeField(dayIndex, range.index)] = scheduleMessages.overlap.message;
-      }
-    });
+    let latestEnd = -1;
+    day.ranges
+      .map((range, index) => ({ ...range, index }))
+      .sort((a, b) => a.startMin - b.startMin)
+      .forEach((range) => {
+        if (range.startMin < latestEnd) fields[rangeField(dayIndex, range.index)] = scheduleMessages.overlap.message;
+        latestEnd = Math.max(latestEnd, range.endMin);
+      });
   });
   return fields;
 }
@@ -58,10 +59,7 @@ const sortDays = (days: ScheduleDay[]): ScheduleDay[] =>
 const hasErrors = (fields: FieldErrors) => Object.keys(fields).length > 0;
 
 export class DoctorScheduleService {
-  constructor(
-    private readonly repository: DoctorScheduleRepository,
-    private readonly clock: Clock,
-  ) {}
+  constructor(private readonly repository: DoctorScheduleRepository) {}
 
   async schedule(doctorId: string): Promise<Schedule> {
     const schedule = await this.repository.find(doctorId);
@@ -71,7 +69,7 @@ export class DoctorScheduleService {
 
   async save(doctorId: string, input: SaveScheduleInput, actor: Actor): Promise<SavedSchedule> {
     const overlapping = overlaps(input.days);
-    if (hasErrors(overlapping)) throw unprocessable(scheduleMessages.overlap, overlapping);
+    if (hasErrors(overlapping)) throw rejection(scheduleMessages.overlap, overlapping);
     const days = sortDays(input.days);
     let unitHours: UnitHour[] | undefined;
     try {
@@ -81,18 +79,17 @@ export class DoctorScheduleService {
         actor,
         check: (hours) => {
           const outside = outsideUnitHours(input.days, hours);
-          if (hasErrors(outside)) throw unprocessable(scheduleMessages.outsideUnitHours, outside);
+          if (hasErrors(outside)) throw rejection(scheduleMessages.outsideUnitHours, outside);
         },
       });
     } catch (error) {
       if (isExclusionViolation(error, 'doctor_schedule_ranges_no_overlap_excl')) {
-        throw unprocessable(scheduleMessages.overlap);
+        throw rejection(scheduleMessages.overlap);
       }
       throw error;
     }
     if (!unitHours) throw profileMissing();
-    const warnings = await this.repository.futureAppointmentsOutside(doctorId, days, this.clock.now());
-    return { days, unitHours, warnings };
+    return { days, unitHours, warnings: [] };
   }
 
   ensureDefault(doctorId: string): Promise<void> {
