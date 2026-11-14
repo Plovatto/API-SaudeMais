@@ -35,6 +35,9 @@ export class NotificationsRepository {
         bookingId: notifications.bookingId,
         readAt: notifications.readAt,
         createdAt: notifications.createdAt,
+        fullName: sql<
+          string | null
+        >`case when ${notifications.type} = 'user_registered' then (select ${users.fullName} from ${users} where ${users.id} = (${notifications.params}->>'userId')::uuid) end`,
       })
       .from(notifications)
       .where(where)
@@ -43,8 +46,9 @@ export class NotificationsRepository {
     const result = await pageOf(query, pagination, () => this.db.$count(notifications, where));
     return {
       ...result,
-      items: result.items.map(({ readAt, createdAt, ...row }) => ({
+      items: result.items.map(({ readAt, createdAt, fullName, params, ...row }) => ({
         ...row,
+        params: fullName === null ? params : { ...params, fullName },
         readAt: readAt?.toISOString() ?? null,
         createdAt: createdAt.toISOString(),
       })),

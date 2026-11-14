@@ -77,11 +77,7 @@ export class UserService {
             termsVersion: TERMS_VERSION,
             now: this.clock.now(),
           },
-          (tx, user) =>
-            this.notifications.notifyAdmins(tx, {
-              type: 'user_registered',
-              params: { userId: user.id, fullName: user.fullName },
-            }),
+          (tx, user) => this.notifications.notifyAdmins(tx, { type: 'user_registered', params: { userId: user.id } }),
         ),
       emailConflicts,
     );

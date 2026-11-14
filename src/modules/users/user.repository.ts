@@ -1,4 +1,5 @@
 import { and, eq, gt, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { logger } from '../../config/logger.js';
 import type { AfterCommit, Database, Transaction } from '../../database/pg-client.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
@@ -93,7 +94,11 @@ export class UserRepository {
       const created = { ...row, roles: [...roles].sort() };
       return [created, await onCreated?.(tx, created)] as const;
     });
-    afterCommit?.();
+    try {
+      afterCommit?.();
+    } catch (err) {
+      logger.error({ err }, 'After-commit hook failed');
+    }
     return user;
   }
 

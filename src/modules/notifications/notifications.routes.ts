@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
+import { forbiddenResponse, notFoundResponse, protectedAccountResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { idParams } from '../../lib/params.js';
@@ -47,10 +47,10 @@ documentOperation({
   tag: tags.notifications.name,
   summary: 'Marcar um aviso como lido',
   description:
-    'Marca o aviso como lido. Repetir não tem efeito e mantém o horário da primeira leitura. Aviso de outra conta responde como inexistente. Limite: 60 requisições por minuto por IP.',
+    'Marca o aviso como lido. Repetir não tem efeito e mantém o horário da primeira leitura. Aviso de outra conta responde como inexistente. A conta de demonstração só lê. Limite: 60 requisições por minuto por IP.',
   params: idParams,
   success: { status: 204, description: 'Aviso lido.' },
-  errors: { 404: notFoundResponse(notificationNotFound) },
+  errors: { 403: protectedAccountResponse(), 404: notFoundResponse(notificationNotFound) },
 });
 
 documentOperation({
@@ -60,24 +60,34 @@ documentOperation({
   tag: tags.notifications.name,
   summary: 'Marcar todos os avisos como lidos',
   description:
-    'Marca como lidos todos os avisos do perfil da área aberta (`role`); os dos outros perfis da conta não mudam. Limite: 60 requisições por minuto por IP.',
+    'Marca como lidos todos os avisos do perfil da área aberta (`role`); os dos outros perfis da conta não mudam. A conta de demonstração só lê. Limite: 60 requisições por minuto por IP.',
   query: areaQuery,
   success: { status: 204, description: 'Avisos lidos.' },
-  errors: roleErrors,
+  errors: {
+    403: {
+      ...protectedAccountResponse(),
+      description: 'Perfil que a conta não tem (`FORBIDDEN`) ou conta de demonstração (`PROTECTED_ACCOUNT`).',
+    },
+  },
 });
 
 export interface NotificationsRouterDeps {
   controller: NotificationsController;
   requireAuth: RequestHandler;
+  requireWritable: RequestHandler;
 }
 
-export function createNotificationsRouter({ controller, requireAuth }: NotificationsRouterDeps): Router {
+export function createNotificationsRouter({
+  controller,
+  requireAuth,
+  requireWritable,
+}: NotificationsRouterDeps): Router {
   const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
   const writeLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
   const router = Router();
   router.get(path, readLimit, noStore, requireAuth, controller.page);
   router.get(`${path}/unread-count`, readLimit, noStore, requireAuth, controller.unreadCount);
-  router.post(`${path}/read-all`, writeLimit, noStore, requireAuth, controller.markAllRead);
-  router.post(`${path}/:id/read`, writeLimit, noStore, requireAuth, controller.markRead);
+  router.post(`${path}/read-all`, writeLimit, noStore, requireAuth, requireWritable, controller.markAllRead);
+  router.post(`${path}/:id/read`, writeLimit, noStore, requireAuth, requireWritable, controller.markRead);
   return router;
 }
