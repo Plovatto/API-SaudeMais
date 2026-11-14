@@ -186,6 +186,8 @@ docker run --rm -p 8080:8080 -e DATABASE_URL=... -e CORS_ORIGIN=http://localhost
 
 A API escuta na porta `8080` dentro do container, aplica as migrations ao iniciar e, ao receber `SIGTERM`, termina as requisições em andamento antes de encerrar. O CI constrói a imagem e a executa contra um PostgreSQL a cada pull request.
 
+O cache de sessões fica na memória de cada processo. Depois de revogar uma sessão direto no banco, reinicie a API ou espere até 5 min; rodar mais de uma instância exige um cache compartilhado.
+
 ## Documentação da API
 
 A documentação é gerada a partir do código e servida pela própria API. Ela explica autenticação, formato de erro, códigos de erro, datas e paginação, e cada rota traz exemplos e as respostas possíveis. Localmente:

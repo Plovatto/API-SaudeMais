@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE } from '@/lib/time.js';
 import { UserRepository } from '@/modules/users/user.repository.js';
+import { hashToken } from '@/modules/users/user.token.js';
 import { as, buildUsersApp, HOUR, login, registerAndLogin, START } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
@@ -160,6 +161,46 @@ describe('session cache invalidation', () => {
     await request(app).post(`/api/admin/users/${userId}/deactivate`).set(as(admin)).expect(200);
 
     expect(await auth.authenticate(token)).toBeNull();
+  });
+
+  it('reloads the session after a reactivation', async () => {
+    const { app, admin, auth, db, token, userId } = await withAdmin();
+    await db.execute(sql`update users set deactivated_at = now() where id = ${userId}`);
+    await auth.authenticate(admin);
+    const lookups = vi.spyOn(UserRepository.prototype, 'findActiveSession');
+
+    await request(app).post(`/api/admin/users/${userId}/reactivate`).set(as(admin)).expect(200);
+
+    expect(await auth.authenticate(token)).not.toBeNull();
+    expect(lookups).toHaveBeenCalledOnce();
+  });
+
+  it('reflects an admin profile edit on the next request', async () => {
+    const { app, admin, auth, token, userId } = await withAdmin();
+
+    await request(app).patch(`/api/admin/users/${userId}`).set(as(admin)).send({ fullName: 'Ana Souza' }).expect(200);
+
+    expect((await auth.authenticate(token))?.user.fullName).toBe('Ana Souza');
+  });
+
+  it('does not keep a session loaded before a revocation that lands during the lookup', async () => {
+    const { app, auth, clock, db } = await buildUsersApp();
+    const token = await registerAndLogin(app);
+    const stale = await new UserRepository(db).findActiveSession(hashToken(token), clock.now());
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const lookups = vi.spyOn(UserRepository.prototype, 'findActiveSession').mockImplementationOnce(async () => {
+      await gate;
+      return stale;
+    });
+    const inFlight = auth.authenticate(token);
+
+    await auth.updateProfile(stale?.user.id ?? '', { fullName: 'Ana Souza' });
+    release();
+
+    expect((await inFlight)?.user.fullName).toBe('Ana Maria Silva');
+    expect((await auth.authenticate(token))?.user.fullName).toBe('Ana Souza');
+    expect(lookups).toHaveBeenCalledTimes(2);
   });
 
   it('reflects granted and revoked roles on the next request', async () => {

@@ -9,6 +9,9 @@ import { NotificationsRepository } from './notifications.repository.js';
 import { createNotificationsRouter } from './notifications.routes.js';
 import { NotificationsService } from './notifications.service.js';
 
+const COUNTER_TTL = 10 * MINUTE;
+const COUNTER_MAX_ENTRIES = 1000;
+
 export interface NotificationsModuleDeps {
   db: Database;
   clock: Clock;
@@ -17,7 +20,7 @@ export interface NotificationsModuleDeps {
 export function createNotificationsModule({ db, clock }: NotificationsModuleDeps) {
   const service = new NotificationsService(
     new NotificationsRepository(db),
-    new TtlCache<number>(clock, 10 * MINUTE, 1000),
+    new TtlCache<number>(clock, COUNTER_TTL, COUNTER_MAX_ENTRIES),
     clock,
   );
   const routerFor = (requireAuth: RequestHandler) =>
