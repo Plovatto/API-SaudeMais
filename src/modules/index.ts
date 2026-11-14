@@ -12,6 +12,7 @@ import { createDemoModule } from './demo/index.js';
 import { createNotificationsModule } from './notifications/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
 import { createUsersModule, type SessionPolicy } from './users/index.js';
+import { SessionCache } from './users/user.session-cache.js';
 
 export interface ModulesDeps {
   db: Database;
@@ -22,9 +23,10 @@ export interface ModulesDeps {
 }
 
 export function createModules(deps: ModulesDeps) {
+  const sessions = new SessionCache(deps.clock);
   const notifications = createNotificationsModule(deps);
-  const users = createUsersModule({ ...deps, notifications: notifications.service });
-  const passwordReset = createPasswordResetModule(deps);
+  const users = createUsersModule({ ...deps, notifications: notifications.service, sessions });
+  const passwordReset = createPasswordResetModule({ ...deps, sessions });
   const bookings = createBookingsModule({ clock: deps.clock, notifications: notifications.service });
   const catalog = createCatalogModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminUsers = createAdminUsersModule({
@@ -32,6 +34,7 @@ export function createModules(deps: ModulesDeps) {
     clock: deps.clock,
     requireAuth: users.requireAuth,
     passwordReset: passwordReset.service,
+    sessions,
     bookings: bookings.service,
   });
   const doctorSchedule = createDoctorScheduleModule({ db: deps.db, requireAuth: users.requireAuth });

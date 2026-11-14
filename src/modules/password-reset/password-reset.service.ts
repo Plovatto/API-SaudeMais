@@ -5,6 +5,7 @@ import { CLINIC_TIME_ZONE, MINUTE, startOfDayIn } from '../../lib/time.js';
 import type { MailQueue } from '../../mail/index.js';
 import { hashPassword } from '../users/user.password.js';
 import type { UserRepository } from '../users/user.repository.js';
+import type { SessionCache } from '../users/user.session-cache.js';
 import { createSessionToken, hashToken } from '../users/user.token.js';
 import { resetEmail } from './password-reset.mail.js';
 import type { ResetConfirmInput, ResetRequestInput } from './password-reset.model.js';
@@ -16,6 +17,7 @@ export class PasswordResetService {
   constructor(
     private readonly resets: PasswordResetRepository,
     private readonly users: UserRepository,
+    private readonly sessions: SessionCache,
     private readonly mail: MailQueue,
     private readonly clock: Clock,
     private readonly appUrl: string,
@@ -51,9 +53,11 @@ export class PasswordResetService {
 
   async confirm({ token, password }: ResetConfirmInput): Promise<void> {
     const passwordHash = await hashPassword(password);
-    if (!(await this.resets.consume(hashToken(token), passwordHash, this.clock.now()))) {
+    const userId = await this.resets.consume(hashToken(token), passwordHash, this.clock.now());
+    if (!userId) {
       const message = 'Este link é inválido ou já venceu. Peça um novo.';
       throw new AppError(400, 'INVALID_RESET_TOKEN', message, { token: message });
     }
+    this.sessions.invalidateUser(userId);
   }
 }

@@ -13,7 +13,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 ## Funcionalidades
 
-- Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash
+- Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash e validado a partir de um cache em memória de 5 min, limpo no mesmo processo a cada logout, troca de senha, desativação ou mudança de perfil
 - Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
 - Lista de médicos com busca e vagas livres por período, calculadas pela agenda do médico, pelo horário da unidade e pela política de agendamento, no fuso de São Paulo
 - Pedido de consulta só em vaga gerada, com exclusion constraints que impedem horário duplicado para o médico e para o paciente, mesmo com pedidos simultâneos, e limite de 5 agendamentos ativos por paciente
@@ -187,6 +187,8 @@ docker run --rm -p 8080:8080 -e DATABASE_URL=... -e CORS_ORIGIN=http://localhost
 ```
 
 A API escuta na porta `8080` dentro do container, aplica as migrations ao iniciar e, ao receber `SIGTERM`, termina as requisições em andamento antes de encerrar. O CI constrói a imagem e a executa contra um PostgreSQL a cada pull request.
+
+O cache de sessões fica na memória de cada processo. Depois de revogar uma sessão direto no banco, reinicie a API ou espere até 5 min; rodar mais de uma instância exige um cache compartilhado.
 
 ## Documentação da API
 

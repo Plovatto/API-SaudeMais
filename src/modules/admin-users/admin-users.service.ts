@@ -9,6 +9,7 @@ import type { BookingSide } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { PasswordResetService } from '../password-reset/password-reset.service.js';
 import type { UpdateProfileInput } from '../users/user.model.js';
+import type { SessionCache } from '../users/user.session-cache.js';
 import { adminConflicts, doctorProfileNotFound, unavailable, userNotFound } from './admin-users.messages.js';
 import type {
   AdminUserDetail,
@@ -36,6 +37,7 @@ export class AdminUserService {
     private readonly repository: AdminUserRepository,
     private readonly passwordReset: PasswordResetService,
     private readonly bookings: BookingsService,
+    private readonly sessions: SessionCache,
     private readonly clock: Clock,
   ) {}
 
@@ -198,6 +200,7 @@ export class AdminUserService {
       { doctor_profiles_registry_key: adminConflicts.registryTaken },
     );
     if (!applied) throw notFound();
+    this.sessions.invalidateUser(id);
     afterCommits.forEach(runAfterCommit);
     return this.detail(id);
   }

@@ -7,6 +7,7 @@ import { DEMO_ACCOUNTS } from './user.demo.js';
 import { UserRepository } from './user.repository.js';
 import { placeholderPasswordHash } from './user.password.js';
 import { createUserRouter } from './user.routes.js';
+import type { SessionCache } from './user.session-cache.js';
 import { SeedAccountConflictError, UserService, type SessionPolicy } from './user.service.js';
 
 export type { AuthContext, SessionPolicy } from './user.service.js';
@@ -21,11 +22,12 @@ export interface UsersModuleDeps {
   clock: Clock;
   policy: SessionPolicy;
   notifications: NotificationsService;
+  sessions: SessionCache;
 }
 
-export function createUsersModule({ db, clock, policy, notifications }: UsersModuleDeps) {
+export function createUsersModule({ db, clock, policy, notifications, sessions }: UsersModuleDeps) {
   placeholderPasswordHash().catch(() => undefined);
-  const service = new UserService(new UserRepository(db), clock, policy, notifications);
+  const service = new UserService(new UserRepository(db), clock, policy, notifications, sessions);
   const requireAuth = createRequireAuth(service);
   const router = createUserRouter({
     controller: createUserController(service),

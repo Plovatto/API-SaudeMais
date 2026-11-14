@@ -18,6 +18,7 @@ import type {
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
 import { isDemoEmail, type SeedAccount } from './user.demo.js';
 import type { UserRepository } from './user.repository.js';
+import type { SessionCache } from './user.session-cache.js';
 import { createSessionToken, hashToken, isWellFormedToken } from './user.token.js';
 
 const emailConflicts = {
@@ -59,6 +60,7 @@ export class UserService {
     private readonly clock: Clock,
     private readonly policy: SessionPolicy,
     private readonly notifications: NotificationsService,
+    private readonly sessions: SessionCache,
   ) {}
 
   async register({ fullName, email, phone, password }: RegisterInput): Promise<PublicUser> {
@@ -105,7 +107,7 @@ export class UserService {
       absoluteExpiresAt,
     });
     const limit = candidate.isProtected ? PROTECTED_SESSION_LIMIT : this.policy.maxSessionsPerUser;
-    await this.repository.pruneSessions(candidate.id, sessionId, now, limit);
+    this.sessions.invalidateSessions(await this.repository.pruneSessions(candidate.id, sessionId, now, limit));
 
     const { passwordHash: _hash, isProtected: _protected, deactivatedAt: _deactivated, ...user } = candidate;
     return { token, expiresAt: expiresAt.toISOString(), user };
@@ -114,11 +116,17 @@ export class UserService {
   async authenticate(token: string): Promise<AuthContext | null> {
     if (!isWellFormedToken(token)) return null;
     const now = this.clock.now();
-    const session = await this.repository.findActiveSession(hashToken(token), now);
+    const tokenHash = hashToken(token);
+    const session = await this.sessions.resolve(tokenHash, () => this.repository.findActiveSession(tokenHash, now));
     if (!session) return null;
+    if (session.expiresAt <= now) {
+      this.sessions.invalidate(tokenHash);
+      return null;
+    }
     if (now.getTime() - session.lastUsedAt.getTime() >= TOUCH_INTERVAL) {
       const expiresAt = session.remember ? session.absoluteExpiresAt : this.idleExpiry(now, session.absoluteExpiresAt);
       await this.repository.touchSession(session.id, now, expiresAt);
+      Object.assign(session, { lastUsedAt: now, expiresAt });
     }
     return { sessionId: session.id, isProtected: session.isProtected, user: session.user };
   }
@@ -163,6 +171,7 @@ export class UserService {
 
   async updateProfile(userId: string, { fullName, phone }: UpdateProfileInput): Promise<PublicUser> {
     await this.repository.updateProfile(userId, definedFields({ fullName, phone }));
+    this.sessions.invalidateUser(userId);
     return this.profile(userId);
   }
 
@@ -174,6 +183,7 @@ export class UserService {
       throw new AppError(422, 'INVALID_CURRENT_PASSWORD', message, { currentPassword: message });
     }
     await this.repository.replacePassword(user.id, await hashPassword(password), sessionId, now);
+    this.sessions.invalidateUser(user.id);
   }
 
   async listSessions({ sessionId, user }: AuthContext): Promise<SessionView[]> {
@@ -188,12 +198,15 @@ export class UserService {
     }));
   }
 
-  logoutEverywhere({ sessionId, isProtected, user }: AuthContext): Promise<void> {
-    return isProtected ? this.repository.deleteSession(sessionId) : this.repository.deleteSessionsOf(user.id, null);
+  async logoutEverywhere({ sessionId, isProtected, user }: AuthContext): Promise<void> {
+    if (isProtected) return this.logout(sessionId);
+    await this.repository.deleteSessionsOf(user.id, null);
+    this.sessions.invalidateUser(user.id);
   }
 
-  logout(sessionId: string): Promise<void> {
-    return this.repository.deleteSession(sessionId);
+  async logout(sessionId: string): Promise<void> {
+    await this.repository.deleteSession(sessionId);
+    this.sessions.invalidateSessions([sessionId]);
   }
 
   private idleExpiry(now: Date, absoluteExpiresAt: Date): Date {

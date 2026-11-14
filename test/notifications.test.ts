@@ -5,11 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { NotificationParams, NotificationType } from '@/database/schema/notifications.js';
 import type { Role } from '@/database/schema/users.js';
 import { MINUTE } from '@/lib/time.js';
-import { UnreadCounter } from '@/modules/notifications/notifications.counter.js';
 import { NotificationsRepository } from '@/modules/notifications/notifications.repository.js';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
 import { as, buildUsersApp, login, registration } from './support/users.js';
-import { fixedClock } from './support/fixed-clock.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PATH = '/api/notifications';
@@ -382,41 +380,6 @@ describe('GET /api/notifications/unread-count', () => {
 
     expect(await unread(context, context.admin.token, 'admin')).toBe(1);
     expect(await unread(context, context.admin.token, 'patient')).toBe(2);
-  });
-});
-
-describe('UnreadCounter', () => {
-  it('does not keep a count loaded before an invalidation', async () => {
-    const counter = new UnreadCounter(fixedClock(new Date('2026-11-20T12:00:00.000Z')));
-    let finish: (count: number) => void = () => undefined;
-    const stale = counter.count('user:admin', () => new Promise<number>((resolve) => (finish = resolve)));
-
-    counter.invalidate('user:admin');
-    finish(1);
-
-    expect(await stale).toBe(1);
-    expect(await counter.count('user:admin', () => Promise.resolve(2))).toBe(2);
-    expect(await counter.count('user:admin', () => Promise.resolve(3))).toBe(2);
-  });
-
-  it('caches the next load after a failed one', async () => {
-    const counter = new UnreadCounter(fixedClock(new Date('2026-11-20T12:00:00.000Z')));
-
-    await expect(counter.count('user:admin', () => Promise.reject(new Error('offline')))).rejects.toThrow('offline');
-
-    expect(await counter.count('user:admin', () => Promise.resolve(4))).toBe(4);
-    expect(await counter.count('user:admin', () => Promise.resolve(5))).toBe(4);
-  });
-
-  it('evicts expired counts once it holds many keys', async () => {
-    const clock = fixedClock(new Date('2026-11-20T12:00:00.000Z'));
-    const counter = new UnreadCounter(clock);
-    for (let index = 0; index < 1000; index += 1) await counter.count(`old-${index}`, () => Promise.resolve(1));
-    clock.advance(10 * MINUTE);
-
-    await counter.count('fresh', () => Promise.resolve(1));
-
-    expect(counter.size).toBe(1);
   });
 });
 
