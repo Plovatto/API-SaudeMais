@@ -12,7 +12,7 @@ import { hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
 import { hasRole } from '../users/user.repository.js';
 import type { Doctor, DoctorsQuery } from './doctors.model.js';
 
-export type BookingContext = Pick<
+type BookingContext = Pick<
   SlotRequest,
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays'
 >;

@@ -242,10 +242,12 @@ describe('GET /api/doctors/:id/availability', () => {
     expect((shown.body as Availability).days[0]?.slots).toHaveLength(16);
   });
 
-  it('leaves out inactive days, deactivated doctors and inactive specialties', async () => {
+  it('leaves out inactive days, deactivated doctors, inactive specialties and units, and missing profiles', async () => {
     const carlos = await doctorNamed(context, 'Dr. Carlos Mendes');
     const beatriz = await doctorNamed(context, 'Dra. Beatriz Lima');
     const rafael = await doctorNamed(context, 'Dr. Rafael Costa');
+    const ana = await doctorNamed(context, 'Dra. Ana Ferreira');
+    const patientId = ((await request(context.app).get('/api/me').set(as(context.patient))).body as { id: string }).id;
     const week = { from: '2026-11-23', to: '2026-11-27' };
 
     await context.db.execute(
@@ -253,13 +255,24 @@ describe('GET /api/doctors/:id/availability', () => {
     );
     await context.db.execute(sql`update users set deactivated_at = now() where id = ${beatriz.id}`);
     await context.db.execute(sql`update specialties set is_active = false where id = ${rafael.specialty.id}`);
+    await context.db.execute(sql`
+      with closed as (
+        insert into units (name, address, phone, is_active)
+        values ('Unidade Norte', 'Rua do Norte, 10 - São Paulo - SP', '+551144445555', false) returning id
+      )
+      update doctor_profiles set unit_id = (select id from closed) where user_id = ${ana.id}
+    `);
+    await context.db.execute(sql`insert into user_roles (user_id, role) values (${patientId}, 'doctor')`);
 
     const days = ((await availability(context, context.patient, carlos.id, week)).body as Availability).days;
     const listed = namesOf(await list(context, context.patient).expect(200));
+    const withoutProfile = namesOf(await list(context, context.patient, { search: 'Ana Maria' }).expect(200));
 
     expect(days.map((day) => day.date)).toEqual(['2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27']);
-    expect((await availability(context, context.patient, beatriz.id, week)).status).toBe(404);
-    expect((await availability(context, context.patient, rafael.id, week)).status).toBe(404);
-    expect(listed.toSorted()).toEqual(['Dr. Carlos Mendes', 'Dra. Ana Ferreira']);
+    for (const id of [beatriz.id, rafael.id, ana.id, patientId]) {
+      expect((await availability(context, context.patient, id, week)).status).toBe(404);
+    }
+    expect(listed).toEqual(['Dr. Carlos Mendes']);
+    expect(withoutProfile).toEqual([]);
   });
 });

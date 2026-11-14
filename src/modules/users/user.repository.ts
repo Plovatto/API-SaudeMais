@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
@@ -13,8 +13,9 @@ export const publicUserColumns = {
   >`array(select ${userRoles.role} from ${userRoles} where ${userRoles.userId} = ${users.id} order by ${userRoles.role})`,
 };
 
-export const hasRole = (role: Role) =>
-  sql<boolean>`exists (select 1 from ${userRoles} where ${userRoles.userId} = ${users.id} and ${userRoles.role} = ${role})`;
+export function hasRole(role: Role): SQL<boolean> {
+  return sql<boolean>`exists (select 1 from ${userRoles} where ${userRoles.userId} = ${users.id} and ${userRoles.role} = ${role})`;
+}
 
 type Writer = Pick<Database, 'update' | 'delete'>;
 

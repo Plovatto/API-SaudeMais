@@ -94,7 +94,7 @@ export class AdminUserRepository {
     });
   }
 
-  async isActiveAdmin(db: Pick<Database, '$count' | 'select'>, id: string): Promise<boolean> {
+  async isActiveAdmin(db: Pick<Database, '$count'>, id: string): Promise<boolean> {
     const total = await db.$count(users, and(eq(users.id, id), isNull(users.deactivatedAt), hasRole('admin')));
     return total > 0;
   }
