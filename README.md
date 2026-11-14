@@ -122,7 +122,10 @@ MAIL_FROM=
 
 `MAIL_DRIVER` escolhe como os e-mails saem: `console` (padrão, só fora de produção) escreve no log; `smtp` envia pelo servidor configurado em `SMTP_HOST` (padrão `smtp.gmail.com`), `SMTP_PORT` (padrão 465), `SMTP_USER`, `SMTP_PASS` (senha de app do Gmail) e `MAIL_FROM`. Em produção, `smtp` é obrigatório. Os envios acontecem fora da requisição, e uma falha fica só no log.
 
-A API também cria, ao iniciar, a conta protegida de demonstração `paciente@saudemais.test` (senha `paciente-demo-123`), exibida na tela de login.
+A API também garante, ao iniciar, as contas protegidas de demonstração exibidas na tela de login:
+
+- Paciente: `paciente@saudemais.test` (senha `paciente-demo-123`).
+- Médico, também paciente: `medico@saudemais.test` (senha `medico-demo-123`), com perfil de Clínica Geral na Unidade Central. Se a especialidade e a unidade não existirem, são criadas com esses nomes.
 
 ## Scripts
 
@@ -137,6 +140,7 @@ A API também cria, ao iniciar, a conta protegida de demonstração `paciente@sa
 | `npm run test:coverage` | Roda os testes com relatório de cobertura |
 | `npm run test:pg` | Roda a suíte que exige um PostgreSQL real (`TEST_DATABASE_URL`) |
 | `npm run db:generate` | Gera uma migration a partir do schema |
+| `npm run db:seed` | Cria os dados de demonstração |
 
 ## Banco de Dados
 
@@ -147,6 +151,14 @@ Para criar uma migration a partir de mudanças no schema:
 ```bash
 npm run db:generate
 ```
+
+Para popular o banco com dados de demonstração (especialidades, unidades Central e Sul com horários, tipos de exame, ofertas, médicos e pacientes de exemplo):
+
+```bash
+npm run db:seed
+```
+
+O seed pode rodar quantas vezes for preciso: só cria o que falta, mantém o que o administrador já cadastrou com o mesmo nome e não altera contas existentes. As contas de exemplo recebem senhas aleatórias que não são exibidas.
 
 Extensões, exclusion constraints e índices parciais são escritos à mão em uma migration vazia:
 

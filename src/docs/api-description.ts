@@ -81,7 +81,12 @@ O botão **Authorize** desta página envia o token em todas as chamadas de teste
 
 ## Conta de demonstração
 
-Para testar sem criar conta, entre com o paciente de demonstração: \`paciente@saudemais.test\`, senha \`paciente-demo-123\`. Os dados dele são de exemplo e ele não pode ser alterado nem desativado.
+Para testar sem criar conta, entre com uma das contas de demonstração:
+
+- Paciente: \`paciente@saudemais.test\`, senha \`paciente-demo-123\`.
+- Médico, que também é paciente e passa pela escolha de perfil: \`medico@saudemais.test\`, senha \`medico-demo-123\`.
+
+Os dados delas são de exemplo, e elas não podem ser alteradas nem desativadas.
 
 ## Datas
 
