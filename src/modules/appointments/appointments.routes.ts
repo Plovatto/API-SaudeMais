@@ -90,14 +90,18 @@ documentOperation({
   tag: tags.doctor.name,
   summary: 'Confirmar uma consulta',
   description:
-    'Confirma um pedido pendente (`pending`) que ainda não começou, registra o evento `confirmed` com o médico como autor e, depois do commit, avisa o paciente com `appointment_confirmed`. Só o médico que atende a consulta confirma. Envie em `startsAt` o início que a tela mostrava: se o paciente reagendou ou cancelou, se a consulta já foi confirmada ou se o horário já chegou, a resposta é `INVALID_STATE` e nada muda. A conta de demonstração também confirma, porque os agendamentos dela são restaurados todo dia. Responde o detalhe atualizado; para os demais médicos, responde como inexistente. Limite: 60 requisições por minuto por IP.',
+    'Confirma um pedido pendente (`pending`) que ainda não começou, registra o evento `confirmed` com o médico como autor e, depois do commit, avisa o paciente com `appointment_confirmed`. Só o médico que atende a consulta confirma. Envie em `startsAt` o início que a tela mostrava: se o paciente reagendou ou cancelou, se a consulta já foi confirmada ou se o horário já chegou, a resposta é `INVALID_STATE` e nada muda. Horário desatualizado, consulta já iniciada e pedido expirado respondem todos com esse mesmo código; não existem `NOT_STARTED` nem `EXPIRED` nesta rota. A conta de demonstração também confirma, porque os agendamentos dela são restaurados todo dia. Responde o detalhe atualizado; para os demais médicos, responde como inexistente. Limite: 60 requisições por minuto por IP.',
   params: idParams,
   body: confirmAppointmentSchema,
   success: { status: 200, description: 'Consulta confirmada.', schema: appointmentSchema },
   errors: {
     403: forbiddenResponse,
     404: notFoundResponse(appointmentNotFound),
-    409: conflictResponse(appointmentConflicts.notConfirmable),
+    409: {
+      ...conflictResponse(appointmentConflicts.notConfirmable),
+      description:
+        'O `startsAt` enviado está desatualizado, a consulta já foi confirmada ou cancelada, já começou ou o pedido expirou (`INVALID_STATE`).',
+    },
   },
 });
 
