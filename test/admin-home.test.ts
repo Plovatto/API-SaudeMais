@@ -33,11 +33,9 @@ describe('GET /api/admin/home', () => {
 
   it('leaves protected demo accounts out of the counts', async () => {
     const context = await withAdmin();
-    await context.db.execute(sql`update users set is_protected = true where email = ${ADMIN.email}`);
     await context.db.execute(
       sql`insert into user_roles (user_id, role) select id, 'doctor' from users where email = 'paciente@saudemais.test'`,
     );
-    await context.db.execute(sql`update users set is_protected = false where email = ${ADMIN.email}`);
 
     const response = await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${context.token}`);
 
