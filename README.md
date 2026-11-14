@@ -17,6 +17,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
 - Lista de médicos com busca e vagas livres por período, calculadas pela agenda do médico, pelo horário da unidade e pela política de agendamento, no fuso de São Paulo
 - Pedido de consulta só em vaga gerada, com exclusion constraints que impedem horário duplicado para o médico e para o paciente, mesmo com pedidos simultâneos, e limite de 5 agendamentos ativos por paciente
+- Início e agendamentos do paciente nas abas agendados e realizados, com filtros, totais e as ações permitidas calculadas pela política; cancelamento pelo paciente ou pelo médico, condicionado ao horário que a tela mostrava, com aviso à outra parte e marcação de cancelamento tardio
 - Desativar uma conta ou remover o perfil médico cancela os agendamentos ativos futuros e avisa a outra parte; especialidade, unidade, tipo de exame ou oferta com agendamento futuro não podem ser desativados
 - Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
 - Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
@@ -217,6 +218,9 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | GET | `/api/doctors/{id}/availability` | Vagas livres de um médico entre `from` e `to`, até 31 dias (paciente) |
 | POST | `/api/appointments` | Pede uma consulta em uma vaga livre; nasce pendente e avisa o médico (paciente) |
 | GET | `/api/appointments/{id}` | Detalhe e histórico da consulta (paciente dela ou médico que a atende) |
+| POST | `/api/appointments/{id}/cancel` | Cancela a consulta e avisa a outra parte; motivo obrigatório para o médico (paciente dela ou médico que a atende) |
+| GET | `/api/patient/home` | Próximos agendamentos, totais das abas e último aviso (paciente) |
+| GET | `/api/patient/bookings` | Agendamentos do paciente por aba `scope`, com filtros `kind` e `status` e ações permitidas (paciente) |
 | GET, POST | `/api/admin/specialties` | Lista e cria especialidades (admin) |
 | PATCH | `/api/admin/specialties/{id}` | Altera, ativa ou desativa uma especialidade (admin) |
 | GET, POST | `/api/admin/units` | Lista e cria unidades com horários (admin) |

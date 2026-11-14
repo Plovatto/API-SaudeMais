@@ -15,6 +15,11 @@ export const appointmentConflicts = {
     field: 'startsAt',
     message: 'Você já tem um agendamento que coincide com este horário.',
   },
+  invalidState: {
+    code: 'INVALID_STATE',
+    field: '_root',
+    message: 'Esta consulta mudou ou não pode mais ser cancelada. Atualize a página.',
+  },
 } satisfies Record<string, FieldConflict>;
 
 export const appointmentRules = {
@@ -32,6 +37,11 @@ export const appointmentRules = {
     code: 'SPECIALTY_MISMATCH',
     field: 'specialtyId',
     message: 'Este médico não atende a especialidade escolhida.',
+  },
+  reasonRequired: {
+    code: 'REASON_REQUIRED',
+    field: 'reason',
+    message: 'Informe o motivo do cancelamento.',
   },
   selfBooking: {
     code: 'SELF_BOOKING',

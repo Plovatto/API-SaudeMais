@@ -1,15 +1,15 @@
 import { gt, inArray, sql, type SQL } from 'drizzle-orm';
 import { boolean, check, foreignKey, index, pgTable, smallint, text, unique, uuid } from 'drizzle-orm/pg-core';
-import { specialties, unitExamOffers, units } from './catalog.js';
+import { settings, specialties, unitExamOffers, units } from './catalog.js';
 import { isOneOf, timestamps, timestamptz, uuidv7Id } from './columns.js';
 import { doctorProfiles } from './doctor-profiles.js';
 import { users } from './users.js';
 
-const bookingKinds = ['appointment', 'exam'] as const;
+export const bookingKinds = ['appointment', 'exam'] as const;
 export const bookingStatuses = ['pending', 'confirmed', 'cancelled', 'completed', 'no_show', 'expired'] as const;
 const activeBookingStatuses = ['pending', 'confirmed'] as const;
 export const visitTypes = ['first_visit', 'routine', 'follow_up', 'exam_review'] as const;
-const cancellerRoles = ['patient', 'doctor', 'admin', 'system'] as const;
+export const cancellerRoles = ['patient', 'doctor', 'admin', 'system'] as const;
 export const bookingEventTypes = [
   'created',
   'rescheduled',
@@ -150,3 +150,6 @@ export const isActiveFuture = (now: Date): SQL =>
 
 export const effectiveStatus = (now: Date) =>
   sql<BookingStatus>`case when ${bookings.status} = 'pending' and ${bookings.startsAt} <= ${now} then 'expired' else ${bookings.status} end`;
+
+export const isLateCancellation = (now: Date): SQL =>
+  sql`${bookings.status} = 'confirmed' and ${bookings.startsAt} > ${now} and ${bookings.startsAt} - make_interval(hours => (select case when ${bookings.kind} = 'exam' then ${settings.examLateWindowHours} else ${settings.appointmentLateWindowHours} end from ${settings})) < ${now}`;

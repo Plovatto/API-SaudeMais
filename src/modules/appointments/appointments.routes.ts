@@ -10,10 +10,10 @@ import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { AppointmentsController } from './appointments.controller.js';
 import { ACTIVE_LIMIT, appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
-import { appointmentSchema, bookAppointmentSchema } from './appointments.model.js';
+import { appointmentSchema, bookAppointmentSchema, cancelAppointmentSchema } from './appointments.model.js';
 
 const path = '/api/appointments';
-const { outsideAvailability } = appointmentRules;
+const { outsideAvailability, reasonRequired } = appointmentRules;
 
 documentOperation({
   method: 'post',
@@ -55,6 +55,29 @@ documentOperation({
   },
 });
 
+documentOperation({
+  method: 'post',
+  path: `${path}/{id}/cancel`,
+  operationId: 'cancelAppointment',
+  tag: tags.scheduling.name,
+  summary: 'Cancelar uma consulta',
+  description:
+    'Cancela uma consulta pendente ou confirmada que ainda não começou e avisa a outra parte depois do commit: o médico recebe `appointment_cancelled_by_patient` e o paciente recebe `appointment_cancelled`. Cancelam o paciente dela, com motivo opcional, e o médico que a atende, com motivo obrigatório. Envie em `startsAt` o início que a tela mostrava: se a consulta mudou, já começou ou já foi encerrada, a resposta é `INVALID_STATE` e nada muda. O paciente pode cancelar uma consulta confirmada dentro da janela da política (`appointmentLateWindowHours`), e o cancelamento fica marcado como tardio. A vaga volta a ficar livre. As contas de demonstração também cancelam, porque os agendamentos delas são restaurados todo dia. Responde o detalhe atualizado; para os demais usuários, responde como inexistente. Limite: 60 requisições por minuto por IP.',
+  params: idParams,
+  body: cancelAppointmentSchema,
+  success: { status: 200, description: 'Consulta cancelada.', schema: appointmentSchema },
+  errors: {
+    403: { ...forbiddenResponse, description: 'A conta não tem perfil de paciente nem de médico (`FORBIDDEN`).' },
+    404: notFoundResponse(appointmentNotFound),
+    409: conflictResponse(appointmentConflicts.invalidState),
+    422: errorResponse('O médico não informou o motivo (`REASON_REQUIRED`).', {
+      message: reasonRequired.message,
+      code: reasonRequired.code,
+      fields: { [reasonRequired.field]: reasonRequired.message },
+    }),
+  },
+});
+
 export interface AppointmentsRouterDeps {
   controller: AppointmentsController;
   requireAuth: RequestHandler;
@@ -67,5 +90,6 @@ export function createAppointmentsRouter({ controller, requireAuth, requirePatie
   const router = Router();
   router.post(path, writeLimit, noStore, requireAuth, requirePatient, controller.book);
   router.get(`${path}/:id`, readLimit, noStore, requireAuth, controller.detail);
+  router.post(`${path}/:id/cancel`, writeLimit, noStore, requireAuth, controller.cancel);
   return router;
 }
