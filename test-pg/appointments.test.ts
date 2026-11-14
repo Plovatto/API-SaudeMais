@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
+import { DEMO_ACCOUNTS, DEMO_DOCTOR } from '@/modules/users/user.demo.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { as, signUp, START } from '../test/support/users.js';
@@ -21,6 +22,7 @@ describe('appointments on PostgreSQL', () => {
   let context: ReturnType<typeof buildTestApp>;
   let carlos: Doctor;
   let ana: Doctor;
+  let demoDoctor: Doctor;
 
   beforeEach(async () => {
     pool = await createCleanPool();
@@ -39,6 +41,7 @@ describe('appointments on PostgreSQL', () => {
     };
     carlos = named('Dr. Carlos Mendes');
     ana = named('Dra. Ana Ferreira');
+    demoDoctor = named(DEMO_DOCTOR.fullName);
   });
 
   afterEach(async () => {
@@ -90,6 +93,47 @@ describe('appointments on PostgreSQL', () => {
       [booked.id],
     );
     expect(events.rows[0]?.total).toBe(1);
+  });
+
+  async function demoBooking() {
+    const signIn = async ({ email, password }: { email: string; password: string }) =>
+      ((await request(app).post('/api/users/login').send({ email, password }).expect(200)).body as { token: string })
+        .token;
+    const [patient, doctor] = await Promise.all([signIn(DEMO_ACCOUNTS[0] ?? DEMO_DOCTOR), signIn(DEMO_DOCTOR)]);
+    const startsAt = '2026-11-23T11:00:00.000Z';
+    const { id } = (await book(patient, demoDoctor, startsAt).expect(201)).body as { id: string };
+    const act = (action: string, token: string) =>
+      request(app).post(`/api/appointments/${id}/${action}`).set(as(token)).send({ startsAt });
+    const events = async () =>
+      (
+        await pool.query<{ event_type: string }>(
+          "select event_type from booking_events where booking_id = $1 and event_type <> 'created' order by created_at, id",
+          [id],
+        )
+      ).rows.map((row) => row.event_type);
+    return { patient, doctor, act, events };
+  }
+
+  it('confirms a request only once when two confirmations race', async () => {
+    const { doctor, act, events } = await demoBooking();
+
+    const responses = await Promise.all([act('confirm', doctor), act('confirm', doctor)]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(responses.find((response) => response.status === 409)?.body).toMatchObject({ code: 'INVALID_STATE' });
+    expect(await events()).toEqual(['confirmed']);
+  });
+
+  it('keeps the patient cancellation when a confirmation races it', async () => {
+    const { patient, doctor, act, events } = await demoBooking();
+
+    const [confirmed, cancelled] = await Promise.all([act('confirm', doctor), act('cancel', patient)]);
+
+    expect(cancelled.status).toBe(200);
+    expect([200, 409]).toContain(confirmed.status);
+    expect(await events()).toEqual(confirmed.status === 200 ? ['confirmed', 'cancelled'] : ['cancelled']);
+    const status = await pool.query<{ status: string }>('select status from bookings');
+    expect(status.rows.map((row) => row.status)).toEqual(['cancelled']);
   });
 
   it('keeps a patient from holding two overlapping bookings with different doctors', async () => {
