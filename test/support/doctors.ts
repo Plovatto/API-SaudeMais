@@ -1,6 +1,7 @@
+import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
-import { as, buildUsersApp, login, registerAndLogin } from './users.js';
+import { as, buildUsersApp, login, registerAndLogin, signUp } from './users.js';
 
 export interface Doctor {
   id: string;
@@ -44,4 +45,19 @@ export async function doctorNamed(context: Clinic, fullName: string, token = con
   const doctor = page.items.find((item) => item.fullName === fullName);
   if (!doctor) throw new Error(`${fullName} is not listed`);
   return doctor;
+}
+
+export async function createDoctor(context: Clinic, email: string, fullName: string, registryNumber: string) {
+  const token = await signUp(context.app, email, fullName);
+  const rows = await context.db.execute<{ id: string }>(sql`
+    insert into doctor_profiles (user_id, specialty_id, council, unit_id, registry_number, registry_uf)
+    select u.id, p.specialty_id, p.council, p.unit_id, ${registryNumber}, 'SP'
+    from users u, doctor_profiles p join users d on d.id = p.user_id
+    where u.email = ${email} and d.full_name = 'Dr. Carlos Mendes'
+    returning user_id as id
+  `);
+  const id = rows.rows[0]?.id ?? '';
+  await context.db.execute(sql`insert into user_roles (user_id, role) values (${id}, 'doctor')`);
+  await context.modules.doctorSchedule.service.ensureDefault(id);
+  return { token, doctor: await doctorNamed(context, fullName) };
 }

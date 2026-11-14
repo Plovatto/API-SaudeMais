@@ -17,10 +17,10 @@ export class PatientBookingsService {
   }
 
   async home(patientId: string): Promise<PatientHome> {
-    const [upcoming, notifications] = await Promise.all([
+    const [upcoming, lastNotification] = await Promise.all([
       this.page(patientId, { scope: 'upcoming', page: 1, pageSize: HOME_UPCOMING }),
-      this.notifications.page({ userId: patientId, role: 'patient' }, { page: 1, pageSize: 1 }),
+      this.notifications.latest({ userId: patientId, role: 'patient' }),
     ]);
-    return { upcoming: upcoming.items, counts: upcoming.counts, lastNotification: notifications.items[0] ?? null };
+    return { upcoming: upcoming.items, counts: upcoming.counts, lastNotification };
   }
 }

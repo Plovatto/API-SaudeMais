@@ -6,6 +6,7 @@ import { createAdminUsersModule } from './admin-users/index.js';
 import { createAppointmentsModule } from './appointments/index.js';
 import { createBookingsModule } from './bookings/index.js';
 import { createCatalogModule } from './catalog/index.js';
+import { createDoctorAgendaModule } from './doctor-agenda/index.js';
 import { createDoctorScheduleModule } from './doctor-schedule/index.js';
 import { createDoctorsModule } from './doctors/index.js';
 import { createDemoModule } from './demo/index.js';
@@ -59,6 +60,12 @@ export function createModules(deps: ModulesDeps) {
     requireAuth: users.requireAuth,
     notifications: notifications.service,
   });
+  const doctorAgenda = createDoctorAgendaModule({
+    db: deps.db,
+    clock: deps.clock,
+    requireAuth: users.requireAuth,
+    notifications: notifications.service,
+  });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   return {
     users,
@@ -81,6 +88,7 @@ export function createModules(deps: ModulesDeps) {
       doctors.router,
       appointments.router,
       patientBookings.router,
+      doctorAgenda.router,
       notifications.routerFor(users.requireAuth),
     ],
   };

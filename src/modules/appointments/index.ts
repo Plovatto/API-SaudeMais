@@ -23,6 +23,7 @@ export function createAppointmentsModule({ db, clock, requireAuth, notifications
     controller: createAppointmentsController(service),
     requireAuth,
     requirePatient: createRequireRole('patient'),
+    requireDoctor: createRequireRole('doctor'),
   });
   return { router, service };
 }

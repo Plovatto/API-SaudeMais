@@ -1,6 +1,6 @@
 import { and, asc, count, eq, gt, isNull, lt, type SQL } from 'drizzle-orm';
 import type { PgSelect } from 'drizzle-orm/pg-core';
-import type { Database } from '../../database/pg-client.js';
+import { readSnapshot, type Database } from '../../database/pg-client.js';
 import { bookings, isActiveFuture } from '../../database/schema/bookings.js';
 import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
@@ -9,6 +9,7 @@ import { users } from '../../database/schema/users.js';
 import { pageOf, type Page } from '../../lib/pagination.js';
 import { unaccentMatch } from '../../lib/search.js';
 import type { SlotRequest } from '../../lib/time-slots.js';
+import { placeColumns } from '../bookings/bookings.repository.js';
 import { hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
 import { hasRole } from '../users/user.repository.js';
 import type { Doctor, DoctorsQuery } from './doctors.model.js';
@@ -27,8 +28,7 @@ interface Period {
 const doctorColumns = {
   id: users.id,
   fullName: users.fullName,
-  specialty: { id: specialties.id, name: specialties.name, council: specialties.council },
-  unit: { id: units.id, name: units.name, address: units.address, phone: units.phone },
+  ...placeColumns,
   registry: { number: doctorProfiles.registryNumber, uf: doctorProfiles.registryUf },
 };
 
@@ -73,26 +73,23 @@ export class DoctorsRepository {
     includeProtected: boolean,
     { from, to, now }: Period,
   ): Promise<(SlotContext & Pick<SlotRequest, 'busy'>) | undefined> {
-    return this.db.transaction(
-      async (tx) => {
-        const context = await slotContext(tx, doctorId, includeProtected);
-        if (!context) return undefined;
-        const busy = await tx
-          .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
-          .from(bookings)
-          .where(
-            and(
-              eq(bookings.doctorId, doctorId),
-              eq(bookings.kind, 'appointment'),
-              isActiveFuture(now),
-              lt(bookings.startsAt, to),
-              gt(bookings.endsAt, from),
-            ),
-          );
-        return { ...context, busy };
-      },
-      { isolationLevel: 'repeatable read', accessMode: 'read only' },
-    );
+    return this.db.transaction(async (tx) => {
+      const context = await slotContext(tx, doctorId, includeProtected);
+      if (!context) return undefined;
+      const busy = await tx
+        .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.doctorId, doctorId),
+            eq(bookings.kind, 'appointment'),
+            isActiveFuture(now),
+            lt(bookings.startsAt, to),
+            gt(bookings.endsAt, from),
+          ),
+        );
+      return { ...context, busy };
+    }, readSnapshot);
   }
 }
 

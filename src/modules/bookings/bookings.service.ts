@@ -1,18 +1,19 @@
-import { sql, type SQL } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import type { Clock } from '../../lib/clock.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import {
-  asSeen,
   cancelActiveFuture,
+  confirmPending,
   ofAccount,
+  seenBy,
   type BookingSide,
-  type CancelledBooking,
+  type ChangedBooking,
   type Canceller,
   type SeenBooking,
 } from './bookings.repository.js';
 
-function counterparts(booking: CancelledBooking, userId: string, canceller: Canceller) {
+function counterparts(booking: ChangedBooking, userId: string, canceller: Canceller) {
   const notice = {
     bookingId: booking.id,
     params: { startsAt: booking.startsAt.toISOString(), cancelledByRole: canceller.role },
@@ -65,13 +66,23 @@ export class BookingsService {
     canceller: Canceller & { role: BookingSide; userId: string },
   ): Promise<AfterCommit | undefined> {
     const { userId, role } = canceller;
-    const { cancelled, afterCommit } = await this.cancel(
-      tx,
-      sql`${ofAccount(userId, [role])} and ${asSeen(seen)}`,
-      userId,
-      canceller,
-    );
+    const { cancelled, afterCommit } = await this.cancel(tx, seenBy(userId, role, seen), userId, canceller);
     return cancelled > 0 ? afterCommit : undefined;
+  }
+
+  async confirmSeen(tx: Transaction, seen: SeenBooking, doctorId: string): Promise<AfterCommit | undefined> {
+    const confirmed = await confirmPending(tx, seenBy(doctorId, 'doctor', seen), doctorId, this.clock.now());
+    if (confirmed.length === 0) return undefined;
+    return this.notifications.notify(
+      tx,
+      confirmed.map((booking) => ({
+        userId: booking.patientId,
+        audienceRole: 'patient' as const,
+        type: 'appointment_confirmed' as const,
+        bookingId: booking.id,
+        params: { startsAt: booking.startsAt.toISOString() },
+      })),
+    );
   }
 
   private async cancel(tx: Transaction, scope: SQL, userId: string, canceller: Canceller) {

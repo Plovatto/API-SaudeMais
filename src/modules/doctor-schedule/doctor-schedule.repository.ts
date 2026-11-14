@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm';
-import type { Database, Transaction } from '../../database/pg-client.js';
+import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import { unitHours, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { doctorScheduleDays, doctorScheduleRanges } from '../../database/schema/doctor-schedule.js';
@@ -18,40 +18,37 @@ export class DoctorScheduleRepository {
   constructor(private readonly db: Database) {}
 
   find(doctorId: string): Promise<Schedule | undefined> {
-    return this.db.transaction(
-      async (tx) => {
-        const [profile] = await tx
-          .select({ unitId: doctorProfiles.unitId })
-          .from(doctorProfiles)
-          .where(eq(doctorProfiles.userId, doctorId));
-        if (!profile) return undefined;
-        const days = await tx
-          .select({ weekday: doctorScheduleDays.weekday, isActive: doctorScheduleDays.isActive })
-          .from(doctorScheduleDays)
-          .where(eq(doctorScheduleDays.doctorId, doctorId));
-        const ranges = await tx
-          .select({
-            weekday: doctorScheduleRanges.weekday,
-            startMin: doctorScheduleRanges.startMin,
-            endMin: doctorScheduleRanges.endMin,
-          })
-          .from(doctorScheduleRanges)
-          .where(eq(doctorScheduleRanges.doctorId, doctorId))
-          .orderBy(asc(doctorScheduleRanges.startMin));
-        const hours = await hoursOf(tx, profile.unitId);
-        return {
-          days: WEEKDAYS.map((weekday) => ({
-            weekday,
-            isActive: days.some((day) => day.weekday === weekday && day.isActive),
-            ranges: ranges
-              .filter((range) => range.weekday === weekday)
-              .map(({ startMin, endMin }) => ({ startMin, endMin })),
-          })),
-          unitHours: hours,
-        };
-      },
-      { isolationLevel: 'repeatable read', accessMode: 'read only' },
-    );
+    return this.db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select({ unitId: doctorProfiles.unitId })
+        .from(doctorProfiles)
+        .where(eq(doctorProfiles.userId, doctorId));
+      if (!profile) return undefined;
+      const days = await tx
+        .select({ weekday: doctorScheduleDays.weekday, isActive: doctorScheduleDays.isActive })
+        .from(doctorScheduleDays)
+        .where(eq(doctorScheduleDays.doctorId, doctorId));
+      const ranges = await tx
+        .select({
+          weekday: doctorScheduleRanges.weekday,
+          startMin: doctorScheduleRanges.startMin,
+          endMin: doctorScheduleRanges.endMin,
+        })
+        .from(doctorScheduleRanges)
+        .where(eq(doctorScheduleRanges.doctorId, doctorId))
+        .orderBy(asc(doctorScheduleRanges.startMin));
+      const hours = await hoursOf(tx, profile.unitId);
+      return {
+        days: WEEKDAYS.map((weekday) => ({
+          weekday,
+          isActive: days.some((day) => day.weekday === weekday && day.isActive),
+          ranges: ranges
+            .filter((range) => range.weekday === weekday)
+            .map(({ startMin, endMin }) => ({ startMin, endMin })),
+        })),
+        unitHours: hours,
+      };
+    }, readSnapshot);
   }
 
   replace({ doctorId, days, actor, check }: ReplaceRequest): Promise<UnitHour[] | undefined> {

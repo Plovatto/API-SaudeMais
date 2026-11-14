@@ -38,7 +38,7 @@ export const doctorSchema = registry.register(
 
 export const doctorPageSchema = registry.register('DoctorPage', paginatedSchema(doctorSchema));
 
-const civilDay = z.iso.date('Use uma data no formato AAAA-MM-DD.');
+export const civilDay = z.iso.date('Use uma data no formato AAAA-MM-DD.');
 
 export const availabilityQuery = z
   .strictObject({

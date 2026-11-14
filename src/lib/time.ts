@@ -36,3 +36,13 @@ export function startOfDayIn(timeZone: string, date: Date): Date {
   const wallClock = wallClockIn(timeZone, date);
   return instantOfWallClock(timeZone, wallClock - (wallClock % DAY));
 }
+
+export interface DayRange {
+  start: Date;
+  end: Date;
+}
+
+export function dayRangeIn(timeZone: string, date: Date): DayRange {
+  const start = startOfDayIn(timeZone, date);
+  return { start, end: startOfDayIn(timeZone, new Date(start.getTime() + DAY + 2 * HOUR)) };
+}
