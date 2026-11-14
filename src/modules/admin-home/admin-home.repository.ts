@@ -15,7 +15,7 @@ export class AdminHomeRepository {
       .select({ total: countDistinct(users.id) })
       .from(users)
       .innerJoin(userRoles, eq(userRoles.userId, users.id))
-      .where(and(eq(userRoles.role, role), isNull(users.deactivatedAt)));
+      .where(and(eq(userRoles.role, role), isNull(users.deactivatedAt), eq(users.isProtected, false)));
     return row?.total ?? 0;
   }
 

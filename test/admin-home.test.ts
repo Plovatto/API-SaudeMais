@@ -13,7 +13,7 @@ async function withAdmin() {
 }
 
 describe('GET /api/admin/home', () => {
-  it('counts only active accounts per role', async () => {
+  it('counts only active, non-demo accounts per role', async () => {
     const context = await withAdmin();
     for (const email of ['ana@email.com', 'bruno@email.com', 'carla@email.com']) {
       await request(context.app).post('/api/users/register').send(registration({ email })).expect(201);
@@ -28,7 +28,20 @@ describe('GET /api/admin/home', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.body).toEqual({ patients: 4, doctors: 1, appointmentsToday: 0 });
+    expect(response.body).toEqual({ patients: 3, doctors: 1, appointmentsToday: 0 });
+  });
+
+  it('leaves protected demo accounts out of the counts', async () => {
+    const context = await withAdmin();
+    await context.db.execute(sql`update users set is_protected = true where email = ${ADMIN.email}`);
+    await context.db.execute(
+      sql`insert into user_roles (user_id, role) select id, 'doctor' from users where email = 'paciente@saudemais.test'`,
+    );
+    await context.db.execute(sql`update users set is_protected = false where email = ${ADMIN.email}`);
+
+    const response = await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${context.token}`);
+
+    expect(response.body).toEqual({ patients: 1, doctors: 0, appointmentsToday: 0 });
   });
 
   it('is only for admins', async () => {

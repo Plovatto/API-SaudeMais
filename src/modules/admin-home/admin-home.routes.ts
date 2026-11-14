@@ -16,7 +16,7 @@ documentOperation({
   tag: tags.administration.name,
   summary: 'Ver os números do painel',
   description:
-    'Contagens do painel do administrador: pacientes e médicos com conta ativa e consultas de hoje no fuso de São Paulo. Contas desativadas não entram. Limite: 120 requisições por minuto por IP.',
+    'Contagens do painel do administrador: pacientes e médicos com conta ativa e consultas de hoje no fuso de São Paulo. Contas desativadas e de demonstração não entram. Limite: 120 requisições por minuto por IP.',
   success: { status: 200, description: 'Números do painel.', schema: adminHomeSchema },
   errors: { 403: forbiddenResponse },
 });
