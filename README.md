@@ -13,7 +13,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 
 ## Funcionalidades
 
-- Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash
+- Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash e validado a partir de um cache em memória de 5 min, limpo no mesmo processo a cada logout, troca de senha, desativação ou mudança de perfil
 - Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
 - Lista de médicos com busca e vagas livres por período, calculadas pela agenda do médico, pelo horário da unidade e pela política de agendamento, no fuso de São Paulo
 - Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco

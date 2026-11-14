@@ -64,22 +64,22 @@ export class PasswordResetRepository {
     });
   }
 
-  consume(tokenHash: string, passwordHash: string, now: Date): Promise<boolean> {
+  consume(tokenHash: string, passwordHash: string, now: Date): Promise<string | undefined> {
     return this.db.transaction(async (tx) => {
       const [token] = await tx
         .update(passwordResetTokens)
         .set({ usedAt: now })
         .where(and(eq(passwordResetTokens.tokenHash, tokenHash), open, gt(passwordResetTokens.expiresAt, now)))
         .returning({ userId: passwordResetTokens.userId });
-      if (!token) return false;
+      if (!token) return undefined;
       const [user] = await tx
         .select({ id: users.id })
         .from(users)
         .where(and(eq(users.id, token.userId), isNull(users.deactivatedAt), eq(users.isProtected, false)))
         .for('no key update');
-      if (!user) return false;
+      if (!user) return undefined;
       await applyNewPassword(tx, user.id, passwordHash, null, now);
-      return true;
+      return user.id;
     });
   }
 }

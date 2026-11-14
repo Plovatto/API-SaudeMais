@@ -7,6 +7,7 @@ import type { Clock } from '../../lib/clock.js';
 import { forbidden, protectedAccount } from '../../middleware/auth.js';
 import type { PasswordResetService } from '../password-reset/password-reset.service.js';
 import type { UpdateProfileInput } from '../users/user.model.js';
+import type { SessionCache } from '../users/user.session-cache.js';
 import { adminConflicts, doctorProfileNotFound, unavailable, userNotFound } from './admin-users.messages.js';
 import type {
   AdminUserDetail,
@@ -35,6 +36,7 @@ export class AdminUserService {
   constructor(
     private readonly repository: AdminUserRepository,
     private readonly passwordReset: PasswordResetService,
+    private readonly sessions: SessionCache,
     private readonly clock: Clock,
   ) {}
 
@@ -192,6 +194,7 @@ export class AdminUserService {
       { doctor_profiles_registry_key: adminConflicts.registryTaken },
     );
     if (!applied) throw notFound();
+    this.sessions.invalidateUser(id);
     return this.detail(id);
   }
 
