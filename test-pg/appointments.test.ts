@@ -99,7 +99,9 @@ describe('appointments on PostgreSQL', () => {
     const signIn = async ({ email, password }: { email: string; password: string }) =>
       ((await request(app).post('/api/users/login').send({ email, password }).expect(200)).body as { token: string })
         .token;
-    const [patient, doctor] = await Promise.all([signIn(DEMO_ACCOUNTS[0] ?? DEMO_DOCTOR), signIn(DEMO_DOCTOR)]);
+    const demoPatient = DEMO_ACCOUNTS.find((account) => account.roles.includes('patient'));
+    if (!demoPatient) throw new Error('The demo patient is not configured');
+    const [patient, doctor] = await Promise.all([signIn(demoPatient), signIn(DEMO_DOCTOR)]);
     const startsAt = '2026-11-23T11:00:00.000Z';
     const { id } = (await book(patient, demoDoctor, startsAt).expect(201)).body as { id: string };
     const act = (action: string, token: string) =>
@@ -134,6 +136,32 @@ describe('appointments on PostgreSQL', () => {
     expect(await events()).toEqual(confirmed.status === 200 ? ['confirmed', 'cancelled'] : ['cancelled']);
     const status = await pool.query<{ status: string }>('select status from bookings');
     expect(status.rows.map((row) => row.status)).toEqual(['cancelled']);
+  });
+
+  it('serves the doctor agenda tabs and home from PostgreSQL', async () => {
+    const { doctor, act } = await demoBooking();
+    await act('confirm', doctor).expect(200);
+    const get = (path: string) => request(app).get(path).set(as(doctor)).expect(200);
+
+    const tabs = await Promise.all(
+      ['pending', 'confirmed', 'awaiting', 'history'].map((tab) =>
+        get(`/api/doctor/appointments?tab=${tab}&from=2026-11-23`),
+      ),
+    );
+    const home = (await get('/api/doctor/home')).body as Record<string, unknown>;
+
+    expect(tabs.map((response) => (response.body as { total: number }).total)).toEqual([0, 1, 0, 0]);
+    expect(tabs[1]?.body).toMatchObject({
+      counts: { pending: 0, confirmed: 1, awaiting: 0, history: 0 },
+      items: [{ status: 'confirmed', actions: { canConfirm: false, canCancel: true } }],
+    });
+    expect(home).toMatchObject({
+      today: { date: '2026-11-20', total: 0 },
+      pending: [],
+      awaitingRecord: [],
+      counts: { pending: 0, confirmed: 1, awaiting: 0, history: 0 },
+      lastNotification: { type: 'appointment_requested' },
+    });
   });
 
   it('keeps a patient from holding two overlapping bookings with different doctors', async () => {

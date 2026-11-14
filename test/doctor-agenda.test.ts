@@ -16,8 +16,8 @@ interface Item {
 interface Counts {
   pending: number;
   confirmed: number;
+  awaiting: number;
   history: number;
-  awaitingRecord: number;
 }
 
 interface AgendaPage {
@@ -31,6 +31,7 @@ interface AgendaPage {
 interface Home {
   today: Record<string, unknown>;
   pending: Item[];
+  awaitingRecord: Item[];
   counts: Counts;
   lastNotification: { type: string; bookingId: string } | null;
 }
@@ -145,7 +146,7 @@ describe('GET /api/doctor/appointments', () => {
       page: 1,
       pageSize: 20,
       total: 2,
-      counts: { pending: 2, confirmed: 2, history: 4, awaitingRecord: 1 },
+      counts: { pending: 2, confirmed: 2, awaiting: 1, history: 4 },
     });
     expect(ids(page.items)).toEqual([pendingSoon.id, pendingLater.id]);
     const owner = await doctorNamed(context, 'Dra. Agenda Teste');
@@ -191,6 +192,31 @@ describe('GET /api/doctor/appointments', () => {
     for (const item of page.items) expect(item.actions).toEqual({ canConfirm: false, canCancel: false });
   });
 
+  it('lists started confirmed appointments awaiting record oldest first', async () => {
+    const page = (await list(doctor, { tab: 'awaiting' }).expect(200)).body as AgendaPage;
+
+    expect(page).toMatchObject({ total: 1, counts: { awaiting: 1, history: 4 } });
+    expect(page.items[0]).toMatchObject({
+      id: awaiting.id,
+      status: 'confirmed',
+      actions: { canConfirm: false, canCancel: false },
+    });
+  });
+
+  it('shows the phone only while the patient may still need to be reached or was seen', async () => {
+    const page = (await list(doctor, { tab: 'history' }).expect(200)).body as AgendaPage;
+
+    const phones = Object.fromEntries(
+      page.items.map((item) => [item.status, (item.patient as { phone: string | null }).phone]),
+    );
+    expect(phones).toEqual({
+      cancelled: null,
+      completed: '+5511987654321',
+      confirmed: '+5511987654321',
+      expired: null,
+    });
+  });
+
   it('starts at the São Paulo day given in from without changing the counts', async () => {
     const pending = (await list(doctor, { from: '2026-11-24' }).expect(200)).body as AgendaPage;
     const history = (await list(doctor, { tab: 'history', from: '2026-11-17' }).expect(200)).body as AgendaPage;
@@ -201,7 +227,7 @@ describe('GET /api/doctor/appointments', () => {
     await moveTo(pendingLater.id, slot('2026-11-24', '11:00'));
 
     expect(ids(pending.items)).toEqual([pendingLater.id]);
-    expect(pending.counts).toEqual({ pending: 2, confirmed: 2, history: 4, awaitingRecord: 1 });
+    expect(pending.counts).toEqual({ pending: 2, confirmed: 2, awaiting: 1, history: 4 });
     expect(ids(history.items)).toEqual([cancelled.id, completed.id]);
     expect(beforeMidnight.items).toEqual([]);
     expect(ids(atMidnight.items)).toEqual([pendingLater.id]);
@@ -285,7 +311,8 @@ describe('GET /api/doctor/home', () => {
     });
     expect(ids(body.pending)).toEqual([pendingToday.id, lateToday.id, tomorrow.id]);
     expect(body.pending[0]?.actions).toEqual({ canConfirm: true, canCancel: true });
-    expect(body.counts).toEqual({ pending: 4, confirmed: 1, history: 6, awaitingRecord: 1 });
+    expect(ids(body.awaitingRecord)).toEqual([awaiting.id]);
+    expect(body.counts).toEqual({ pending: 4, confirmed: 1, awaiting: 1, history: 6 });
     expect(body.lastNotification).toMatchObject({ type: 'appointment_cancelled_by_patient', bookingId: cancelled.id });
   });
 
@@ -305,7 +332,8 @@ describe('GET /api/doctor/home', () => {
         expired: 0,
       },
       pending: [],
-      counts: { pending: 0, confirmed: 0, history: 0, awaitingRecord: 0 },
+      awaitingRecord: [],
+      counts: { pending: 0, confirmed: 0, awaiting: 0, history: 0 },
       lastNotification: null,
     });
   });
@@ -400,7 +428,7 @@ describe('POST /api/appointments/:id/confirm', () => {
     expect(events.rows[0]?.total).toBe(1);
   });
 
-  it('answers 404 to other doctors and unknown ids and 403 to accounts without the doctor profile', async () => {
+  it('answers 404 to other doctors, exams and unknown ids and 403 to accounts without the doctor profile', async () => {
     const booked = await book(patient, owner, slot('2026-12-03', '11:00'));
     const other = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password }).expect(200);
     const body = { startsAt: booked.startsAt };
@@ -408,10 +436,19 @@ describe('POST /api/appointments/:id/confirm', () => {
     const otherDoctor = await confirm((other.body as { token: string }).token, booked.id, body);
     const unknown = await confirm(doctor, UNKNOWN_ID, body);
     const byPatient = await confirm(patient, booked.id, body);
+    const exams = await context.db.execute<{ id: string }>(sql`
+      insert into bookings (kind, patient_id, unit_id, exam_type_id, public_code, lane, starts_at, ends_at, status)
+      select 'exam', u.id, o.unit_id, o.exam_type_id, 'EX-9H5N4S', 1, '2026-12-10T12:00:00Z', '2026-12-10T12:20:00Z', 'confirmed'
+      from users u, (select unit_id, exam_type_id from unit_exam_offers limit 1) o
+      where u.email = 'historico@email.com'
+      returning id
+    `);
+    const exam = await confirm(doctor, exams.rows[0]?.id ?? '', { startsAt: '2026-12-10T12:00:00.000Z' });
 
     expect(otherDoctor.status).toBe(404);
     expect(otherDoctor.body).toEqual({ message: 'Consulta não encontrada.', code: 'NOT_FOUND' });
     expect(unknown.status).toBe(404);
+    expect(exam.status).toBe(404);
     expect(byPatient.status).toBe(403);
     expect(byPatient.body).toMatchObject({ code: 'FORBIDDEN' });
   });
