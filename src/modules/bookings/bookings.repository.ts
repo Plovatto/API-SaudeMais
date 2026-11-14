@@ -9,6 +9,7 @@ import {
   type BookingStatus,
   type CancellerRole,
 } from '../../database/schema/bookings.js';
+import { specialties, units } from '../../database/schema/catalog.js';
 
 export type BookingSide = 'patient' | 'doctor';
 
@@ -35,6 +36,11 @@ interface Change {
   where: SQL | undefined;
   event: Pick<typeof bookingEvents.$inferInsert, 'eventType' | 'actorType' | 'actorUserId' | 'createdAt'>;
 }
+
+export const placeColumns = {
+  specialty: { id: specialties.id, name: specialties.name, council: specialties.council },
+  unit: { id: units.id, name: units.name, address: units.address, phone: units.phone },
+};
 
 export const cancellationColumns = {
   byRole: bookings.cancelledByRole,

@@ -13,8 +13,7 @@ import {
 import { examTypes, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf } from '../../lib/pagination.js';
-import { cancellationColumns, countWhere, viewOf } from '../bookings/bookings.repository.js';
-import { placeColumns } from '../doctors/doctors.repository.js';
+import { cancellationColumns, countWhere, placeColumns, viewOf } from '../bookings/bookings.repository.js';
 import type { BookingScope, PatientBookingPage, PatientBookingsQuery } from './patient-bookings.model.js';
 
 const doctorUsers = alias(users, 'doctor_users');

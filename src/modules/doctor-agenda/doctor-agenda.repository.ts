@@ -12,8 +12,7 @@ import { specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf } from '../../lib/pagination.js';
 import { CLINIC_TIME_ZONE, instantOfWallClock, type DayRange } from '../../lib/time.js';
-import { cancellationColumns, countWhere, viewOf } from '../bookings/bookings.repository.js';
-import { placeColumns } from '../doctors/doctors.repository.js';
+import { cancellationColumns, countWhere, placeColumns, viewOf } from '../bookings/bookings.repository.js';
 import type { AgendaTab, DoctorAppointmentPage, DoctorAppointmentsQuery, DoctorHome } from './doctor-agenda.model.js';
 
 const futureWith = (status: BookingStatus, now: Date) => and(eq(bookings.status, status), gt(bookings.startsAt, now));

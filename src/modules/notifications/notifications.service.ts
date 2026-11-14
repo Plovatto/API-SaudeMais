@@ -44,8 +44,8 @@ export class NotificationsService {
     return this.repository.page(area, pagination);
   }
 
-  async latest(area: Area): Promise<NotificationView | null> {
-    return (await this.page(area, { page: 1, pageSize: 1 })).items[0] ?? null;
+  latest(area: Area): Promise<NotificationView | null> {
+    return this.repository.latest(area);
   }
 
   unreadCount(area: Area): Promise<number> {

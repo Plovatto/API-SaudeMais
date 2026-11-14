@@ -10,6 +10,36 @@ export type NewNotification = typeof notifications.$inferInsert;
 
 const ofArea = ({ userId, role }: Area) => and(eq(notifications.userId, userId), eq(notifications.audienceRole, role));
 
+function selectIn(db: Pick<Database, 'select'>, area: Area) {
+  return db
+    .select({
+      id: notifications.id,
+      type: notifications.type,
+      params: notifications.params,
+      bookingId: notifications.bookingId,
+      readAt: notifications.readAt,
+      createdAt: notifications.createdAt,
+      fullName: sql<
+        string | null
+      >`case when ${notifications.type} = 'user_registered' then (select ${users.fullName} from ${users} where ${users.id} = (${notifications.params}->>'userId')::uuid) end`,
+    })
+    .from(notifications)
+    .where(ofArea(area))
+    .orderBy(desc(notifications.createdAt), desc(notifications.id))
+    .$dynamic();
+}
+
+type NotificationRow = Awaited<ReturnType<typeof selectIn>>[number];
+
+function viewOf({ readAt, createdAt, fullName, params, ...row }: NotificationRow): NotificationView {
+  return {
+    ...row,
+    params: fullName === null ? params : { ...params, fullName },
+    readAt: readAt?.toISOString() ?? null,
+    createdAt: createdAt.toISOString(),
+  };
+}
+
 export class NotificationsRepository {
   constructor(private readonly db: Database) {}
 
@@ -26,33 +56,13 @@ export class NotificationsRepository {
   }
 
   async page(area: Area, pagination: Pagination): Promise<Page<NotificationView>> {
-    const where = ofArea(area);
-    const query = this.db
-      .select({
-        id: notifications.id,
-        type: notifications.type,
-        params: notifications.params,
-        bookingId: notifications.bookingId,
-        readAt: notifications.readAt,
-        createdAt: notifications.createdAt,
-        fullName: sql<
-          string | null
-        >`case when ${notifications.type} = 'user_registered' then (select ${users.fullName} from ${users} where ${users.id} = (${notifications.params}->>'userId')::uuid) end`,
-      })
-      .from(notifications)
-      .where(where)
-      .orderBy(desc(notifications.createdAt), desc(notifications.id))
-      .$dynamic();
-    const result = await pageOf(query, pagination, () => this.db.$count(notifications, where));
-    return {
-      ...result,
-      items: result.items.map(({ readAt, createdAt, fullName, params, ...row }) => ({
-        ...row,
-        params: fullName === null ? params : { ...params, fullName },
-        readAt: readAt?.toISOString() ?? null,
-        createdAt: createdAt.toISOString(),
-      })),
-    };
+    const result = await pageOf(selectIn(this.db, area), pagination, () => this.db.$count(notifications, ofArea(area)));
+    return { ...result, items: result.items.map(viewOf) };
+  }
+
+  async latest(area: Area): Promise<NotificationView | null> {
+    const [row] = await selectIn(this.db, area).limit(1);
+    return row ? viewOf(row) : null;
   }
 
   unreadCount(area: Area): Promise<number> {

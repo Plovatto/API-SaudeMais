@@ -9,6 +9,7 @@ import { users } from '../../database/schema/users.js';
 import { pageOf, type Page } from '../../lib/pagination.js';
 import { unaccentMatch } from '../../lib/search.js';
 import type { SlotRequest } from '../../lib/time-slots.js';
+import { placeColumns } from '../bookings/bookings.repository.js';
 import { hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
 import { hasRole } from '../users/user.repository.js';
 import type { Doctor, DoctorsQuery } from './doctors.model.js';
@@ -23,11 +24,6 @@ interface Period {
   to: Date;
   now: Date;
 }
-
-export const placeColumns = {
-  specialty: { id: specialties.id, name: specialties.name, council: specialties.council },
-  unit: { id: units.id, name: units.name, address: units.address, phone: units.phone },
-};
 
 const doctorColumns = {
   id: users.id,

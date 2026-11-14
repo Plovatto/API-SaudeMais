@@ -11,8 +11,14 @@ import {
 import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { users, type Role } from '../../database/schema/users.js';
-import { cancellationColumns, ofAccount, viewOf, type BookingSide } from '../bookings/bookings.repository.js';
-import { placeColumns, slotContext, type SlotContext } from '../doctors/doctors.repository.js';
+import {
+  cancellationColumns,
+  ofAccount,
+  placeColumns,
+  viewOf,
+  type BookingSide,
+} from '../bookings/bookings.repository.js';
+import { slotContext, type SlotContext } from '../doctors/doctors.repository.js';
 import type { Appointment } from './appointments.model.js';
 
 interface NewAppointment {
