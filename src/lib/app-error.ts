@@ -27,6 +27,10 @@ export function unprocessable(code: string, message: string, fields?: FieldError
   return new AppError(422, code, message, fields);
 }
 
+export function unprocessableField({ code, field, message }: FieldConflict): AppError {
+  return unprocessable(code, message, { [field]: message });
+}
+
 export function conflictError({ code, field, message }: FieldConflict): AppError {
   return new AppError(409, code, message, { [field]: message });
 }

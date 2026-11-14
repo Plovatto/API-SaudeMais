@@ -78,6 +78,20 @@
       "when": 1794665253429,
       "tag": "0010_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794666680712,
+      "tag": "0011_bookings",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794666687265,
+      "tag": "0012_bookings_no_overlap",
+      "breakpoints": true
     }
   ]
 }

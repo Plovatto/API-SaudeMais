@@ -1,64 +1,27 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DEMO_ACCOUNTS, DEMO_DOCTOR } from '@/modules/users/user.demo.js';
-import { as, buildUsersApp, login, registerAndLogin, registration } from './support/users.js';
-
-type Context = Awaited<ReturnType<typeof buildUsersApp>>;
-
-interface Doctor {
-  id: string;
-  fullName: string;
-  specialty: { id: string; name: string; council: string };
-  unit: { id: string; name: string; address: string; phone: string };
-  registry: { number: string; uf: string };
-}
-
-interface DoctorPage {
-  items: Doctor[];
-  page: number;
-  pageSize: number;
-  total: number;
-}
-
-interface Availability {
-  days: { date: string; slots: { startsAt: string; endsAt: string }[] }[];
-}
+import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import {
+  availability,
+  doctorNamed,
+  listDoctors,
+  setupClinic,
+  type Availability,
+  type Clinic,
+  type DoctorPage,
+} from './support/doctors.js';
+import { as, login, registration } from './support/users.js';
 
 const SAMPLE_NAMES = ['Dr. Carlos Mendes', 'Dr. Rafael Costa', 'Dra. Ana Ferreira', 'Dra. Beatriz Lima'];
 const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 
-async function setup() {
-  const context = await buildUsersApp();
-  await context.modules.users.bootstrap(undefined);
-  await context.modules.demo.service.seed();
-  const patient = await registerAndLogin(context.app);
-  const demo = DEMO_ACCOUNTS[0];
-  const demoLogin = await login(context.app, { email: demo?.email, password: demo?.password }).expect(200);
-  return { ...context, patient, demoPatient: (demoLogin.body as { token: string }).token };
-}
-
-type Setup = Awaited<ReturnType<typeof setup>>;
-
-const list = (context: Context, token: string, query: Record<string, string | number> = {}) =>
-  request(context.app).get('/api/doctors').query(query).set(as(token));
-
-const availability = (context: Context, token: string, id: string, query: Record<string, string>) =>
-  request(context.app).get(`/api/doctors/${id}/availability`).query(query).set(as(token));
-
-async function doctorNamed(context: Setup, fullName: string, token = context.demoPatient): Promise<Doctor> {
-  const page = (await list(context, token, { search: fullName }).expect(200)).body as DoctorPage;
-  const doctor = page.items.find((item) => item.fullName === fullName);
-  if (!doctor) throw new Error(`${fullName} is not listed`);
-  return doctor;
-}
-
 const namesOf = (response: request.Response) => (response.body as DoctorPage).items.map((item) => item.fullName);
 
-let context: Setup;
+let context: Clinic;
 
 beforeAll(async () => {
-  context = await setup();
+  context = await setupClinic();
 }, 60_000);
 
 describe('doctor routes', () => {
@@ -77,15 +40,15 @@ describe('doctor routes', () => {
 
     expect((await request(context.app).get('/api/doctors')).status).toBe(401);
     expect((await request(context.app).get(`/api/doctors/${doctor.id}/availability`).query(period)).status).toBe(401);
-    expect((await list(context, admin)).body).toMatchObject({ code: 'FORBIDDEN' });
-    expect((await list(context, admin)).status).toBe(403);
+    expect((await listDoctors(context, admin)).body).toMatchObject({ code: 'FORBIDDEN' });
+    expect((await listDoctors(context, admin)).status).toBe(403);
     expect((await availability(context, admin, doctor.id, period)).status).toBe(403);
   });
 });
 
 describe('GET /api/doctors', () => {
   it('lists active doctors with specialty, unit and registry', async () => {
-    const response = await list(context, context.patient).expect(200);
+    const response = await listDoctors(context, context.patient).expect(200);
     const page = response.body as DoctorPage;
     const carlos = page.items.find((item) => item.fullName === 'Dr. Carlos Mendes');
 
@@ -107,8 +70,8 @@ describe('GET /api/doctors', () => {
   });
 
   it('shows the demo doctor only to protected patients', async () => {
-    const visitor = await list(context, context.patient, { search: 'joao' }).expect(200);
-    const demo = await list(context, context.demoPatient).expect(200);
+    const visitor = await listDoctors(context, context.patient, { search: 'joao' }).expect(200);
+    const demo = await listDoctors(context, context.demoPatient).expect(200);
 
     expect((visitor.body as DoctorPage).total).toBe(0);
     expect(namesOf(demo).toSorted()).toEqual([...SAMPLE_NAMES, DEMO_DOCTOR.fullName].toSorted());
@@ -117,28 +80,29 @@ describe('GET /api/doctors', () => {
   it('filters by specialty', async () => {
     const carlos = await doctorNamed(context, 'Dr. Carlos Mendes');
 
-    const response = await list(context, context.patient, { specialtyId: carlos.specialty.id }).expect(200);
+    const response = await listDoctors(context, context.patient, { specialtyId: carlos.specialty.id }).expect(200);
 
     expect(namesOf(response)).toEqual(['Dr. Carlos Mendes']);
   });
 
   it('searches the name ignoring accents and case, with wildcards escaped', async () => {
-    expect(namesOf(await list(context, context.patient, { search: 'BEATRIZ' }).expect(200))).toEqual([
+    expect(namesOf(await listDoctors(context, context.patient, { search: 'BEATRIZ' }).expect(200))).toEqual([
       'Dra. Beatriz Lima',
     ]);
-    expect(namesOf(await list(context, context.demoPatient, { search: 'joao' }).expect(200))).toEqual([
+    expect(namesOf(await listDoctors(context, context.demoPatient, { search: 'joao' }).expect(200))).toEqual([
       DEMO_DOCTOR.fullName,
     ]);
-    expect(namesOf(await list(context, context.demoPatient, { search: 'JOÃO' }).expect(200))).toEqual([
+    expect(namesOf(await listDoctors(context, context.demoPatient, { search: 'JOÃO' }).expect(200))).toEqual([
       DEMO_DOCTOR.fullName,
     ]);
-    expect(namesOf(await list(context, context.patient, { search: '%' }).expect(200))).toEqual([]);
-    expect(namesOf(await list(context, context.patient, { search: 'Dr_' }).expect(200))).toEqual([]);
+    expect(namesOf(await listDoctors(context, context.patient, { search: '%' }).expect(200))).toEqual([]);
+    expect(namesOf(await listDoctors(context, context.patient, { search: 'Dr_' }).expect(200))).toEqual([]);
   });
 
   it('paginates', async () => {
-    const first = (await list(context, context.patient, { pageSize: 3 }).expect(200)).body as DoctorPage;
-    const second = (await list(context, context.patient, { pageSize: 3, page: 2 }).expect(200)).body as DoctorPage;
+    const first = (await listDoctors(context, context.patient, { pageSize: 3 }).expect(200)).body as DoctorPage;
+    const second = (await listDoctors(context, context.patient, { pageSize: 3, page: 2 }).expect(200))
+      .body as DoctorPage;
 
     expect(first.items).toHaveLength(3);
     expect(second).toMatchObject({ page: 2, pageSize: 3, total: 4 });
@@ -148,7 +112,7 @@ describe('GET /api/doctors', () => {
 
   it('rejects invalid filters', async () => {
     for (const query of [{ specialtyId: 'abc' }, { pageSize: 51 }, { search: 'a'.repeat(121) }, { role: 'doctor' }]) {
-      const response = await list(context, context.patient, query);
+      const response = await listDoctors(context, context.patient, query);
       expect(response.status).toBe(400);
       expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR' });
     }
@@ -264,8 +228,8 @@ describe('GET /api/doctors/:id/availability', () => {
     await context.db.execute(sql`insert into user_roles (user_id, role) values (${patientId}, 'doctor')`);
 
     const days = ((await availability(context, context.patient, carlos.id, week)).body as Availability).days;
-    const listed = namesOf(await list(context, context.patient).expect(200));
-    const withoutProfile = namesOf(await list(context, context.patient, { search: 'Ana Maria' }).expect(200));
+    const listed = namesOf(await listDoctors(context, context.patient).expect(200));
+    const withoutProfile = namesOf(await listDoctors(context, context.patient, { search: 'Ana Maria' }).expect(200));
 
     expect(days.map((day) => day.date)).toEqual(['2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27']);
     for (const id of [beatriz.id, rafael.id, ana.id, patientId]) {

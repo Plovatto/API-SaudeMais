@@ -104,7 +104,7 @@ document({
   operationId: 'adminDeactivateUser',
   summary: 'Desativar conta',
   description:
-    'Bloqueia o login e encerra todas as sessões; os agendamentos futuros da pessoa serão cancelados. Não é possível desativar a própria conta nem o último administrador. Repetir não tem efeito.',
+    'Bloqueia o login e encerra todas as sessões; cancela os agendamentos ativos futuros da pessoa, como paciente e como médico, e avisa a outra parte (`appointment_cancelled`). Não é possível desativar a própria conta nem o último administrador. Repetir não tem efeito.',
   params: idParams,
   writes: true,
   conflict: conflictResponse(adminConflicts.selfOrLastAdmin),
@@ -189,7 +189,7 @@ document({
   operationId: 'adminDeleteDoctorProfile',
   summary: 'Remover perfil médico',
   description:
-    'Tira o perfil de médico da conta; os dados do registro ficam guardados para o histórico e podem voltar a valer com um novo POST. As consultas futuras que ele atende serão canceladas.',
+    'Tira o perfil de médico da conta; os dados do registro ficam guardados para o histórico e podem voltar a valer com um novo POST. As consultas ativas futuras que ele atende são canceladas e os pacientes recebem o aviso `appointment_cancelled`.',
   params: idParams,
   writes: true,
   notFound: doctorProfileNotFound,

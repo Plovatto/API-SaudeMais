@@ -14,6 +14,7 @@ import type { CatalogController } from './catalog.controller.js';
 import {
   councilInUse,
   examTypeInactive,
+  inUse,
   notFoundMessages,
   uniqueConflicts,
   type CatalogEntity,
@@ -44,6 +45,8 @@ const notFoundOf = (entity: CatalogEntity) => notFoundResponse(notFoundMessages[
 const specialtyConflict = conflictResponse(uniqueConflicts.specialties_name_key, councilInUse);
 const unitConflict = conflictResponse(uniqueConflicts.units_name_key);
 const examTypeConflict = conflictResponse(uniqueConflicts.exam_types_code_key, uniqueConflicts.exam_types_name_key);
+const deactivationNote =
+  ' Desativar é recusado (`IN_USE`) enquanto houver agendamento futuro ativo ligado ao cadastro.';
 
 interface Operation extends Omit<OperationDoc, 'tag' | 'errors' | 'success'> {
   method: 'get' | 'post' | 'patch' | 'put';
@@ -119,12 +122,12 @@ document({
   path: '/api/admin/specialties/{id}',
   operationId: 'adminUpdateSpecialty',
   summary: 'Alterar ou ativar e desativar especialidade',
-  description: 'Altera só os campos enviados. A nova duração vale para agendamentos futuros criados depois da mudança.',
+  description: `Altera só os campos enviados. A nova duração vale para agendamentos futuros criados depois da mudança.${deactivationNote}`,
   params: idParams,
   entity: 'specialty',
   body: updateSpecialtySchema,
   success: { status: 200, description: 'Especialidade atualizada.', schema: specialtySchema },
-  conflict: specialtyConflict,
+  conflict: conflictResponse(uniqueConflicts.specialties_name_key, councilInUse, inUse),
 });
 document({
   method: 'get',
@@ -150,11 +153,11 @@ document({
   path: '/api/admin/units/{id}',
   operationId: 'adminUpdateUnit',
   summary: 'Alterar ou ativar e desativar unidade',
-  description: 'Altera só os campos enviados. `hours`, quando enviado, substitui todos os horários da unidade.',
+  description: `Altera só os campos enviados. \`hours\`, quando enviado, substitui todos os horários da unidade.${deactivationNote}`,
   params: idParams,
   body: updateUnitSchema,
   success: { status: 200, description: 'Unidade atualizada.', schema: unitSchema },
-  conflict: unitConflict,
+  conflict: conflictResponse(uniqueConflicts.units_name_key, inUse),
 });
 document({
   method: 'get',
@@ -180,12 +183,12 @@ document({
   path: '/api/admin/exam-types/{id}',
   operationId: 'adminUpdateExamType',
   summary: 'Alterar ou ativar e desativar tipo de exame',
-  description: 'Altera só os campos enviados.',
+  description: `Altera só os campos enviados.${deactivationNote}`,
   params: idParams,
   entity: 'exam_type',
   body: updateExamTypeSchema,
   success: { status: 200, description: 'Tipo de exame atualizado.', schema: examTypeSchema },
-  conflict: examTypeConflict,
+  conflict: conflictResponse(uniqueConflicts.exam_types_code_key, uniqueConflicts.exam_types_name_key, inUse),
 });
 document({
   method: 'get',
@@ -202,11 +205,11 @@ document({
   operationId: 'adminSaveExamOffer',
   summary: 'Oferecer um exame na unidade',
   description:
-    'Cria ou altera a oferta do exame na unidade. Um tipo de exame inativo só pode ter oferta inativa. Devolve todas as ofertas da unidade.',
+    'Cria ou altera a oferta do exame na unidade. Um tipo de exame inativo só pode ter oferta inativa. Desativar a oferta é recusado (`IN_USE`) enquanto houver exame futuro ativo nela. Devolve todas as ofertas da unidade.',
   params: offerParams,
   body: saveOfferSchema,
   success: { status: 200, description: 'Ofertas da unidade.', schema: z.array(examOfferSchema) },
-  conflict: conflictResponse(examTypeInactive),
+  conflict: conflictResponse(examTypeInactive, inUse),
 });
 document({
   method: 'get',

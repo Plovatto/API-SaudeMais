@@ -1,6 +1,7 @@
-import { and, asc, count, eq, isNull, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, gt, isNull, lt, type SQL } from 'drizzle-orm';
 import type { PgSelect } from 'drizzle-orm/pg-core';
 import type { Database } from '../../database/pg-client.js';
+import { bookings, isActiveFuture } from '../../database/schema/bookings.js';
 import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { doctorScheduleDays, doctorScheduleRanges } from '../../database/schema/doctor-schedule.js';
@@ -12,10 +13,16 @@ import { hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
 import { hasRole } from '../users/user.repository.js';
 import type { Doctor, DoctorsQuery } from './doctors.model.js';
 
-type BookingContext = Pick<
+export type SlotContext = Pick<
   SlotRequest,
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays'
->;
+> & { specialtyId: string };
+
+interface Period {
+  from: Date;
+  to: Date;
+  now: Date;
+}
 
 const doctorColumns = {
   id: users.id,
@@ -61,35 +68,65 @@ export class DoctorsRepository {
     });
   }
 
-  bookingContext(doctorId: string, includeProtected: boolean): Promise<BookingContext | undefined> {
+  bookingContext(
+    doctorId: string,
+    includeProtected: boolean,
+    { from, to, now }: Period,
+  ): Promise<(SlotContext & Pick<SlotRequest, 'busy'>) | undefined> {
     return this.db.transaction(
       async (tx) => {
-        const [doctor] = await joinProfile(
-          tx.select({ durationMin: specialties.appointmentDurationMin, unitId: units.id }).from(users).$dynamic(),
-        ).where(and(eq(users.id, doctorId), bookable(includeProtected)));
-        if (!doctor) return undefined;
-        const ranges = await tx
-          .select({
-            weekday: doctorScheduleRanges.weekday,
-            startMin: doctorScheduleRanges.startMin,
-            endMin: doctorScheduleRanges.endMin,
-          })
-          .from(doctorScheduleRanges)
-          .innerJoin(
-            doctorScheduleDays,
+        const context = await slotContext(tx, doctorId, includeProtected);
+        if (!context) return undefined;
+        const busy = await tx
+          .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
+          .from(bookings)
+          .where(
             and(
-              eq(doctorScheduleDays.doctorId, doctorScheduleRanges.doctorId),
-              eq(doctorScheduleDays.weekday, doctorScheduleRanges.weekday),
+              eq(bookings.doctorId, doctorId),
+              eq(bookings.kind, 'appointment'),
+              isActiveFuture(now),
+              lt(bookings.startsAt, to),
+              gt(bookings.endsAt, from),
             ),
-          )
-          .where(and(eq(doctorScheduleRanges.doctorId, doctorId), eq(doctorScheduleDays.isActive, true)));
-        const [policy] = await tx
-          .select({ minLeadMinutes: settings.minLeadMinutes, bookingHorizonDays: settings.bookingHorizonDays })
-          .from(settings);
-        if (!policy) throw new Error('Settings row is missing');
-        return { durationMin: doctor.durationMin, ranges, unitHours: await hoursOf(tx, doctor.unitId), ...policy };
+          );
+        return { ...context, busy };
       },
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
     );
   }
+}
+
+export async function slotContext(
+  db: Pick<Database, 'select'>,
+  doctorId: string,
+  includeProtected: boolean,
+): Promise<SlotContext | undefined> {
+  const [doctor] = await joinProfile(
+    db
+      .select({ durationMin: specialties.appointmentDurationMin, specialtyId: specialties.id, unitId: units.id })
+      .from(users)
+      .$dynamic(),
+  ).where(and(eq(users.id, doctorId), bookable(includeProtected)));
+  if (!doctor) return undefined;
+  const ranges = await db
+    .select({
+      weekday: doctorScheduleRanges.weekday,
+      startMin: doctorScheduleRanges.startMin,
+      endMin: doctorScheduleRanges.endMin,
+    })
+    .from(doctorScheduleRanges)
+    .innerJoin(
+      doctorScheduleDays,
+      and(
+        eq(doctorScheduleDays.doctorId, doctorScheduleRanges.doctorId),
+        eq(doctorScheduleDays.weekday, doctorScheduleRanges.weekday),
+      ),
+    )
+    .where(and(eq(doctorScheduleRanges.doctorId, doctorId), eq(doctorScheduleDays.isActive, true)));
+  const [policy] = await db
+    .select({ minLeadMinutes: settings.minLeadMinutes, bookingHorizonDays: settings.bookingHorizonDays })
+    .from(settings);
+  if (!policy) throw new Error('Settings row is missing');
+  const { durationMin, specialtyId, unitId } = doctor;
+  return { durationMin, specialtyId, ranges, unitHours: await hoursOf(db, unitId), ...policy };
 }

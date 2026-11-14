@@ -1,10 +1,12 @@
-import type { Transaction } from '../../database/pg-client.js';
-import { AppError, conflictError, unprocessable, type FieldConflict } from '../../lib/app-error.js';
+import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
+import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { forbidden, protectedAccount } from '../../middleware/auth.js';
+import type { BookingSide } from '../bookings/bookings.repository.js';
+import type { BookingsService } from '../bookings/bookings.service.js';
 import type { PasswordResetService } from '../password-reset/password-reset.service.js';
 import type { UpdateProfileInput } from '../users/user.model.js';
 import type { SessionCache } from '../users/user.session-cache.js';
@@ -19,8 +21,6 @@ import type {
 import type { AdminUserRepository, LockedUser } from './admin-users.repository.js';
 
 const notFound = (message = userNotFound) => new AppError(404, 'NOT_FOUND', message);
-const unavailableError = ({ code, field, message }: FieldConflict) =>
-  unprocessable(code, message, { [field]: message });
 
 function editable(user: LockedUser): LockedUser {
   if (user.isProtected) throw protectedAccount();
@@ -36,6 +36,7 @@ export class AdminUserService {
   constructor(
     private readonly repository: AdminUserRepository,
     private readonly passwordReset: PasswordResetService,
+    private readonly bookings: BookingsService,
     private readonly sessions: SessionCache,
     private readonly clock: Clock,
   ) {}
@@ -50,7 +51,7 @@ export class AdminUserService {
 
   async impact(id: string): Promise<DeactivationImpact> {
     await this.detail(id);
-    return this.repository.futureBookingCounts(id);
+    return this.repository.futureBookingCounts(id, this.clock.now());
   }
 
   update(actor: Actor, id: string, { fullName, phone }: UpdateProfileInput) {
@@ -67,12 +68,12 @@ export class AdminUserService {
       actor,
       id,
       'user.deactivated',
-      async (tx, user) => {
+      async (tx, user, defer) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
         editable(user);
         if (user.deactivatedAt) return undefined;
         await this.ensureAnotherAdmin(tx, user);
-        await this.repository.cancelFutureBookings(tx, id, 'both');
+        defer(await this.cancelBookings(tx, user, ['patient', 'doctor'], actor));
         await this.repository.setDeactivated(tx, id, this.clock.now());
         return {};
       },
@@ -162,10 +163,10 @@ export class AdminUserService {
   }
 
   deleteDoctorProfile(actor: Actor, id: string) {
-    return this.change(actor, id, 'doctor_profile.deleted', async (tx, user) => {
+    return this.change(actor, id, 'doctor_profile.deleted', async (tx, user, defer) => {
       editable(user);
       if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
-      await this.repository.cancelFutureBookings(tx, id, 'doctor');
+      defer(await this.cancelBookings(tx, user, ['doctor'], actor));
       await this.repository.revokeRole(tx, id, 'doctor');
       return {};
     });
@@ -175,16 +176,21 @@ export class AdminUserService {
     actor: Actor,
     id: string,
     action: string,
-    work: (tx: Transaction, user: LockedUser) => Promise<Record<string, unknown> | undefined>,
+    work: (
+      tx: Transaction,
+      user: LockedUser,
+      defer: (afterCommit: AfterCommit) => void,
+    ) => Promise<Record<string, unknown> | undefined>,
     adminSet = false,
   ): Promise<AdminUserDetail> {
+    const afterCommits: AfterCommit[] = [];
     const applied = await withConstraintConflicts(
       () =>
         this.repository.mutate(
           id,
           async (tx, user) => {
             if (!(await this.repository.isActiveAdmin(tx, actor.actorId))) throw forbidden();
-            const metadata = await work(tx, user);
+            const metadata = await work(tx, user, (afterCommit) => afterCommits.push(afterCommit));
             if (metadata)
               await this.repository.audit({ ...actor, action, entityType: 'user', entityId: id, metadata }, tx);
             return true;
@@ -195,6 +201,7 @@ export class AdminUserService {
     );
     if (!applied) throw notFound();
     this.sessions.invalidateUser(id);
+    afterCommits.forEach(runAfterCommit);
     return this.detail(id);
   }
 
@@ -207,15 +214,20 @@ export class AdminUserService {
   private async availableCouncil(tx: Transaction, specialtyId: string): Promise<string> {
     return (
       (await this.repository.activeSpecialtyCouncil(tx, specialtyId)) ??
-      Promise.reject(unavailableError(unavailable.specialty))
+      Promise.reject(unprocessableField(unavailable.specialty))
     );
   }
 
   private async ensureUnitAvailable(tx: Transaction, unitId: string): Promise<void> {
-    if (!(await this.repository.unitIsActive(tx, unitId))) throw unavailableError(unavailable.unit);
+    if (!(await this.repository.unitIsActive(tx, unitId))) throw unprocessableField(unavailable.unit);
+  }
+
+  private async cancelBookings(tx: Transaction, user: LockedUser, sides: BookingSide[], actor: Actor) {
+    if (user.roles.includes('doctor')) await this.repository.profileRow(tx, user.id, true);
+    return this.bookings.cancelForAccount(tx, user.id, sides, { role: 'admin', userId: actor.actorId });
   }
 
   private async hasFutureAppointments(tx: Transaction, id: string): Promise<boolean> {
-    return (await this.repository.futureBookingCounts(id, tx)).futureAppointmentsAsDoctor > 0;
+    return (await this.repository.futureBookingCounts(id, this.clock.now(), tx)).futureAppointmentsAsDoctor > 0;
   }
 }

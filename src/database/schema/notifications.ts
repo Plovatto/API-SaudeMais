@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, foreignKey, index, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { bookings } from './bookings.js';
 import { isOneOf, timestamptz, uuidv7Id } from './columns.js';
 import { roles, users } from './users.js';
 
@@ -33,6 +34,11 @@ export const notifications = pgTable(
     foreignKey({ name: 'notifications_user_id_fkey', columns: [table.userId], foreignColumns: [users.id] }).onDelete(
       'cascade',
     ),
+    foreignKey({
+      name: 'notifications_booking_id_fkey',
+      columns: [table.bookingId],
+      foreignColumns: [bookings.id],
+    }).onDelete('cascade'),
     index('notifications_user_role_created_at_idx').on(
       table.userId,
       table.audienceRole,

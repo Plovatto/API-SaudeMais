@@ -1,7 +1,7 @@
 import { AppError } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import type { Page } from '../../lib/pagination.js';
-import { CLINIC_TIME_ZONE } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, DAY, instantOfWallClock } from '../../lib/time.js';
 import { slotDays } from '../../lib/time-slots.js';
 import { doctorNotFound } from './doctors.messages.js';
 import type { Availability, AvailabilityQuery, Doctor, DoctorsQuery } from './doctors.model.js';
@@ -18,10 +18,13 @@ export class DoctorsService {
   }
 
   async availability(doctorId: string, period: AvailabilityQuery, viewerIsProtected: boolean): Promise<Availability> {
-    const context = await this.repository.bookingContext(doctorId, viewerIsProtected);
+    const now = this.clock.now();
+    const context = await this.repository.bookingContext(doctorId, viewerIsProtected, {
+      from: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.from)),
+      to: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.to) + DAY),
+      now,
+    });
     if (!context) throw new AppError(404, 'NOT_FOUND', doctorNotFound);
-    return {
-      days: slotDays({ ...context, ...period, now: this.clock.now(), timeZone: CLINIC_TIME_ZONE, busy: [] }),
-    };
+    return { days: slotDays({ ...context, ...period, now, timeZone: CLINIC_TIME_ZONE }) };
   }
 }

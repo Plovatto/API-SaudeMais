@@ -1,0 +1,3 @@
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_doctor_no_overlap_excl" EXCLUDE USING gist ("doctor_id" WITH =, tstzrange("starts_at", "ends_at", '[)') WITH &&) WHERE (kind = 'appointment' and status in ('pending', 'confirmed'));--> statement-breakpoint
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_patient_no_overlap_excl" EXCLUDE USING gist ("patient_id" WITH =, tstzrange("starts_at", "ends_at", '[)') WITH &&) WHERE (status in ('pending', 'confirmed'));--> statement-breakpoint
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_exam_lane_no_overlap_excl" EXCLUDE USING gist ("unit_id" WITH =, "exam_type_id" WITH =, "lane" WITH =, tstzrange("starts_at", "ends_at", '[)') WITH &&) WHERE (kind = 'exam' and status = 'confirmed');

@@ -1,4 +1,5 @@
 export * from './audit-logs.js';
+export * from './bookings.js';
 export * from './catalog.js';
 export * from './doctor-profiles.js';
 export * from './doctor-schedule.js';

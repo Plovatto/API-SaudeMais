@@ -44,3 +44,8 @@ export async function registerAndLogin(app: App, body: Record<string, unknown> =
   const response = await login(app, body);
   return (response.body as { token: string }).token;
 }
+
+export async function signUp(app: App, email: string, fullName = 'Paciente de Teste') {
+  await request(app).post('/api/users/register').send(registration({ email, fullName })).expect(201);
+  return ((await login(app, { email }).expect(200)).body as { token: string }).token;
+}

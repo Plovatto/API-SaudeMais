@@ -1,6 +1,8 @@
 const UNIQUE_VIOLATION = '23505';
 const FOREIGN_KEY_VIOLATION = '23503';
 const EXCLUSION_VIOLATION = '23P01';
+const DEADLOCK_DETECTED = '40P01';
+const CONFLICT_CODES = new Set([UNIQUE_VIOLATION, FOREIGN_KEY_VIOLATION, EXCLUSION_VIOLATION]);
 
 interface PgError {
   code: string;
@@ -41,5 +43,14 @@ export const isExclusionViolation = (error: unknown, constraint: string) =>
 
 export function violatedConstraint(error: unknown): string | undefined {
   const pgError = findPgError(error);
-  return pgError?.code === UNIQUE_VIOLATION || pgError?.code === FOREIGN_KEY_VIOLATION ? pgError.constraint : undefined;
+  return pgError && CONFLICT_CODES.has(pgError.code) ? pgError.constraint : undefined;
+}
+
+export async function retryOnDeadlock<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (findPgError(error)?.code !== DEADLOCK_DETECTED) throw error;
+    return work();
+  }
 }

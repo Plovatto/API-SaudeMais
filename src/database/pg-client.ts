@@ -8,6 +8,14 @@ export type Database = PgDatabase<PgQueryResultHKT, typeof schema>;
 export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export type AfterCommit = () => void;
 
+export function runAfterCommit(afterCommit: AfterCommit | undefined): void {
+  try {
+    afterCommit?.();
+  } catch (err) {
+    logger.error({ err }, 'After-commit hook failed');
+  }
+}
+
 export function poolOptions(connectionString: string): PoolConfig {
   return {
     connectionString,
