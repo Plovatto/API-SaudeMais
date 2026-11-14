@@ -7,6 +7,7 @@ import { userRoles, users, type Role } from '../../database/schema/users.js';
 import { recordAudit, type AuditEntry } from '../../lib/audit.js';
 import { pageOf, type Page } from '../../lib/pagination.js';
 import { likePattern, unaccentMatch } from '../../lib/search.js';
+import { futureBookingCounts } from '../bookings/bookings.repository.js';
 import { hasRole, publicUserColumns } from '../users/user.repository.js';
 import type { AdminUser, AdminUserDetail, DoctorProfile, UsersQuery } from './admin-users.model.js';
 
@@ -160,12 +161,8 @@ export class AdminUserRepository {
       .onConflictDoUpdate({ target: doctorProfiles.userId, set: profile });
   }
 
-  futureBookingCounts(_userId: string, _db: Pick<Database, 'select'> = this.db) {
-    return Promise.resolve({ futureAppointmentsAsPatient: 0, futureAppointmentsAsDoctor: 0 });
-  }
-
-  cancelFutureBookings(_tx: Transaction, _userId: string, _as: 'patient' | 'doctor' | 'both') {
-    return Promise.resolve();
+  futureBookingCounts(userId: string, now: Date, db: Pick<Database, 'select'> = this.db) {
+    return futureBookingCounts(db, userId, now);
   }
 
   audit(entry: AuditEntry, db: Pick<Database, 'insert'> = this.db) {

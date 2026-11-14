@@ -1,10 +1,12 @@
-import type { Transaction } from '../../database/pg-client.js';
+import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
 import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { forbidden, protectedAccount } from '../../middleware/auth.js';
+import type { BookingSide } from '../bookings/bookings.repository.js';
+import type { BookingsService } from '../bookings/bookings.service.js';
 import type { PasswordResetService } from '../password-reset/password-reset.service.js';
 import type { UpdateProfileInput } from '../users/user.model.js';
 import { adminConflicts, doctorProfileNotFound, unavailable, userNotFound } from './admin-users.messages.js';
@@ -33,6 +35,7 @@ export class AdminUserService {
   constructor(
     private readonly repository: AdminUserRepository,
     private readonly passwordReset: PasswordResetService,
+    private readonly bookings: BookingsService,
     private readonly clock: Clock,
   ) {}
 
@@ -46,7 +49,7 @@ export class AdminUserService {
 
   async impact(id: string): Promise<DeactivationImpact> {
     await this.detail(id);
-    return this.repository.futureBookingCounts(id);
+    return this.repository.futureBookingCounts(id, this.clock.now());
   }
 
   update(actor: Actor, id: string, { fullName, phone }: UpdateProfileInput) {
@@ -63,12 +66,12 @@ export class AdminUserService {
       actor,
       id,
       'user.deactivated',
-      async (tx, user) => {
+      async (tx, user, defer) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
         editable(user);
         if (user.deactivatedAt) return undefined;
         await this.ensureAnotherAdmin(tx, user);
-        await this.repository.cancelFutureBookings(tx, id, 'both');
+        defer(await this.cancelBookings(tx, user, ['patient', 'doctor'], actor));
         await this.repository.setDeactivated(tx, id, this.clock.now());
         return {};
       },
@@ -158,10 +161,10 @@ export class AdminUserService {
   }
 
   deleteDoctorProfile(actor: Actor, id: string) {
-    return this.change(actor, id, 'doctor_profile.deleted', async (tx, user) => {
+    return this.change(actor, id, 'doctor_profile.deleted', async (tx, user, defer) => {
       editable(user);
       if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
-      await this.repository.cancelFutureBookings(tx, id, 'doctor');
+      defer(await this.cancelBookings(tx, user, ['doctor'], actor));
       await this.repository.revokeRole(tx, id, 'doctor');
       return {};
     });
@@ -171,16 +174,21 @@ export class AdminUserService {
     actor: Actor,
     id: string,
     action: string,
-    work: (tx: Transaction, user: LockedUser) => Promise<Record<string, unknown> | undefined>,
+    work: (
+      tx: Transaction,
+      user: LockedUser,
+      defer: (afterCommit: AfterCommit) => void,
+    ) => Promise<Record<string, unknown> | undefined>,
     adminSet = false,
   ): Promise<AdminUserDetail> {
+    const afterCommits: AfterCommit[] = [];
     const applied = await withConstraintConflicts(
       () =>
         this.repository.mutate(
           id,
           async (tx, user) => {
             if (!(await this.repository.isActiveAdmin(tx, actor.actorId))) throw forbidden();
-            const metadata = await work(tx, user);
+            const metadata = await work(tx, user, (afterCommit) => afterCommits.push(afterCommit));
             if (metadata)
               await this.repository.audit({ ...actor, action, entityType: 'user', entityId: id, metadata }, tx);
             return true;
@@ -190,6 +198,7 @@ export class AdminUserService {
       { doctor_profiles_registry_key: adminConflicts.registryTaken },
     );
     if (!applied) throw notFound();
+    afterCommits.forEach(runAfterCommit);
     return this.detail(id);
   }
 
@@ -210,7 +219,12 @@ export class AdminUserService {
     if (!(await this.repository.unitIsActive(tx, unitId))) throw unprocessableField(unavailable.unit);
   }
 
+  private async cancelBookings(tx: Transaction, user: LockedUser, sides: BookingSide[], actor: Actor) {
+    if (user.roles.includes('doctor')) await this.repository.profileRow(tx, user.id, true);
+    return this.bookings.cancelForAccount(tx, user.id, sides, { role: 'admin', userId: actor.actorId });
+  }
+
   private async hasFutureAppointments(tx: Transaction, id: string): Promise<boolean> {
-    return (await this.repository.futureBookingCounts(id, tx)).futureAppointmentsAsDoctor > 0;
+    return (await this.repository.futureBookingCounts(id, this.clock.now(), tx)).futureAppointmentsAsDoctor > 0;
   }
 }
