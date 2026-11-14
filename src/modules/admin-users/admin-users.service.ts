@@ -1,5 +1,5 @@
 import type { Transaction } from '../../database/pg-client.js';
-import { AppError, conflictError, type FieldConflict } from '../../lib/app-error.js';
+import { AppError, conflictError, unprocessable, type FieldConflict } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import type { Actor } from '../../lib/audit.js';
@@ -18,8 +18,8 @@ import type {
 import type { AdminUserRepository, LockedUser } from './admin-users.repository.js';
 
 const notFound = (message = userNotFound) => new AppError(404, 'NOT_FOUND', message);
-const unprocessable = ({ code, field, message }: FieldConflict) =>
-  new AppError(422, code, message, { [field]: message });
+const unavailableError = ({ code, field, message }: FieldConflict) =>
+  unprocessable(code, message, { [field]: message });
 
 function editable(user: LockedUser): LockedUser {
   if (user.isProtected) throw protectedAccount();
@@ -204,12 +204,12 @@ export class AdminUserService {
   private async availableCouncil(tx: Transaction, specialtyId: string): Promise<string> {
     return (
       (await this.repository.activeSpecialtyCouncil(tx, specialtyId)) ??
-      Promise.reject(unprocessable(unavailable.specialty))
+      Promise.reject(unavailableError(unavailable.specialty))
     );
   }
 
   private async ensureUnitAvailable(tx: Transaction, unitId: string): Promise<void> {
-    if (!(await this.repository.unitIsActive(tx, unitId))) throw unprocessable(unavailable.unit);
+    if (!(await this.repository.unitIsActive(tx, unitId))) throw unavailableError(unavailable.unit);
   }
 
   private async hasFutureAppointments(tx: Transaction, id: string): Promise<boolean> {

@@ -1,6 +1,12 @@
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { conflictResponse, errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
+import {
+  conflictResponse,
+  errorResponse,
+  forbiddenResponse,
+  notFoundResponse,
+  protectedAccountResponse,
+} from '../../docs/common-schemas.js';
 import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { idParams } from '../../lib/params.js';
@@ -20,10 +26,7 @@ import {
   usersQuery,
 } from './admin-users.model.js';
 
-const protectedResponse = errorResponse(
-  'Sem perfil de administrador (`FORBIDDEN`) ou conta de demonstração (`PROTECTED_ACCOUNT`).',
-  { message: 'Esta é uma conta de demonstração e não pode ser alterada.', code: 'PROTECTED_ACCOUNT' },
-);
+const protectedResponse = protectedAccountResponse('administrador');
 const userMissing = notFoundResponse(userNotFound);
 const unavailableResponse = errorResponse(
   'Especialidade ou unidade inativa ou inexistente (`SPECIALTY_UNAVAILABLE`, `UNIT_UNAVAILABLE`).',

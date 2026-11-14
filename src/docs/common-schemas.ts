@@ -1,6 +1,7 @@
 import './zod-extend.js';
 import { z } from 'zod';
 import type { FieldConflict } from '../lib/app-error.js';
+import { PROTECTED_ACCOUNT_MESSAGE } from '../middleware/auth.js';
 import { registry } from './registry.js';
 
 export const errorResponseSchema = registry.register(
@@ -59,6 +60,13 @@ export const forbiddenResponse = errorResponse('A conta não tem o perfil exigid
   message: 'Você não tem acesso a esta área.',
   code: 'FORBIDDEN',
 });
+
+export function protectedAccountResponse(role?: string) {
+  const description = role
+    ? `Sem perfil de ${role} (\`FORBIDDEN\`) ou conta de demonstração (\`PROTECTED_ACCOUNT\`).`
+    : 'Conta de demonstração (`PROTECTED_ACCOUNT`); não pode ser alterada.';
+  return errorResponse(description, { message: PROTECTED_ACCOUNT_MESSAGE, code: 'PROTECTED_ACCOUNT' });
+}
 
 export const tooManyRequestsResponse = errorResponse(
   'Limite de tentativas atingido (`TOO_MANY_REQUESTS`). O cabeçalho `RateLimit` diz quando tentar de novo.',

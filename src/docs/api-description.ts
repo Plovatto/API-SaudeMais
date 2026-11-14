@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta e o catálogo com a administração dele, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários e a agenda semanal do médico, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
 
 ## Erros
 
@@ -17,7 +17,7 @@ Toda resposta de erro tem o mesmo formato:
 
 - \`message\` é um texto em português, pronto para exibir.
 - \`code\` é estável e serve para o cliente decidir o que fazer ou escolher o próprio texto.
-- \`fields\` aparece apenas em erros de validação, com uma mensagem por campo.
+- \`fields\` aparece em erros de validação e nos de regra ligados a um campo, com uma mensagem por campo.
 
 | Status | Quando acontece |
 |---|---|
@@ -61,6 +61,8 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`HAS_FUTURE_APPOINTMENTS\` | 409 | O médico tem consultas futuras que impedem a mudança |
 | \`RESET_NOT_SENT\` | 409 | Um link de redefinição foi enviado há pouco ou o limite do dia foi atingido |
 | \`SPECIALTY_UNAVAILABLE\`, \`UNIT_UNAVAILABLE\` | 422 | A especialidade ou a unidade escolhida está inativa ou não existe |
+| \`OVERLAP\` | 422 | Faixas de horário do mesmo dia se sobrepõem; veja \`fields\` |
+| \`OUTSIDE_UNIT_HOURS\` | 422 | A faixa de horário fica fora do horário da unidade; veja \`fields\` |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |
 | \`TOO_MANY_REQUESTS\` | 429 | Muitas requisições do mesmo IP (300 por minuto) ou limite próprio da rota |

@@ -5,6 +5,7 @@ import { examKinds } from '../../database/schema/catalog.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema } from '../../lib/pagination.js';
 import { boundedText } from '../../lib/text.js';
+import { endMinute, endsAfterStart, startMinute, weekday, weekList } from '../../lib/week.js';
 import { phoneNumber } from '../users/user.model.js';
 
 const catalogName = boundedText('O nome', 2, 80);
@@ -56,31 +57,19 @@ export const specialtySchema = registry.register(
   z.object({ id: z.uuid(), ...specialtyFields, isActive: z.boolean() }),
 );
 
-const unitHourSchema = z
-  .strictObject({
-    weekday: z.number().int().min(0).max(6).openapi({ description: '0 = domingo.', example: 1 }),
-    openMin: z
-      .number()
-      .int()
-      .min(0)
-      .max(1439)
-      .openapi({ description: 'Abertura, em minutos desde 00:00.', example: 480 }),
-    closeMin: z
-      .number()
-      .int()
-      .min(1)
-      .max(1440)
-      .openapi({ description: 'Fechamento, em minutos desde 00:00.', example: 1080 }),
-  })
-  .refine((hour) => hour.openMin < hour.closeMin, {
-    path: ['closeMin'],
-    message: 'O fechamento precisa ser depois da abertura.',
-  });
+const unitHourSchema = endsAfterStart(
+  z.strictObject({
+    weekday,
+    openMin: startMinute.openapi({ description: 'Abertura, em minutos desde 00:00.', example: 480 }),
+    closeMin: endMinute.openapi({ description: 'Fechamento, em minutos desde 00:00.', example: 1080 }),
+  }),
+  'openMin',
+  'closeMin',
+  'O fechamento precisa ser depois da abertura.',
+);
 
-const unitHours = z
-  .array(unitHourSchema)
+const unitHours = weekList(unitHourSchema)
   .max(7)
-  .refine((hours) => new Set(hours.map((hour) => hour.weekday)).size === hours.length, 'Informe cada dia uma vez só.')
   .openapi({ description: 'Horário de cada dia em que a unidade abre; dias ausentes ficam fechados.' });
 
 const unitFields = {
@@ -116,7 +105,7 @@ export const unitSchema = registry.register(
     address: z.string(),
     phone: z.string().openapi({ example: '+551133334444' }),
     isActive: z.boolean(),
-    hours: z.array(z.object({ weekday: z.number().int(), openMin: z.number().int(), closeMin: z.number().int() })),
+    hours: z.array(z.object({ weekday: z.int(), openMin: z.int(), closeMin: z.int() })),
   }),
 );
 

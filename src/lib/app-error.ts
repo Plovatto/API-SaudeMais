@@ -23,6 +23,10 @@ export class AppError extends Error {
   }
 }
 
+export function unprocessable(code: string, message: string, fields?: FieldErrors): AppError {
+  return new AppError(422, code, message, fields);
+}
+
 export function conflictError({ code, field, message }: FieldConflict): AppError {
   return new AppError(409, code, message, { [field]: message });
 }

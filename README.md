@@ -224,6 +224,7 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | POST | `/api/admin/users/{id}/password-reset` | Envia link de redefinição de senha (admin) |
 | POST, DELETE | `/api/admin/users/{id}/roles/admin` | Concede e remove o perfil de administrador (admin) |
 | POST, PATCH, DELETE | `/api/admin/users/{id}/doctor-profile` | Cria, altera e remove o perfil médico (admin) |
+| GET, PUT | `/api/doctor/schedule` | Agenda semanal do médico, em minutos desde 00:00 (médico) |
 | GET | `/api/me` | Dados da própria conta |
 | PATCH | `/api/me` | Altera nome ou telefone |
 | POST | `/api/me/password` | Troca a senha e encerra as outras sessões |
