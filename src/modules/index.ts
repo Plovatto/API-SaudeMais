@@ -1,6 +1,7 @@
 import type { Database } from '../database/pg-client.js';
 import type { Clock } from '../lib/clock.js';
 import type { MailQueue } from '../mail/index.js';
+import { createAdminHomeModule } from './admin-home/index.js';
 import { createAdminUsersModule } from './admin-users/index.js';
 import { createCatalogModule } from './catalog/index.js';
 import { createDemoModule } from './demo/index.js';
@@ -26,12 +27,14 @@ export function createModules(deps: ModulesDeps) {
     passwordReset: passwordReset.service,
   });
   const demo = createDemoModule({ db: deps.db, users: users.service, clock: deps.clock });
+  const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   return {
     users,
     passwordReset,
     catalog,
     adminUsers,
     demo,
-    routers: [users.router, passwordReset.router, catalog.router, adminUsers.router],
+    adminHome,
+    routers: [users.router, passwordReset.router, catalog.router, adminUsers.router, adminHome.router],
   };
 }
