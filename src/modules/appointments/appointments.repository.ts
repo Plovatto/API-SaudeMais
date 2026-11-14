@@ -1,11 +1,11 @@
-import { and, asc, eq, gt, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import {
-  activeBookingStatuses,
   bookingEvents,
   bookings,
-  type BookingStatus,
+  effectiveStatus,
+  isActiveFuture,
   type VisitType,
 } from '../../database/schema/bookings.js';
 import { specialties, units } from '../../database/schema/catalog.js';
@@ -37,9 +37,6 @@ export interface Viewer {
 
 const doctorUsers = alias(users, 'doctor_users');
 
-const effectiveStatus = (now: Date) =>
-  sql<BookingStatus>`case when ${bookings.status} = 'pending' and ${bookings.startsAt} <= ${now} then 'expired' else ${bookings.status} end`;
-
 const iso = (date: Date | null) => date?.toISOString() ?? null;
 
 export class AppointmentsRepository {
@@ -57,14 +54,7 @@ export class AppointmentsRepository {
   }
 
   activeFutureCount(tx: Transaction, patientId: string, now: Date): Promise<number> {
-    return tx.$count(
-      bookings,
-      and(
-        eq(bookings.patientId, patientId),
-        inArray(bookings.status, activeBookingStatuses),
-        gt(bookings.startsAt, now),
-      ),
-    );
+    return tx.$count(bookings, and(eq(bookings.patientId, patientId), isActiveFuture(now)));
   }
 
   async lockDoctor(

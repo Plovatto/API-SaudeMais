@@ -13,11 +13,6 @@ import { ACTIVE_LIMIT, appointmentConflicts, appointmentNotFound, appointmentRul
 import type { Appointment, BookAppointmentInput } from './appointments.model.js';
 import type { AppointmentsRepository, Viewer } from './appointments.repository.js';
 
-interface Patient {
-  id: string;
-  isProtected: boolean;
-}
-
 const exclusionConflicts = {
   bookings_doctor_no_overlap_excl: appointmentConflicts.slotTaken,
   bookings_patient_no_overlap_excl: appointmentConflicts.patientConflict,
@@ -41,15 +36,15 @@ export class AppointmentsService {
     private readonly clock: Clock,
   ) {}
 
-  async book(patient: Patient, input: BookAppointmentInput): Promise<Appointment> {
-    if (input.doctorId === patient.id) throw unprocessableField(appointmentRules.selfBooking);
+  async book(patientId: string, input: BookAppointmentInput): Promise<Appointment> {
+    if (input.doctorId === patientId) throw unprocessableField(appointmentRules.selfBooking);
     const result = await withConstraintConflicts(
-      () => retryOnDeadlock(() => this.create(patient.id, input)),
+      () => retryOnDeadlock(() => this.create(patientId, input)),
       exclusionConflicts,
     );
     if (!result) throw unauthenticated();
     runAfterCommit(result.afterCommit);
-    return this.detail(result.id, { userId: patient.id, roles: ['patient'] });
+    return this.detail(result.id, { userId: patientId, roles: ['patient'] });
   }
 
   async detail(id: string, viewer: Viewer): Promise<Appointment> {

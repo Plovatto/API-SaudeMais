@@ -18,11 +18,13 @@ export class DoctorsService {
   }
 
   async availability(doctorId: string, period: AvailabilityQuery, viewerIsProtected: boolean): Promise<Availability> {
+    const now = this.clock.now();
     const context = await this.repository.bookingContext(doctorId, viewerIsProtected, {
       from: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.from)),
       to: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.to) + DAY),
+      now,
     });
     if (!context) throw new AppError(404, 'NOT_FOUND', doctorNotFound);
-    return { days: slotDays({ ...context, ...period, now: this.clock.now(), timeZone: CLINIC_TIME_ZONE }) };
+    return { days: slotDays({ ...context, ...period, now, timeZone: CLINIC_TIME_ZONE }) };
   }
 }

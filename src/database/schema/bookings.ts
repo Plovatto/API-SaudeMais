@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { gt, inArray, sql, type SQL } from 'drizzle-orm';
 import { boolean, check, foreignKey, index, pgTable, smallint, text, unique, uuid } from 'drizzle-orm/pg-core';
 import { specialties, unitExamOffers, units } from './catalog.js';
 import { isOneOf, timestamps, timestamptz, uuidv7Id } from './columns.js';
@@ -7,7 +7,7 @@ import { users } from './users.js';
 
 const bookingKinds = ['appointment', 'exam'] as const;
 export const bookingStatuses = ['pending', 'confirmed', 'cancelled', 'completed', 'no_show', 'expired'] as const;
-export const activeBookingStatuses = ['pending', 'confirmed'] as const;
+const activeBookingStatuses = ['pending', 'confirmed'] as const;
 export const visitTypes = ['first_visit', 'routine', 'follow_up', 'exam_review'] as const;
 const cancellerRoles = ['patient', 'doctor', 'admin', 'system'] as const;
 export const bookingEventTypes = [
@@ -24,6 +24,7 @@ export const bookingActorTypes = ['patient', 'doctor', 'admin', 'system', 'integ
 
 export type BookingStatus = (typeof bookingStatuses)[number];
 export type VisitType = (typeof visitTypes)[number];
+export type CancellerRole = (typeof cancellerRoles)[number];
 
 export const bookings = pgTable(
   'bookings',
@@ -143,3 +144,9 @@ export const bookingEvents = pgTable(
     ),
   ],
 );
+
+export const isActiveFuture = (now: Date): SQL =>
+  sql`${inArray(bookings.status, activeBookingStatuses)} and ${gt(bookings.startsAt, now)}`;
+
+export const effectiveStatus = (now: Date) =>
+  sql<BookingStatus>`case when ${bookings.status} = 'pending' and ${bookings.startsAt} <= ${now} then 'expired' else ${bookings.status} end`;

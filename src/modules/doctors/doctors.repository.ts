@@ -1,7 +1,7 @@
-import { and, asc, count, eq, gt, inArray, isNull, lt, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, gt, isNull, lt, type SQL } from 'drizzle-orm';
 import type { PgSelect } from 'drizzle-orm/pg-core';
 import type { Database } from '../../database/pg-client.js';
-import { activeBookingStatuses, bookings } from '../../database/schema/bookings.js';
+import { bookings, isActiveFuture } from '../../database/schema/bookings.js';
 import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { doctorScheduleDays, doctorScheduleRanges } from '../../database/schema/doctor-schedule.js';
@@ -18,9 +18,10 @@ export type SlotContext = Pick<
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays'
 > & { specialtyId: string };
 
-interface Window {
+interface Period {
   from: Date;
   to: Date;
+  now: Date;
 }
 
 const doctorColumns = {
@@ -70,7 +71,7 @@ export class DoctorsRepository {
   bookingContext(
     doctorId: string,
     includeProtected: boolean,
-    { from, to }: Window,
+    { from, to, now }: Period,
   ): Promise<(SlotContext & Pick<SlotRequest, 'busy'>) | undefined> {
     return this.db.transaction(
       async (tx) => {
@@ -83,7 +84,7 @@ export class DoctorsRepository {
             and(
               eq(bookings.doctorId, doctorId),
               eq(bookings.kind, 'appointment'),
-              inArray(bookings.status, activeBookingStatuses),
+              isActiveFuture(now),
               lt(bookings.startsAt, to),
               gt(bookings.endsAt, from),
             ),

@@ -7,8 +7,7 @@ import type { AppointmentsService } from './appointments.service.js';
 export function createAppointmentsController(service: AppointmentsService) {
   return {
     book: (async (req, res) => {
-      const { user, isProtected } = authOf(req);
-      res.status(201).json(await service.book({ id: user.id, isProtected }, bookAppointmentSchema.parse(req.body)));
+      res.status(201).json(await service.book(authOf(req).user.id, bookAppointmentSchema.parse(req.body)));
     }) satisfies RequestHandler,
     detail: (async (req, res) => {
       const { user } = authOf(req);
