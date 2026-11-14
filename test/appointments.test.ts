@@ -97,6 +97,7 @@ describe('POST /api/appointments', () => {
       doctor: { id: carlos.id, fullName: 'Dr. Carlos Mendes' },
       specialty: carlos.specialty,
       unit: carlos.unit,
+      cancellation: null,
       createdAt: START.toISOString(),
       events: [
         {

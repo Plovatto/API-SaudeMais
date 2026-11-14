@@ -1,6 +1,7 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { bookings, isLateCancellation } from '@/database/schema/bookings.js';
 import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
 import {
   availability,
@@ -10,7 +11,7 @@ import {
   type Clinic,
   type Doctor,
 } from './support/doctors.js';
-import { as, login, signUp } from './support/users.js';
+import { as, HOUR, login, signUp, START } from './support/users.js';
 
 interface Booking {
   id: string;
@@ -77,12 +78,14 @@ const moveBack = (id: string, days: number) =>
     where id = ${id}
   `);
 
-async function withLateWindow<T>(hours: number, work: () => Promise<T>): Promise<T> {
-  await context.db.execute(sql`update settings set appointment_late_window_hours = ${hours}`);
+async function withLateWindow<T>(hours: number, work: () => Promise<T>, examHours = 2): Promise<T> {
+  await context.db.execute(
+    sql`update settings set appointment_late_window_hours = ${hours}, exam_late_window_hours = ${examHours}`,
+  );
   try {
     return await work();
   } finally {
-    await context.db.execute(sql`update settings set appointment_late_window_hours = 24`);
+    await context.db.execute(sql`update settings set appointment_late_window_hours = 24, exam_late_window_hours = 2`);
   }
 }
 
@@ -145,6 +148,7 @@ describe('GET /api/patient/bookings', () => {
       examType: null,
       publicCode: null,
       unit: carlos.unit,
+      cancellation: null,
       actions: { canCancel: true, lateCancellation: false, cancelBlockedReason: null },
     });
     expect(page.items[1]).toMatchObject({ status: 'confirmed', actions: { canCancel: true, lateCancellation: false } });
@@ -165,7 +169,28 @@ describe('GET /api/patient/bookings', () => {
       examType: { id: expect.any(String) as unknown, name: expect.any(String) as unknown },
       publicCode: 'EX-7F3K2Q',
       unit: { address: expect.any(String) as unknown, phone: expect.any(String) as unknown },
+      actions: { canCancel: false, lateCancellation: false, cancelBlockedReason: 'unavailable' },
     });
+  });
+
+  it('measures the late window of exams with the exam setting, excluding the exact boundary', async () => {
+    const lateAt = async (now: Date) => {
+      const [row] = await context.db
+        .select({ late: isLateCancellation(now) })
+        .from(bookings)
+        .where(eq(bookings.id, exam));
+      return row?.late;
+    };
+
+    const results = await withLateWindow(
+      0,
+      async () => [await lateAt(START), await lateAt(new Date(START.getTime() + HOUR))],
+      168,
+    );
+    const withDefault = await lateAt(new Date(START.getTime() + HOUR));
+
+    expect(results).toEqual([false, true]);
+    expect(withDefault).toBe(false);
   });
 
   it('lists past bookings most recent first with the computed expired status', async () => {
@@ -175,6 +200,13 @@ describe('GET /api/patient/bookings', () => {
       [cancelled.id, 'cancelled'],
       [expired.id, 'expired'],
     ]);
+    expect(page.items[0]?.cancellation).toEqual({
+      byRole: 'patient',
+      reason: null,
+      late: false,
+      cancelledAt: START.toISOString(),
+    });
+    expect(page.items[1]?.cancellation).toBeNull();
     for (const item of page.items) {
       expect(item.actions).toEqual({ canCancel: false, lateCancellation: false, cancelBlockedReason: 'closed' });
     }
@@ -223,11 +255,24 @@ describe('allowed actions', () => {
     expect(items.find((item) => item.id === early.id)?.actions.lateCancellation).toBe(false);
 
     await moveBack(late.id, 4);
-    const past = ((await list(patient, { scope: 'past' }).expect(200)).body as BookingPage).items;
-    expect(past.find((item) => item.id === late.id)).toMatchObject({
+    const past = ((await list(patient, { scope: 'past', status: 'confirmed' }).expect(200)).body as BookingPage).items;
+    expect(past).toHaveLength(1);
+    expect(past[0]).toMatchObject({
+      id: late.id,
       status: 'confirmed',
       actions: { canCancel: false, lateCancellation: false, cancelBlockedReason: 'started' },
     });
+  });
+
+  it('does not flag a booking that starts exactly at the window boundary', async () => {
+    const patient = await signUp(context.app, 'limite.janela@email.com');
+    const booked = await book(patient, slot('2026-11-23', '12:00'));
+    await confirm(booked.id);
+    const lateWith = (hours: number) =>
+      withLateWindow(hours, async () => ((await list(patient).expect(200)).body as BookingPage).items[0]?.actions);
+
+    expect((await lateWith(72))?.lateCancellation).toBe(false);
+    expect((await lateWith(73))?.lateCancellation).toBe(true);
   });
 });
 
@@ -259,7 +304,11 @@ describe('POST /api/appointments/:id/cancel', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.body).toMatchObject({ id: booked.id, status: 'cancelled' });
+    expect(response.body).toMatchObject({
+      id: booked.id,
+      status: 'cancelled',
+      cancellation: { byRole: 'patient', reason: 'Viagem.', late: false, cancelledAt: START.toISOString() },
+    });
     expect((response.body as { events: unknown[] }).events.at(-1)).toMatchObject({
       type: 'cancelled',
       actorType: 'patient',
@@ -308,11 +357,14 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(rows.rows.every((row) => row.cancel_reason === null)).toBe(true);
   });
 
-  it('requires a reason from the doctor and notifies the patient', async () => {
-    const booked = await book(context.demoPatient, slot('2026-12-14', '11:00'), demoDoctor);
+  it('requires a reason from the doctor, never flags it late and notifies the patient', async () => {
+    const booked = await book(context.demoPatient, slot('2026-11-23', '11:00'), demoDoctor);
+    await confirm(booked.id);
 
     const missing = await cancel(doctorToken, booked.id, { startsAt: booked.startsAt, reason: '   ' });
-    const response = await cancel(doctorToken, booked.id, { startsAt: booked.startsAt, reason: 'Congresso médico.' });
+    const response = await withLateWindow(96, () =>
+      cancel(doctorToken, booked.id, { startsAt: booked.startsAt, reason: 'Congresso médico.' }),
+    );
 
     expect(missing.status).toBe(422);
     expect(missing.body).toEqual({
@@ -321,6 +373,9 @@ describe('POST /api/appointments/:id/cancel', () => {
       fields: { reason: 'Informe o motivo do cancelamento.' },
     });
     expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      cancellation: { byRole: 'doctor', reason: 'Congresso médico.', late: false },
+    });
     expect((response.body as { events: unknown[] }).events.at(-1)).toMatchObject({ actorType: 'doctor' });
     const rows = await context.db.execute(sql`
       select b.cancelled_by_role, b.cancel_reason, b.late_cancellation, n.audience_role, n.type, n.params
@@ -347,6 +402,8 @@ describe('POST /api/appointments/:id/cancel', () => {
     const booked = await book(context.demoPatient, slot('2026-12-14', '12:00'), demoDoctor);
     const body = { startsAt: booked.startsAt, reason: 'Motivo.' };
 
+    const carlosBooking = await book(context.patient, slot('2026-12-04', '11:00'));
+    const otherDoctor = await cancel(doctorToken, carlosBooking.id, { startsAt: carlosBooking.startsAt, reason: 'x' });
     const stranger = await cancel(context.patient, booked.id, body);
     const unknown = await cancel(context.patient, UNKNOWN_ID, body);
     const forbidden = await cancel(admin, booked.id, body);
@@ -354,6 +411,7 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(stranger.status).toBe(404);
     expect(stranger.body).toEqual({ message: 'Consulta não encontrada.', code: 'NOT_FOUND' });
     expect(unknown.status).toBe(404);
+    expect(otherDoctor.status).toBe(404);
     expect(forbidden.status).toBe(403);
     expect(forbidden.body).toMatchObject({ code: 'FORBIDDEN' });
   });
