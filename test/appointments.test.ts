@@ -185,6 +185,14 @@ describe('POST /api/appointments', () => {
     }
   });
 
+  it('accepts the first slot right at the minimum lead time', async () => {
+    const patient = await signUp(context.app, 'antecedencia@email.com');
+
+    const response = await book(patient, appointment(carlos, '2026-11-20T13:00:00.000Z'));
+
+    expect(response.status).toBe(201);
+  });
+
   it('accepts the slot start with a São Paulo offset', async () => {
     const patient = await signUp(context.app, 'offset@email.com');
 
@@ -312,6 +320,22 @@ describe('GET /api/appointments/:id', () => {
       expect((await show(later.token, created.id)).body).toMatchObject({ status: 'expired' });
     } finally {
       context.clock.advance(-19 * 24 * HOUR);
+    }
+  });
+});
+
+describe('unavailable doctors', () => {
+  it('answers 404 for an inactive specialty, an inactive unit or a deactivated doctor', async () => {
+    const rafael = await doctorNamed(context, 'Dr. Rafael Costa');
+    const beatriz = await doctorNamed(context, 'Dra. Beatriz Lima');
+    await context.db.execute(sql`update specialties set is_active = false where id = ${rafael.specialty.id}`);
+    await context.db.execute(sql`update users set deactivated_at = now() where id = ${beatriz.id}`);
+    await context.db.execute(sql`update units set is_active = false where id = ${ana.unit.id}`);
+
+    for (const doctor of [rafael, beatriz, ana]) {
+      const response = await book(context.patient, appointment(doctor, slot('2026-12-09', '11:00')));
+      expect(response.status, doctor.fullName).toBe(404);
+      expect(response.body).toMatchObject({ code: 'NOT_FOUND' });
     }
   });
 });
