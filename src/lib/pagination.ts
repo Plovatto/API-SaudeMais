@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { PgSelect } from 'drizzle-orm/pg-core';
 
 export const paginationQuery = z.strictObject({
   page: z.coerce.number().int().min(1).default(1),
@@ -25,4 +26,13 @@ export function paginatedSchema<T extends z.ZodType>(item: T) {
 
 export function offsetOf({ page, pageSize }: Pagination): number {
   return (page - 1) * pageSize;
+}
+
+export async function pageOf<Q extends PgSelect>(
+  query: Q,
+  { page, pageSize }: Pagination,
+  total: () => Promise<number>,
+) {
+  const items: Awaited<Q> = await query.limit(pageSize).offset(offsetOf({ page, pageSize }));
+  return { items, page, pageSize, total: await total() };
 }

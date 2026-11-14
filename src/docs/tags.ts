@@ -12,6 +12,10 @@ export const tags = {
     name: 'Catálogo',
     description: 'Especialidades, unidades e tipos de exame ativos, usados nos agendamentos. Exige login.',
   },
+  scheduling: {
+    name: 'Agendamento',
+    description: 'Médicos e vagas livres para o paciente marcar consulta. Exige o perfil de paciente.',
+  },
   doctor: {
     name: 'Médico',
     description: 'Agenda e rotina do médico logado. Exige o perfil de médico.',

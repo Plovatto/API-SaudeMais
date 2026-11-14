@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários e a agenda semanal do médico, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários, a agenda semanal do médico e a lista de médicos com as vagas livres de cada um, além de \`/health\` e desta documentação. As seções marcadas como convenção descrevem o padrão que as próximas rotas vão seguir; cada rota lista o que realmente pode devolver.
 
 ## Erros
 
@@ -92,14 +92,13 @@ Os dados delas são de exemplo, e elas não podem ser alteradas nem desativadas.
 
 ## Datas
 
-Convenção para as próximas rotas:
-
-- Data e hora, como o início de uma consulta, em ISO 8601 e UTC: \`2026-11-20T13:30:00.000Z\`.
-- Datas sem horário, como um filtro por dia, em \`YYYY-MM-DD\`, no fuso de São Paulo (\`America/Sao_Paulo\`).
+- Data e hora, como o início de uma vaga, em ISO 8601 e UTC: \`2026-11-20T13:30:00.000Z\`.
+- Datas sem horário, como \`from\` e \`to\` das vagas, em \`YYYY-MM-DD\`, no fuso de São Paulo (\`America/Sao_Paulo\`).
+- Para agendar, envie de volta o \`startsAt\` recebido na lista de vagas, sem montar o horário no cliente.
 
 ## Paginação
 
-As listas administrativas recebem \`page\` (a partir de 1) e \`pageSize\` (até 50) e respondem:
+As listas paginadas recebem \`page\` (a partir de 1) e \`pageSize\` (até 50) e respondem:
 
 \`\`\`json
 { "items": [], "page": 1, "pageSize": 20, "total": 0 }

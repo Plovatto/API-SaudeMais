@@ -1,7 +1,7 @@
 import type { AuditEntry } from '../../lib/audit.js';
 import { AppError } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
-import { MINUTE, startOfDayIn } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, MINUTE, startOfDayIn } from '../../lib/time.js';
 import type { MailQueue } from '../../mail/index.js';
 import { hashPassword } from '../users/user.password.js';
 import type { UserRepository } from '../users/user.repository.js';
@@ -11,7 +11,6 @@ import type { ResetConfirmInput, ResetRequestInput } from './password-reset.mode
 import type { PasswordResetRepository } from './password-reset.repository.js';
 
 export const RESET_TOKEN_MINUTES = 30;
-const TIME_ZONE = 'America/Sao_Paulo';
 
 export class PasswordResetService {
   constructor(
@@ -41,7 +40,7 @@ export class PasswordResetService {
       tokenHash,
       now,
       expiresAt: new Date(now.getTime() + RESET_TOKEN_MINUTES * MINUTE),
-      dayStart: startOfDayIn(TIME_ZONE, now),
+      dayStart: startOfDayIn(CLINIC_TIME_ZONE, now),
       audit,
     });
     if (issued) {

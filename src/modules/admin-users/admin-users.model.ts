@@ -4,6 +4,7 @@ import { roles } from '../../database/schema/users.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
 import { uuidParam } from '../../lib/params.js';
+import { searchText } from '../../lib/search.js';
 import { publicUserSchema } from '../users/user.model.js';
 
 const ufs = [
@@ -37,12 +38,7 @@ const ufs = [
 ] as const;
 
 export const usersQuery = paginationQuery.extend({
-  search: z
-    .string()
-    .trim()
-    .max(120, 'A busca pode ter até 120 caracteres.')
-    .optional()
-    .openapi({ description: 'Parte do nome (sem distinguir acentos nem maiúsculas) ou do e-mail.' }),
+  search: searchText.openapi({ description: 'Parte do nome (sem distinguir acentos nem maiúsculas) ou do e-mail.' }),
   role: z.enum(roles).optional().openapi({ description: 'Só contas com este perfil.' }),
   status: z.enum(['active', 'inactive']).optional().openapi({ description: 'Só contas ativas ou só desativadas.' }),
 });

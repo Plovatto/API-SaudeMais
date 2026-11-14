@@ -1,9 +1,7 @@
 import type { Clock } from '../../lib/clock.js';
-import { DAY, HOUR, startOfDayIn } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, DAY, HOUR, startOfDayIn } from '../../lib/time.js';
 import type { AdminHome } from './admin-home.model.js';
 import type { AdminHomeRepository } from './admin-home.repository.js';
-
-const TIME_ZONE = 'America/Sao_Paulo';
 
 export class AdminHomeService {
   constructor(
@@ -12,8 +10,8 @@ export class AdminHomeService {
   ) {}
 
   async summary(): Promise<AdminHome> {
-    const start = startOfDayIn(TIME_ZONE, this.clock.now());
-    const end = startOfDayIn(TIME_ZONE, new Date(start.getTime() + DAY + 2 * HOUR));
+    const start = startOfDayIn(CLINIC_TIME_ZONE, this.clock.now());
+    const end = startOfDayIn(CLINIC_TIME_ZONE, new Date(start.getTime() + DAY + 2 * HOUR));
     const [patients, doctors, appointmentsToday] = await Promise.all([
       this.repository.activeAccounts('patient'),
       this.repository.activeAccounts('doctor'),

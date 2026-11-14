@@ -1,12 +1,13 @@
-import { and, asc, eq, exists, ilike, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, ilike, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { userRoles, users, type Role } from '../../database/schema/users.js';
 import { recordAudit, type AuditEntry } from '../../lib/audit.js';
-import { offsetOf, type Page } from '../../lib/pagination.js';
-import { publicUserColumns } from '../users/user.repository.js';
+import { pageOf, type Page } from '../../lib/pagination.js';
+import { likePattern, unaccentMatch } from '../../lib/search.js';
+import { hasRole, publicUserColumns } from '../users/user.repository.js';
 import type { AdminUser, AdminUserDetail, DoctorProfile, UsersQuery } from './admin-users.model.js';
 
 const ADMIN_SET_LOCK = 727_003;
@@ -40,10 +41,6 @@ function toAdminUser({ deactivatedAt, createdAt, ...row }: AdminUserRow): AdminU
   return { ...row, deactivatedAt: deactivatedAt?.toISOString() ?? null, createdAt: createdAt.toISOString() };
 }
 
-function likePattern(search: string): string {
-  return `%${search.replace(/[\\%_]/g, '\\$&')}%`;
-}
-
 export class AdminUserRepository {
   constructor(private readonly db: Database) {}
 
@@ -53,20 +50,8 @@ export class AdminUserRepository {
 
   async page({ search, role, status, page, pageSize }: UsersQuery): Promise<Page<AdminUser>> {
     const filters: (SQL | undefined)[] = [
-      search
-        ? or(
-            sql`unaccent(${users.fullName}) ilike unaccent(${likePattern(search)})`,
-            ilike(users.email, likePattern(search)),
-          )
-        : undefined,
-      role
-        ? exists(
-            this.db
-              .select({ one: sql`1` })
-              .from(userRoles)
-              .where(and(eq(userRoles.userId, users.id), eq(userRoles.role, role))),
-          )
-        : undefined,
+      search ? or(unaccentMatch(users.fullName, search), ilike(users.email, likePattern(search))) : undefined,
+      role ? hasRole(role) : undefined,
       status === 'active'
         ? isNull(users.deactivatedAt)
         : status === 'inactive'
@@ -74,14 +59,14 @@ export class AdminUserRepository {
           : undefined,
     ];
     const where = and(...filters);
-    const rows = await this.db
+    const query = this.db
       .select(adminUserColumns)
       .from(users)
       .where(where)
       .orderBy(asc(users.fullName), asc(users.id))
-      .limit(pageSize)
-      .offset(offsetOf({ page, pageSize }));
-    return { items: rows.map(toAdminUser), page, pageSize, total: await this.db.$count(users, where) };
+      .$dynamic();
+    const result = await pageOf(query, { page, pageSize }, () => this.db.$count(users, where));
+    return { ...result, items: result.items.map(toAdminUser) };
   }
 
   async detail(id: string): Promise<AdminUserDetail | undefined> {
@@ -109,37 +94,13 @@ export class AdminUserRepository {
     });
   }
 
-  async isActiveAdmin(db: Pick<Database, '$count' | 'select'>, id: string): Promise<boolean> {
-    const total = await db.$count(
-      users,
-      and(
-        eq(users.id, id),
-        isNull(users.deactivatedAt),
-        exists(
-          db
-            .select({ one: sql`1` })
-            .from(userRoles)
-            .where(and(eq(userRoles.userId, users.id), eq(userRoles.role, 'admin'))),
-        ),
-      ),
-    );
+  async isActiveAdmin(db: Pick<Database, '$count'>, id: string): Promise<boolean> {
+    const total = await db.$count(users, and(eq(users.id, id), isNull(users.deactivatedAt), hasRole('admin')));
     return total > 0;
   }
 
   async otherActiveAdmins(tx: Transaction, exceptId: string): Promise<number> {
-    return tx.$count(
-      users,
-      and(
-        ne(users.id, exceptId),
-        isNull(users.deactivatedAt),
-        exists(
-          tx
-            .select({ one: sql`1` })
-            .from(userRoles)
-            .where(and(eq(userRoles.userId, users.id), eq(userRoles.role, 'admin'))),
-        ),
-      ),
-    );
+    return tx.$count(users, and(ne(users.id, exceptId), isNull(users.deactivatedAt), hasRole('admin')));
   }
 
   async updateUser(tx: Transaction, id: string, changes: { fullName?: string; phone?: string | null }) {
