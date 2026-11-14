@@ -1,18 +1,18 @@
-import { sql, type SQL } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import type { Clock } from '../../lib/clock.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import {
-  asSeen,
   cancelActiveFuture,
   ofAccount,
+  seenBy,
   type BookingSide,
-  type CancelledBooking,
+  type ChangedBooking,
   type Canceller,
   type SeenBooking,
 } from './bookings.repository.js';
 
-function counterparts(booking: CancelledBooking, userId: string, canceller: Canceller) {
+function counterparts(booking: ChangedBooking, userId: string, canceller: Canceller) {
   const notice = {
     bookingId: booking.id,
     params: { startsAt: booking.startsAt.toISOString(), cancelledByRole: canceller.role },
@@ -65,12 +65,7 @@ export class BookingsService {
     canceller: Canceller & { role: BookingSide; userId: string },
   ): Promise<AfterCommit | undefined> {
     const { userId, role } = canceller;
-    const { cancelled, afterCommit } = await this.cancel(
-      tx,
-      sql`${ofAccount(userId, [role])} and ${asSeen(seen)}`,
-      userId,
-      canceller,
-    );
+    const { cancelled, afterCommit } = await this.cancel(tx, seenBy(userId, role, seen), userId, canceller);
     return cancelled > 0 ? afterCommit : undefined;
   }
 

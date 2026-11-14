@@ -148,6 +148,8 @@ export const bookingEvents = pgTable(
 export const isActiveFuture = (now: Date): SQL =>
   sql`${inArray(bookings.status, activeBookingStatuses)} and ${gt(bookings.startsAt, now)}`;
 
+export const notActiveFuture = (now: Date): SQL => sql`not (${isActiveFuture(now)})`;
+
 export const effectiveStatus = (now: Date) =>
   sql<BookingStatus>`case when ${bookings.status} = 'pending' and ${bookings.startsAt} <= ${now} then 'expired' else ${bookings.status} end`;
 

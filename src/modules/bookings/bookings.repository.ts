@@ -1,4 +1,5 @@
 import { and, eq, or, sql, type SQL } from 'drizzle-orm';
+import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import {
   bookingEvents,
@@ -17,7 +18,7 @@ export interface Canceller {
   reason?: string | null;
 }
 
-export interface CancelledBooking {
+export interface ChangedBooking {
   id: string;
   patientId: string;
   doctorId: string | null;
@@ -27,6 +28,12 @@ export interface CancelledBooking {
 export interface SeenBooking {
   id: string;
   startsAt: Date;
+}
+
+interface Change {
+  set: PgUpdateSetSource<typeof bookings>;
+  where: SQL | undefined;
+  event: Pick<typeof bookingEvents.$inferInsert, 'eventType' | 'actorType' | 'actorUserId' | 'createdAt'>;
 }
 
 export const cancellationColumns = {
@@ -47,14 +54,26 @@ export function cancellationOf({ byRole, reason, late, cancelledAt }: Cancellati
   return byRole && cancelledAt ? { byRole, reason, late, cancelledAt: cancelledAt.toISOString() } : null;
 }
 
+export function viewOf<T extends { startsAt: Date; endsAt: Date; cancellation: CancellationRow }>(row: T) {
+  const { startsAt, endsAt, cancellation, ...rest } = row;
+  return {
+    ...rest,
+    startsAt: startsAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+    cancellation: cancellationOf(cancellation),
+  };
+}
+
+export const countWhere = (where: SQL | undefined) => sql<number>`count(*) filter (where ${where})`.mapWith(Number);
+
 const sideColumns = { patient: bookings.patientId, doctor: bookings.doctorId };
 
 export function ofAccount(userId: string, sides: BookingSide[]): SQL {
   return or(...sides.map((side) => eq(sideColumns[side], userId))) ?? sql`false`;
 }
 
-export function asSeen({ id, startsAt }: SeenBooking): SQL {
-  return sql`${eq(bookings.id, id)} and ${eq(bookings.startsAt, startsAt)}`;
+export function seenBy(userId: string, side: BookingSide, { id, startsAt }: SeenBooking): SQL {
+  return sql`${ofAccount(userId, [side])} and ${eq(bookings.id, id)} and ${eq(bookings.startsAt, startsAt)}`;
 }
 
 export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
@@ -64,52 +83,51 @@ export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, 
 export async function futureBookingCounts(db: Pick<Database, 'select'>, userId: string, now: Date) {
   const [row] = await db
     .select({
-      futureAppointmentsAsPatient: sql<number>`count(*) filter (where ${bookings.patientId} = ${userId})`.mapWith(
-        Number,
-      ),
-      futureAppointmentsAsDoctor: sql<number>`count(*) filter (where ${bookings.doctorId} = ${userId})`.mapWith(Number),
+      futureAppointmentsAsPatient: countWhere(eq(bookings.patientId, userId)),
+      futureAppointmentsAsDoctor: countWhere(eq(bookings.doctorId, userId)),
     })
     .from(bookings)
     .where(and(isActiveFuture(now), ofAccount(userId, ['patient', 'doctor'])));
   return row ?? { futureAppointmentsAsPatient: 0, futureAppointmentsAsDoctor: 0 };
 }
 
-export async function cancelActiveFuture(
-  tx: Transaction,
-  scope: SQL,
-  { role, userId, reason = null }: Canceller,
-  now: Date,
-): Promise<CancelledBooking[]> {
+async function change(tx: Transaction, { set, where, event }: Change): Promise<ChangedBooking[]> {
   const rows = await tx
     .update(bookings)
-    .set({
-      status: 'cancelled',
-      cancelledByRole: role,
-      cancelledBy: userId,
-      cancelledAt: now,
-      cancelReason: reason,
-      lateCancellation: role === 'patient' ? isLateCancellation(now) : false,
-    })
-    .where(and(isActiveFuture(now), scope))
+    .set(set)
+    .where(where)
     .returning({
       id: bookings.id,
       patientId: bookings.patientId,
       doctorId: bookings.doctorId,
       startsAt: bookings.startsAt,
       fromStatus: sql<BookingStatus>`old.status`,
+      toStatus: bookings.status,
     });
   if (rows.length > 0) {
-    await tx.insert(bookingEvents).values(
-      rows.map((row) => ({
-        bookingId: row.id,
-        eventType: 'cancelled' as const,
-        actorType: role,
-        actorUserId: userId,
-        fromStatus: row.fromStatus,
-        toStatus: 'cancelled' as const,
-        createdAt: now,
-      })),
-    );
+    await tx
+      .insert(bookingEvents)
+      .values(rows.map(({ id, fromStatus, toStatus }) => ({ ...event, bookingId: id, fromStatus, toStatus })));
   }
-  return rows.map(({ fromStatus: _fromStatus, ...row }) => row);
+  return rows.map(({ fromStatus: _fromStatus, toStatus: _toStatus, ...row }) => row);
+}
+
+export function cancelActiveFuture(
+  tx: Transaction,
+  scope: SQL,
+  { role, userId, reason = null }: Canceller,
+  now: Date,
+): Promise<ChangedBooking[]> {
+  return change(tx, {
+    set: {
+      status: 'cancelled',
+      cancelledByRole: role,
+      cancelledBy: userId,
+      cancelledAt: now,
+      cancelReason: reason,
+      lateCancellation: role === 'patient' ? isLateCancellation(now) : false,
+    },
+    where: and(isActiveFuture(now), scope),
+    event: { eventType: 'cancelled', actorType: role, actorUserId: userId, createdAt: now },
+  });
 }

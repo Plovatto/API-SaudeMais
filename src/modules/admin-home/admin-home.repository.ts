@@ -1,11 +1,7 @@
 import { and, countDistinct, eq, isNull } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { userRoles, users, type Role } from '../../database/schema/users.js';
-
-export interface DayRange {
-  start: Date;
-  end: Date;
-}
+import type { DayRange } from '../../lib/time.js';
 
 export class AdminHomeRepository {
   constructor(private readonly db: Database) {}

@@ -5,7 +5,7 @@ import type { Clock } from '../../lib/clock.js';
 import type { Pagination } from '../../lib/pagination.js';
 import type { TtlCache } from '../../lib/ttl-cache.js';
 import { notificationNotFound } from './notifications.messages.js';
-import type { Area } from './notifications.model.js';
+import type { Area, NotificationView } from './notifications.model.js';
 import type { NewNotification, NotificationsRepository } from './notifications.repository.js';
 
 type Notice = Pick<NewNotification, 'type' | 'params' | 'bookingId'>;
@@ -42,6 +42,10 @@ export class NotificationsService {
 
   page(area: Area, pagination: Pagination) {
     return this.repository.page(area, pagination);
+  }
+
+  async latest(area: Area): Promise<NotificationView | null> {
+    return (await this.page(area, { page: 1, pageSize: 1 })).items[0] ?? null;
   }
 
   unreadCount(area: Area): Promise<number> {
