@@ -16,6 +16,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash
 - Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
 - Lista de médicos com busca e vagas livres por período, calculadas pela agenda do médico, pelo horário da unidade e pela política de agendamento, no fuso de São Paulo
+- Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
 - Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
 - Senhas com scrypt, login em tempo constante e limites de tentativas por IP e por e-mail
 - Banco PostgreSQL com migrations em SQL aplicadas ao iniciar
@@ -228,6 +229,10 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | POST, DELETE | `/api/admin/users/{id}/roles/admin` | Concede e remove o perfil de administrador (admin) |
 | POST, PATCH, DELETE | `/api/admin/users/{id}/doctor-profile` | Cria, altera e remove o perfil médico (admin) |
 | GET, PUT | `/api/doctor/schedule` | Agenda semanal do médico, em minutos desde 00:00 (médico) |
+| GET | `/api/notifications` | Avisos da conta no perfil `role`, do mais novo para o mais antigo |
+| GET | `/api/notifications/unread-count` | Total de avisos não lidos no perfil `role`, servido da memória |
+| POST | `/api/notifications/{id}/read` | Marca um aviso como lido |
+| POST | `/api/notifications/read-all` | Marca como lidos todos os avisos do perfil `role` |
 | GET | `/api/me` | Dados da própria conta |
 | PATCH | `/api/me` | Altera nome ou telefone |
 | POST | `/api/me/password` | Troca a senha e encerra as outras sessões |
