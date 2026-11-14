@@ -94,7 +94,7 @@ export const OFFERS: readonly { unit: string; examType: string; capacityPerSlot:
 export const DEMO_DOCTOR_PROFILE: DoctorProfileTarget = {
   specialty: 'Clínica Geral',
   unit: 'Unidade Central',
-  registryNumber: '123456',
+  registryNumber: '999999',
   registryUf: 'SP',
 };
 

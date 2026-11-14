@@ -1,4 +1,4 @@
-import { AppError } from '../../lib/app-error.js';
+import { AppError, conflictError } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -15,7 +15,7 @@ import type {
   UpdateProfileInput,
 } from './user.model.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
-import type { SeedAccount } from './user.demo.js';
+import { isDemoEmail, type SeedAccount } from './user.demo.js';
 import type { UserRepository } from './user.repository.js';
 import { createSessionToken, hashToken, isWellFormedToken } from './user.token.js';
 
@@ -45,6 +45,13 @@ export interface AuthContext {
   user: PublicUser;
 }
 
+export class SeedAccountConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SeedAccountConflictError';
+  }
+}
+
 export class UserService {
   constructor(
     private readonly repository: UserRepository,
@@ -54,6 +61,7 @@ export class UserService {
 
   async register({ fullName, email, phone, password }: RegisterInput): Promise<PublicUser> {
     const passwordHash = await hashPassword(password);
+    if (isDemoEmail(email)) throw conflictError(emailConflicts.users_email_key);
     return withConstraintConflicts(
       () =>
         this.repository.createUser({
@@ -115,12 +123,12 @@ export class UserService {
     const existing = await this.repository.findLoginCandidate(email);
     if (existing) {
       if (existing.isProtected !== isProtected) {
-        throw new Error(`Seed account ${email} already exists with a different protection setting`);
+        throw new SeedAccountConflictError(`Seed account ${email} already exists with a different protection setting`);
       }
       const missing = roles.filter((role) => !existing.roles.includes(role));
       if (missing.length === 0) return;
       if (existing.deactivatedAt || !(await verifyPassword(password, existing.passwordHash))) {
-        throw new Error(`${email} belongs to an existing account whose password does not match`);
+        throw new SeedAccountConflictError(`${email} belongs to an existing account whose password does not match`);
       }
       await this.repository.grantRoles(existing.id, missing, now);
       return;

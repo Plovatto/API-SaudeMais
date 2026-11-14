@@ -6,7 +6,7 @@ import { DEMO_ACCOUNTS } from './user.demo.js';
 import { UserRepository } from './user.repository.js';
 import { placeholderPasswordHash } from './user.password.js';
 import { createUserRouter } from './user.routes.js';
-import { UserService, type SessionPolicy } from './user.service.js';
+import { SeedAccountConflictError, UserService, type SessionPolicy } from './user.service.js';
 
 export type { AuthContext, SessionPolicy } from './user.service.js';
 
@@ -30,7 +30,7 @@ export function createUsersModule({ db, clock, policy }: UsersModuleDeps) {
     requireAuth,
     requireWritable: createRequireWritable(),
   });
-  const bootstrap = async (admin: InitialAdmin | undefined) => {
+  const bootstrap = async (admin: InitialAdmin | undefined, { demoAccounts = true } = {}): Promise<string[]> => {
     if (admin) {
       await service.ensureAccount({
         fullName: 'Administrador',
@@ -39,7 +39,17 @@ export function createUsersModule({ db, clock, policy }: UsersModuleDeps) {
         isProtected: false,
       });
     }
-    for (const account of DEMO_ACCOUNTS) await service.ensureAccount(account);
+    const skipped: string[] = [];
+    if (!demoAccounts) return skipped;
+    for (const account of DEMO_ACCOUNTS) {
+      try {
+        await service.ensureAccount(account);
+      } catch (error) {
+        if (!(error instanceof SeedAccountConflictError)) throw error;
+        skipped.push(error.message);
+      }
+    }
+    return skipped;
   };
   return { router, requireAuth, service, bootstrap };
 }

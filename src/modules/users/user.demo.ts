@@ -22,7 +22,7 @@ export const DEMO_DOCTOR: SeedAccount = {
   fullName: 'Dr. João Silveira',
   email: 'medico@saudemais.test',
   password: 'medico-demo-123',
-  roles: ['patient', 'doctor'],
+  roles: ['patient'],
   isProtected: true,
 };
 

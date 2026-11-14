@@ -15,6 +15,11 @@ const DB = 'postgres://user:pass@localhost:5432/saudemais';
 const dev = { NODE_ENV: 'development', DATABASE_URL: DB };
 
 describe('parseEnv', () => {
+  it('turns the demo accounts off only when DEMO_ACCOUNTS_ENABLED is false', () => {
+    expect(parseEnv({ ...dev, DEMO_ACCOUNTS_ENABLED: 'false' }).DEMO_ACCOUNTS_ENABLED).toBe(false);
+    expect(() => parseEnv({ ...dev, DEMO_ACCOUNTS_ENABLED: 'no' })).toThrow(/DEMO_ACCOUNTS_ENABLED/);
+  });
+
   it('applies defaults for local development', () => {
     expect(parseEnv(dev)).toEqual({
       NODE_ENV: 'development',
@@ -26,6 +31,7 @@ describe('parseEnv', () => {
       SESSION_TTL_HOURS: 12,
       SESSION_REMEMBER_DAYS: 7,
       APP_PUBLIC_URL: 'http://localhost:5173',
+      DEMO_ACCOUNTS_ENABLED: true,
       MAIL_DRIVER: 'console',
       SMTP_HOST: 'smtp.gmail.com',
       SMTP_PORT: 465,
@@ -74,6 +80,7 @@ describe('parseEnv', () => {
       SESSION_TTL_HOURS: 12,
       SESSION_REMEMBER_DAYS: 7,
       APP_PUBLIC_URL: 'https://plovatto.github.io/SaudeMais',
+      DEMO_ACCOUNTS_ENABLED: true,
       SMTP_HOST: 'smtp.gmail.com',
       SMTP_PORT: 465,
       MAIL_DRIVER: 'smtp',

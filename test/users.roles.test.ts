@@ -110,14 +110,21 @@ describe('initial accounts', () => {
     expect(rows.rows[0]?.total).toBe(0);
   });
 
-  it('refuses to start when the demo e-mail belongs to a regular account', async () => {
-    const { app, users } = await buildRolesApp();
-    await request(app)
-      .post('/api/users/register')
-      .send(registration({ email: demo.email }))
-      .expect(201);
+  it('skips the demo account with a warning when its e-mail belongs to a regular account', async () => {
+    const { db, users } = await buildRolesApp();
+    await users.service.ensureAccount({ ...demo, isProtected: false });
 
-    await expect(users.bootstrap(undefined)).rejects.toThrow(/different protection/);
+    await expect(users.bootstrap(undefined)).resolves.toEqual([expect.stringMatching(/different protection/)]);
+    const rows = await db.execute<{ is_protected: boolean }>(sql`select is_protected from users`);
+    expect(rows.rows).toEqual([{ is_protected: false }]);
+  });
+
+  it('creates no demo account when demo accounts are turned off', async () => {
+    const { db, users } = await buildRolesApp();
+
+    await expect(users.bootstrap(undefined, { demoAccounts: false })).resolves.toEqual([]);
+    const rows = await db.execute<{ total: number }>(sql`select count(*)::int as total from users`);
+    expect(rows.rows[0]?.total).toBe(0);
   });
 
   it('can run on every start without duplicating accounts, and promotes an existing account that proves its password', async () => {
