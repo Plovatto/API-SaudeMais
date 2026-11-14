@@ -18,3 +18,6 @@ export const timestamps = () => ({
   createdAt: timestamptz('created_at').notNull().defaultNow(),
   updatedAt: timestamptz('updated_at').notNull().defaultNow(),
 });
+
+export const isOneOf = (column: string, values: readonly string[]) =>
+  sql.raw(`${column} in (${values.map((value) => `'${value}'`).join(', ')})`);
