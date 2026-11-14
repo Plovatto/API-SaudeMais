@@ -17,6 +17,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
 - Lista de médicos com busca e vagas livres por período, calculadas pela agenda do médico, pelo horário da unidade e pela política de agendamento, no fuso de São Paulo
 - Pedido de consulta só em vaga gerada, com exclusion constraints que impedem horário duplicado para o médico e para o paciente, mesmo com pedidos simultâneos, e limite de 5 agendamentos ativos por paciente
+- Desativar uma conta ou remover o perfil médico cancela os agendamentos ativos futuros e avisa a outra parte; especialidade, unidade, tipo de exame ou oferta com agendamento futuro não podem ser desativados
 - Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
 - Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
 - Senhas com scrypt, login em tempo constante e limites de tentativas por IP e por e-mail

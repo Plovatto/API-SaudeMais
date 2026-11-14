@@ -1,8 +1,10 @@
-import { and, asc, eq, exists, inArray } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
+import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, settings, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
+import type { Clock } from '../../lib/clock.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import type {
   CreateExamTypeInput,
@@ -19,6 +21,7 @@ import type {
   UpdateSpecialtyInput,
   UpdateUnitInput,
 } from './catalog.model.js';
+import { hasActiveFuture } from '../bookings/bookings.repository.js';
 import type { CatalogEntity } from './catalog.messages.js';
 
 export type { Actor };
@@ -66,10 +69,10 @@ const policyColumns = {
   updatedAt: settings.updatedAt,
 };
 
-const lockable: Record<CatalogEntity, { table: PgTable; id: AnyPgColumn }> = {
-  specialty: { table: specialties, id: specialties.id },
-  unit: { table: units, id: units.id },
-  exam_type: { table: examTypes, id: examTypes.id },
+const lockable: Record<CatalogEntity, { table: PgTable; id: AnyPgColumn; booked: AnyPgColumn }> = {
+  specialty: { table: specialties, id: specialties.id, booked: bookings.specialtyId },
+  unit: { table: units, id: units.id, booked: bookings.unitId },
+  exam_type: { table: examTypes, id: examTypes.id, booked: bookings.examTypeId },
 };
 
 type UnitRow = Omit<Unit, 'hours'>;
@@ -77,7 +80,10 @@ type HourRow = Unit['hours'][number];
 type PolicyRow = Omit<Policy, 'updatedAt'> & { updatedAt: Date };
 
 export class CatalogRepository {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly clock: Clock,
+  ) {}
 
   activeSpecialties(): Promise<Specialty[]> {
     return this.db
@@ -215,6 +221,8 @@ export class CatalogRepository {
         .insert(unitExamOffers)
         .values({ unitId, examTypeId, ...input })
         .onConflictDoUpdate({ target: [unitExamOffers.unitId, unitExamOffers.examTypeId], set: input });
+      if (!input.isActive)
+        await this.ensureUnused(tx, and(eq(bookings.unitId, unitId), eq(bookings.examTypeId, examTypeId)));
       await recordAudit(tx, {
         ...actor,
         action: 'unit_exam_offer.saved',
@@ -247,8 +255,8 @@ export class CatalogRepository {
     });
   }
 
-  private isInUse(_tx: Transaction, _entity: CatalogEntity, _id: string): Promise<boolean> {
-    return Promise.resolve(false);
+  private async ensureUnused(tx: Transaction, scope: SQL | undefined): Promise<void> {
+    if (scope && (await hasActiveFuture(tx, scope, this.clock.now()))) throw new InUseError();
   }
 
   private capacityInUseAbove(_tx: Transaction, _unitId: string, _examTypeId: string, _capacity: number) {
@@ -277,8 +285,8 @@ export class CatalogRepository {
   ): Promise<Row | undefined> {
     return this.db.transaction(async (tx) => {
       if (!(await lockRow(tx, entity, id))) return undefined;
-      if (changes.isActive === false && (await this.isInUse(tx, entity, id))) throw new InUseError();
       const [row] = await update(tx);
+      if (changes.isActive === false) await this.ensureUnused(tx, eq(lockable[entity].booked, id));
       if (row) await recordAudit(tx, { ...actor, ...changeEntry(entity, id, changes) });
       return row;
     });

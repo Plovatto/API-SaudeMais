@@ -53,6 +53,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`NAME_TAKEN\` | 409 | Já existe um cadastro com esse nome, sem distinguir maiúsculas |
 | \`CODE_TAKEN\` | 409 | Já existe um tipo de exame com esse código |
 | \`EXAM_TYPE_INACTIVE\` | 409 | O tipo de exame está inativo e não pode ter oferta ativa |
+| \`IN_USE\` | 409 | Há agendamento futuro ativo ligado ao cadastro; ele não pode ser desativado |
 | \`COUNCIL_IN_USE\` | 409 | A especialidade tem médicos; o conselho não pode mudar |
 | \`SELF_OR_LAST_ADMIN\` | 409 | O administrador não pode desativar nem rebaixar a si mesmo nem deixar o sistema sem administradores |
 | \`USER_INACTIVE\` | 403 ou 409 | Conta desativada: login recusado (403) ou ação que exige conta ativa (409) |
