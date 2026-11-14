@@ -4,6 +4,7 @@ import type { Clock } from '../../lib/clock.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import {
   cancelActiveFuture,
+  confirmPending,
   ofAccount,
   seenBy,
   type BookingSide,
@@ -67,6 +68,21 @@ export class BookingsService {
     const { userId, role } = canceller;
     const { cancelled, afterCommit } = await this.cancel(tx, seenBy(userId, role, seen), userId, canceller);
     return cancelled > 0 ? afterCommit : undefined;
+  }
+
+  async confirmSeen(tx: Transaction, seen: SeenBooking, doctorId: string): Promise<AfterCommit | undefined> {
+    const confirmed = await confirmPending(tx, seenBy(doctorId, 'doctor', seen), doctorId, this.clock.now());
+    if (confirmed.length === 0) return undefined;
+    return this.notifications.notify(
+      tx,
+      confirmed.map((booking) => ({
+        userId: booking.patientId,
+        audienceRole: 'patient' as const,
+        type: 'appointment_confirmed' as const,
+        bookingId: booking.id,
+        params: { startsAt: booking.startsAt.toISOString() },
+      })),
+    );
   }
 
   private async cancel(tx: Transaction, scope: SQL, userId: string, canceller: Canceller) {

@@ -10,7 +10,12 @@ import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { AppointmentsController } from './appointments.controller.js';
 import { ACTIVE_LIMIT, appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
-import { appointmentSchema, bookAppointmentSchema, cancelAppointmentSchema } from './appointments.model.js';
+import {
+  appointmentSchema,
+  bookAppointmentSchema,
+  cancelAppointmentSchema,
+  confirmAppointmentSchema,
+} from './appointments.model.js';
 
 const path = '/api/appointments';
 const { outsideAvailability, reasonRequired } = appointmentRules;
@@ -78,18 +83,43 @@ documentOperation({
   },
 });
 
+documentOperation({
+  method: 'post',
+  path: `${path}/{id}/confirm`,
+  operationId: 'confirmAppointment',
+  tag: tags.doctor.name,
+  summary: 'Confirmar uma consulta',
+  description:
+    'Confirma um pedido pendente (`pending`) que ainda não começou, registra o evento `confirmed` com o médico como autor e, depois do commit, avisa o paciente com `appointment_confirmed`. Só o médico que atende a consulta confirma. Envie em `startsAt` o início que a tela mostrava: se o paciente reagendou ou cancelou, se a consulta já foi confirmada ou se o horário já chegou, a resposta é `INVALID_STATE` e nada muda. A conta de demonstração também confirma, porque os agendamentos dela são restaurados todo dia. Responde o detalhe atualizado; para os demais médicos, responde como inexistente. Limite: 60 requisições por minuto por IP.',
+  params: idParams,
+  body: confirmAppointmentSchema,
+  success: { status: 200, description: 'Consulta confirmada.', schema: appointmentSchema },
+  errors: {
+    403: forbiddenResponse,
+    404: notFoundResponse(appointmentNotFound),
+    409: conflictResponse(appointmentConflicts.notConfirmable),
+  },
+});
+
 export interface AppointmentsRouterDeps {
   controller: AppointmentsController;
   requireAuth: RequestHandler;
   requirePatient: RequestHandler;
+  requireDoctor: RequestHandler;
 }
 
-export function createAppointmentsRouter({ controller, requireAuth, requirePatient }: AppointmentsRouterDeps): Router {
+export function createAppointmentsRouter({
+  controller,
+  requireAuth,
+  requirePatient,
+  requireDoctor,
+}: AppointmentsRouterDeps): Router {
   const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
   const writeLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
   const router = Router();
   router.post(path, writeLimit, noStore, requireAuth, requirePatient, controller.book);
   router.get(`${path}/:id`, readLimit, noStore, requireAuth, controller.detail);
+  router.post(`${path}/:id/confirm`, writeLimit, noStore, requireAuth, requireDoctor, controller.confirm);
   router.post(`${path}/:id/cancel`, writeLimit, noStore, requireAuth, controller.cancel);
   return router;
 }

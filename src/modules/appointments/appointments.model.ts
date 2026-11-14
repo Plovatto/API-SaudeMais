@@ -34,13 +34,20 @@ export const bookAppointmentSchema = registry.register(
   }),
 );
 
+const seenStartsAt = instant(
+  'Envie o startsAt da consulta como ela apareceu na tela.',
+  'Início da consulta como o cliente o exibiu. Se a consulta mudou desde então, a resposta é `INVALID_STATE`.',
+);
+
+export const confirmAppointmentSchema = registry.register(
+  'ConfirmAppointmentRequest',
+  z.strictObject({ startsAt: seenStartsAt }),
+);
+
 export const cancelAppointmentSchema = registry.register(
   'CancelAppointmentRequest',
   z.strictObject({
-    startsAt: instant(
-      'Envie o startsAt da consulta como ela apareceu na tela.',
-      'Início da consulta como o cliente o exibiu. Se a consulta mudou desde então, a resposta é `INVALID_STATE`.',
-    ),
+    startsAt: seenStartsAt,
     reason: boundedText('O motivo', 0, 500).optional().openapi({
       description: 'Motivo do cancelamento; obrigatório para o médico.',
       example: 'Imprevisto de trabalho.',
@@ -96,5 +103,6 @@ export const appointmentSchema = registry.register(
 );
 
 export type BookAppointmentInput = z.infer<typeof bookAppointmentSchema>;
+export type ConfirmAppointmentInput = z.infer<typeof confirmAppointmentSchema>;
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
 export type Appointment = z.infer<typeof appointmentSchema>;

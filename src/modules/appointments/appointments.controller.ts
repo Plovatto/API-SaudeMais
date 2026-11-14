@@ -1,7 +1,7 @@
 import type { Request, RequestHandler } from 'express';
 import { idParams } from '../../lib/params.js';
 import { authOf } from '../../middleware/auth.js';
-import { bookAppointmentSchema, cancelAppointmentSchema } from './appointments.model.js';
+import { bookAppointmentSchema, cancelAppointmentSchema, confirmAppointmentSchema } from './appointments.model.js';
 import type { Viewer } from './appointments.repository.js';
 import type { AppointmentsService } from './appointments.service.js';
 
@@ -17,6 +17,10 @@ export function createAppointmentsController(service: AppointmentsService) {
     }) satisfies RequestHandler,
     detail: (async (req, res) => {
       res.json(await service.detail(idParams.parse(req.params).id, viewerOf(req)));
+    }) satisfies RequestHandler,
+    confirm: (async (req, res) => {
+      const { id } = idParams.parse(req.params);
+      res.json(await service.confirm(id, authOf(req).user.id, confirmAppointmentSchema.parse(req.body)));
     }) satisfies RequestHandler,
     cancel: (async (req, res) => {
       const { id } = idParams.parse(req.params);

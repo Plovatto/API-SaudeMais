@@ -1,17 +1,23 @@
-import { runAfterCommit } from '../../database/pg-client.js';
-import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
+import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
+import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import { civilDate, CLINIC_TIME_ZONE, wallClockIn } from '../../lib/time.js';
 import { slotDays } from '../../lib/time-slots.js';
 import { forbidden, unauthenticated } from '../../middleware/auth.js';
+import type { BookingSide } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { SlotContext } from '../doctors/doctors.repository.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import { ACTIVE_LIMIT, appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
-import type { Appointment, BookAppointmentInput, CancelAppointmentInput } from './appointments.model.js';
+import type {
+  Appointment,
+  BookAppointmentInput,
+  CancelAppointmentInput,
+  ConfirmAppointmentInput,
+} from './appointments.model.js';
 import type { AppointmentsRepository, Viewer } from './appointments.repository.js';
 
 const exclusionConflicts = {
@@ -60,15 +66,34 @@ export class AppointmentsService {
 
   async cancel(id: string, viewer: Viewer, { startsAt, reason }: CancelAppointmentInput): Promise<Appointment> {
     ensureParty(viewer);
+    return this.change(id, viewer, appointmentConflicts.invalidState, (role) => {
+      if (role === 'doctor' && !reason) throw unprocessableField(appointmentRules.reasonRequired);
+      const canceller = { role, userId: viewer.userId, reason: reason || null };
+      return (tx) => this.bookings.cancelSeen(tx, { id, startsAt: new Date(startsAt) }, canceller);
+    });
+  }
+
+  confirm(id: string, doctorId: string, { startsAt }: ConfirmAppointmentInput): Promise<Appointment> {
+    const viewer: Viewer = { userId: doctorId, roles: ['doctor'] };
+    return this.change(
+      id,
+      viewer,
+      appointmentConflicts.notConfirmable,
+      () => (tx) => this.bookings.confirmSeen(tx, { id, startsAt: new Date(startsAt) }, doctorId),
+    );
+  }
+
+  private async change(
+    id: string,
+    viewer: Viewer,
+    conflict: FieldConflict,
+    prepare: (role: BookingSide) => (tx: Transaction) => Promise<AfterCommit | undefined>,
+  ): Promise<Appointment> {
     const role = await this.repository.sideOf(id, viewer);
     if (!role) throw notFound(appointmentNotFound);
-    if (role === 'doctor' && !reason) throw unprocessableField(appointmentRules.reasonRequired);
-    const canceller = { role, userId: viewer.userId, reason: reason || null };
-    const seen = { id, startsAt: new Date(startsAt) };
-    const afterCommit = await retryOnDeadlock(() =>
-      this.repository.transaction((tx) => this.bookings.cancelSeen(tx, seen, canceller)),
-    );
-    if (!afterCommit) throw conflictError(appointmentConflicts.invalidState);
+    const work = prepare(role);
+    const afterCommit = await retryOnDeadlock(() => this.repository.transaction(work));
+    if (!afterCommit) throw conflictError(conflict);
     runAfterCommit(afterCommit);
     return this.find(id, viewer);
   }

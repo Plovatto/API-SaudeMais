@@ -1,4 +1,4 @@
-import { and, eq, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, gt, or, sql, type SQL } from 'drizzle-orm';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import {
@@ -129,5 +129,13 @@ export function cancelActiveFuture(
     },
     where: and(isActiveFuture(now), scope),
     event: { eventType: 'cancelled', actorType: role, actorUserId: userId, createdAt: now },
+  });
+}
+
+export function confirmPending(tx: Transaction, scope: SQL, doctorId: string, now: Date): Promise<ChangedBooking[]> {
+  return change(tx, {
+    set: { status: 'confirmed' },
+    where: and(eq(bookings.status, 'pending'), gt(bookings.startsAt, now), scope),
+    event: { eventType: 'confirmed', actorType: 'doctor', actorUserId: doctorId, createdAt: now },
   });
 }
