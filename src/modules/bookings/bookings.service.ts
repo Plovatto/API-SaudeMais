@@ -32,6 +32,7 @@ type Placement = Omit<Move, 'startsAt'>;
 interface Reschedule extends SeenBooking {
   patientId: string;
   newStartsAt: Date;
+  now: Date;
 }
 
 const rescheduleBlocks: Partial<Record<NonNullable<BookingActions['rescheduleBlockedReason']>, FieldConflict>> = {
@@ -111,11 +112,10 @@ export class BookingsService {
 
   async moveSeen(
     tx: Transaction,
-    { patientId, newStartsAt, ...seen }: Reschedule,
+    { patientId, newStartsAt, now, ...seen }: Reschedule,
     invalidState: FieldConflict,
     place: (booking: LockedBooking) => Placement | Promise<Placement>,
   ): Promise<ChangedBooking & { fromStartsAt: Date }> {
-    const now = this.clock.now();
     const booking = await lockSeen(tx, patientId, seen);
     if (!booking) throw conflictError(invalidState);
     const { rescheduleBlockedReason } = (await actionsAt(tx, now))(booking);
@@ -126,8 +126,8 @@ export class BookingsService {
     return { ...moved, fromStartsAt: booking.startsAt };
   }
 
-  async ensureActiveLimit(tx: Transaction, patientId: string, { isProtected }: LockedPatient): Promise<void> {
-    if (!isProtected && (await activeFutureCount(tx, patientId, this.clock.now())) >= ACTIVE_LIMIT) {
+  async ensureActiveLimit(tx: Transaction, patientId: string, { isProtected }: LockedPatient, now: Date) {
+    if (!isProtected && (await activeFutureCount(tx, patientId, now)) >= ACTIVE_LIMIT) {
       throw unprocessableField(activeLimit);
     }
   }

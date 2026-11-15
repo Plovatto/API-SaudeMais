@@ -11,7 +11,7 @@ import {
 } from '../../database/schema/bookings.js';
 import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
-import { bookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
+import { bookingActions, type BookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
 
 export type BookingSide = 'patient' | 'doctor';
 
@@ -120,6 +120,15 @@ async function policySettings(db: Pick<Database, 'select'>): Promise<PolicySetti
 export async function actionsAt(db: Pick<Database, 'select'>, now: Date) {
   const current = await policySettings(db);
   return (booking: PolicySubject) => bookingActions(booking, current, now);
+}
+
+export function splitActions<T extends Omit<PolicySubject, 'kind'>>(
+  row: T,
+  kind: PolicySubject['kind'],
+  actionsOf: (booking: PolicySubject) => BookingActions,
+) {
+  const { rescheduleCount: _rescheduleCount, ...view } = row;
+  return { view, actions: actionsOf({ ...row, kind }) };
 }
 
 export function exceptOwn(patientId: string, id: string | undefined): SQL | undefined {
@@ -256,7 +265,7 @@ export async function lockSeen(tx: Transaction, patientId: string, seen: SeenBoo
     })
     .from(bookings)
     .where(seenBy(patientId, 'patient', seen))
-    .for('update');
+    .for('no key update');
   return row;
 }
 

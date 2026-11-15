@@ -9,6 +9,7 @@ import {
   eventsOf,
   placeColumns,
   recordCreated,
+  splitActions,
   viewOf,
 } from '../bookings/bookings.repository.js';
 import { hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
@@ -173,11 +174,11 @@ export class ExamBookingsRepository {
         .innerJoin(examTypes, eq(examTypes.id, bookings.examTypeId))
         .where(examWith(id, patientId));
       if (!row) return undefined;
-      const { rescheduleCount: _rescheduleCount, ...view } = row;
+      const { view, actions } = splitActions(row, 'exam', await actionsAt(tx, now));
       return {
         ...viewOf(view),
         createdAt: row.createdAt.toISOString(),
-        actions: (await actionsAt(tx, now))({ ...row, kind: 'exam' }),
+        actions,
         events: await eventsOf(tx, id),
       };
     }, readSnapshot);

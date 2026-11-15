@@ -98,13 +98,14 @@ export class ExamBookingsService {
     if (!offer) throw notFound(examBookingNotFound);
     const target = new Date(newStartsAt);
     await this.bookings.rescheduleAsPatient(patientId, exclusionConflicts, async (tx) => {
+      const now = this.clock.now();
       const context = await this.repository.lockOffer(tx, offer);
-      if (!context) throw notFound(examOfferNotFound);
+      if (!context) throw conflictError(examConflicts.notReschedulable);
       return this.bookings.moveSeen(
         tx,
-        { id, patientId, startsAt: new Date(startsAt), newStartsAt: target },
+        { id, patientId, startsAt: new Date(startsAt), newStartsAt: target, now },
         examConflicts.notReschedulable,
-        ({ lane }) => this.seat(tx, context, offer, target, { id, patientId, lane }),
+        ({ lane }) => this.seat(tx, context, offer, { startsAt: target, now }, { id, patientId, lane }),
       );
     });
     return this.detail(id, patientId);
@@ -116,19 +117,20 @@ export class ExamBookingsService {
     patientId: string,
     { unitId, examTypeId, notes, ...input }: BookExamInput,
   ) {
-    await this.bookings.ensureActiveLimit(tx, patientId, patient);
+    const now = this.clock.now();
+    await this.bookings.ensureActiveLimit(tx, patientId, patient, now);
     const offer = { unitId, examTypeId };
     const context = await this.repository.lockOffer(tx, offer);
     if (!context) throw notFound(examOfferNotFound);
     const startsAt = new Date(input.startsAt);
-    const seat = await this.seat(tx, context, offer, startsAt);
+    const seat = await this.seat(tx, context, offer, { startsAt, now });
     return this.repository.create(tx, {
       ...offer,
       ...seat,
       patientId,
       startsAt,
       notes: notes || null,
-      now: this.clock.now(),
+      now,
     });
   }
 
@@ -136,10 +138,10 @@ export class ExamBookingsService {
     tx: Transaction,
     context: ExamSlotContext,
     offer: Offer,
-    startsAt: Date,
+    { startsAt, now }: { startsAt: Date; now: Date },
     current?: { id: string; patientId: string; lane: number | null },
   ) {
-    const slot = slotAt({ ...context, now: this.clock.now(), timeZone: CLINIC_TIME_ZONE }, startsAt);
+    const slot = slotAt({ ...context, now, timeZone: CLINIC_TIME_ZONE }, startsAt);
     if (!slot) throw unprocessableField(outsideExamAvailability);
     const endsAt = new Date(slot.endsAt);
     const except = current && exceptOwn(current.patientId, current.id);

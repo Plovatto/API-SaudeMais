@@ -11,7 +11,14 @@ import {
 import { examTypes, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf } from '../../lib/pagination.js';
-import { actionsAt, cancellationColumns, countWhere, placeColumns, viewOf } from '../bookings/bookings.repository.js';
+import {
+  actionsAt,
+  cancellationColumns,
+  countWhere,
+  placeColumns,
+  splitActions,
+  viewOf,
+} from '../bookings/bookings.repository.js';
 import type { BookingScope, PatientBookingPage, PatientBookingsQuery } from './patient-bookings.model.js';
 
 const doctorUsers = alias(users, 'doctor_users');
@@ -70,10 +77,10 @@ export class PatientBookingsRepository {
       const actionsOf = await actionsAt(tx, now);
       return {
         ...page,
-        items: page.items.map(({ rescheduleCount, ...row }) => ({
-          ...viewOf(row),
-          actions: actionsOf({ ...row, rescheduleCount }),
-        })),
+        items: page.items.map((row) => {
+          const { view, actions } = splitActions(row, row.kind, actionsOf);
+          return { ...viewOf(view), actions };
+        }),
         counts: await countsOf(tx, patientId, now),
       };
     }, readSnapshot);

@@ -1,5 +1,5 @@
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
-import { AppError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
+import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotAt } from '../../lib/time-slots.js';
@@ -86,13 +86,14 @@ export class AppointmentsService {
     if (!party) throw notFound(appointmentNotFound);
     const target = new Date(newStartsAt);
     const afterCommit = await this.bookings.rescheduleAsPatient(patientId, exclusionConflicts, async (tx, patient) => {
+      const now = this.clock.now();
       const context = await this.repository.lockDoctor(tx, { ...party, includeProtected: patient.isProtected });
-      if (!context) throw notFound(doctorNotFound);
+      if (!context) throw conflictError(appointmentConflicts.notReschedulable);
       const moved = await this.bookings.moveSeen(
         tx,
-        { id, patientId, startsAt: new Date(startsAt), newStartsAt: target },
+        { id, patientId, startsAt: new Date(startsAt), newStartsAt: target, now },
         appointmentConflicts.notReschedulable,
-        () => ({ endsAt: slotEnd(context, target, this.clock.now()), status: 'pending' }),
+        () => ({ endsAt: slotEnd(context, target, now), status: 'pending' }),
       );
       return this.notifications.notify(tx, [
         {
@@ -132,8 +133,8 @@ export class AppointmentsService {
     patientId: string,
     { doctorId, specialtyId, visitType, notes, ...input }: BookAppointmentInput,
   ) {
-    await this.bookings.ensureActiveLimit(tx, patientId, patient);
     const now = this.clock.now();
+    await this.bookings.ensureActiveLimit(tx, patientId, patient, now);
     const context = await this.repository.lockDoctor(tx, {
       doctorId,
       specialtyId,

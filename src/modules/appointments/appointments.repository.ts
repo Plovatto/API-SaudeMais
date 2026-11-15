@@ -12,6 +12,7 @@ import {
   ofAccount,
   placeColumns,
   recordCreated,
+  splitActions,
   viewOf,
   type BookingSide,
 } from '../bookings/bookings.repository.js';
@@ -138,12 +139,11 @@ export class AppointmentsRepository {
         .innerJoin(units, eq(units.id, bookings.unitId))
         .where(and(appointmentWith(id), visibleTo(viewer)));
       if (!row) return undefined;
-      const { rescheduleCount: _rescheduleCount, ...view } = row;
-      const actionsOf = row.patient.id === viewer.userId ? await actionsAt(tx, now) : undefined;
+      const { view, actions } = splitActions(row, 'appointment', await actionsAt(tx, now));
       return {
         ...viewOf(view),
         createdAt: row.createdAt.toISOString(),
-        actions: actionsOf?.({ ...row, kind: 'appointment' }) ?? null,
+        actions: row.patient.id === viewer.userId ? actions : null,
         events: await eventsOf(tx, id),
       };
     }, readSnapshot);
