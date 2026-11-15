@@ -29,12 +29,14 @@ describe('POST /api/appointments/:id/complete and /no-show', () => {
   let doctor: string;
   let owner: Doctor;
   let patient: string;
+  let other: Awaited<ReturnType<typeof createDoctor>>;
 
   beforeAll(async () => {
     const created = await createDoctor(context, 'registro.medico@email.com', 'Dra. Registro Teste', '700006');
     doctor = created.token;
     owner = created.doctor;
     patient = await signUp(context.app, 'registrado@email.com');
+    other = await createDoctor(context, 'registro.outro@email.com', 'Dr. Registro Outro', '700007');
   });
 
   const record = (token: string, action: string, id: string, body: Record<string, unknown>) =>
@@ -73,8 +75,8 @@ describe('POST /api/appointments/:id/complete and /no-show', () => {
     const response = await record(doctor, 'complete', awaiting.id, { startsAt: awaiting.startsAt });
 
     expect(before.items.find((item) => item.id === awaiting.id)?.actions).toEqual(RECORDABLE);
-    expect((shownToDoctor.body as Item).actions).toEqual(RECORDABLE);
-    expect((response.body as Item).actions).toEqual(NO_ACTIONS);
+    expect(shownToDoctor.body).toMatchObject({ patientActions: null, doctorActions: RECORDABLE });
+    expect(response.body).toMatchObject({ patientActions: null, doctorActions: NO_ACTIONS });
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.body).toMatchObject({ id: awaiting.id, status: 'completed', startsAt: awaiting.startsAt });
@@ -99,7 +101,8 @@ describe('POST /api/appointments/:id/complete and /no-show', () => {
     const shown = await request(context.app).get(`/api/appointments/${awaiting.id}`).set(as(patient)).expect(200);
     expect(shown.body).toMatchObject({
       status: 'completed',
-      actions: { canCancel: false, cancelBlockedReason: 'closed', canReschedule: false },
+      patientActions: { canCancel: false, cancelBlockedReason: 'closed', canReschedule: false },
+      doctorActions: null,
     });
   });
 
@@ -119,9 +122,13 @@ describe('POST /api/appointments/:id/complete and /no-show', () => {
     expect(await eventsOf(awaiting.id)).toEqual(['created', 'confirmed', 'no_show']);
   });
 
-  it('answers 409 NOT_STARTED to a confirmed appointment that has not started yet', async () => {
+  it('answers 409 NOT_STARTED to a confirmed appointment that has not started yet and 404 to other doctors', async () => {
     const booked = await book(patient, owner, slot('2026-12-08', '11:00'));
     await confirm(doctor, booked.id, { startsAt: booked.startsAt }).expect(200);
+    const byOtherDoctor = await record(other.token, 'complete', booked.id, { startsAt: booked.startsAt });
+
+    expect(byOtherDoctor.status).toBe(404);
+    expect(byOtherDoctor.body).toEqual({ message: 'Consulta não encontrada.', code: 'NOT_FOUND' });
 
     for (const action of ['complete', 'no-show']) {
       const response = await record(doctor, action, booked.id, { startsAt: booked.startsAt });
@@ -164,7 +171,6 @@ describe('POST /api/appointments/:id/complete and /no-show', () => {
 
   it('answers 404 to other doctors and to the patient side and 403 to accounts without the doctor profile', async () => {
     const awaiting = await started(slot('2026-12-10', '11:00'), slot('2026-11-17', '11:00'));
-    const other = await createDoctor(context, 'registro.outro@email.com', 'Dr. Registro Outro', '700007');
     const ownBooking = await book(doctor, other.doctor, slot('2026-12-10', '12:00'));
     await confirm(other.token, ownBooking.id, { startsAt: ownBooking.startsAt }).expect(200);
     await moveTo(ownBooking.id, slot('2026-11-17', '12:00'));

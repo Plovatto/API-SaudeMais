@@ -20,6 +20,7 @@ export const notStarted: FieldConflict = {
   field: '_root',
   message: 'Esta consulta ainda não começou. Conclua ou registre a falta a partir do horário de início.',
 };
+
 export const rescheduleConflicts = {
   windowClosed: {
     code: 'RESCHEDULE_WINDOW_CLOSED',

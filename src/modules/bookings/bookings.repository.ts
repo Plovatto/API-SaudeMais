@@ -124,10 +124,10 @@ export async function actionsAt(db: Pick<Database, 'select'>, now: Date) {
   return (booking: PolicySubject) => bookingActions(booking, current, now);
 }
 
-export function splitActions<T extends Omit<PolicySubject, 'kind'>>(
+export function splitActions<T extends Omit<PolicySubject, 'kind'>, A = BookingActions>(
   row: T,
   kind: PolicySubject['kind'],
-  actionsOf: (booking: PolicySubject) => BookingActions,
+  actionsOf: (booking: PolicySubject) => A,
 ) {
   const { rescheduleCount: _rescheduleCount, ...view } = row;
   return { view, actions: actionsOf({ ...row, kind }) };
@@ -137,12 +137,12 @@ export function exceptOwn(patientId: string, id: string | undefined): SQL | unde
   return id === undefined ? undefined : sql`not (${eq(bookings.id, id)} and ${eq(bookings.patientId, patientId)})`;
 }
 
-export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
+export async function hasActiveFuture(
+  db: Pick<Database, '$count'>,
+  scope: SQL | undefined,
+  now: Date,
+): Promise<boolean> {
   return (await db.$count(bookings, and(isActiveFuture(now), scope))) > 0;
-}
-
-export function hasUpcomingConfirmed(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
-  return hasActiveFuture(db, sql`${eq(bookings.status, 'confirmed')} and ${scope}`, now);
 }
 
 export async function futureBookingCounts(db: Pick<Database, 'select'>, userId: string, now: Date) {

@@ -140,11 +140,13 @@ export class AppointmentsRepository {
         .innerJoin(units, eq(units.id, bookings.unitId))
         .where(and(appointmentWith(id), visibleTo(viewer)));
       if (!row) return undefined;
-      const { view, actions } = splitActions(row, 'appointment', await actionsAt(tx, now));
+      const isPatient = row.patient.id === viewer.userId;
+      const { view, actions } = splitActions(row, 'appointment', isPatient ? await actionsAt(tx, now) : () => null);
       return {
         ...viewOf(view),
         createdAt: row.createdAt.toISOString(),
-        actions: row.patient.id === viewer.userId ? actions : doctorActions(row, now),
+        patientActions: actions,
+        doctorActions: isPatient ? null : doctorActions(row, now),
         events: await eventsOf(tx, id),
       };
     }, readSnapshot);

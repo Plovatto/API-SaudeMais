@@ -17,7 +17,7 @@ interface Appointment {
   id: string;
   status: string;
   startsAt: string;
-  actions: Record<string, unknown> | null;
+  patientActions: Record<string, unknown> | null;
   events: Record<string, unknown>[];
 }
 
@@ -82,7 +82,7 @@ describe('POST /api/appointments/:id/reschedule', () => {
       status: 'pending',
       startsAt: to,
       endsAt: slot('2026-12-14', '12:30'),
-      actions: { canReschedule: true, rescheduleBlockedReason: null, reschedulesLeft: 1 },
+      patientActions: { canReschedule: true, rescheduleBlockedReason: null, reschedulesLeft: 1 },
     });
     expect(moved.events.at(-1)).toEqual({
       type: 'rescheduled',
@@ -144,7 +144,7 @@ describe('POST /api/appointments/:id/reschedule', () => {
     expect((await show(token, booking.id)).body).toMatchObject({
       status: 'confirmed',
       startsAt: confirmedAt,
-      actions: { lateCancellation: true, canReschedule: false, rescheduleBlockedReason: 'window_closed' },
+      patientActions: { lateCancellation: true, canReschedule: false, rescheduleBlockedReason: 'window_closed' },
     });
   });
 
@@ -157,7 +157,11 @@ describe('POST /api/appointments/:id/reschedule', () => {
       .body as Appointment;
     const response = await reschedule(token, booking.id, { startsAt: third, newStartsAt: fourth });
 
-    expect(last.actions).toMatchObject({ canReschedule: false, rescheduleBlockedReason: 'limit', reschedulesLeft: 0 });
+    expect(last.patientActions).toMatchObject({
+      canReschedule: false,
+      rescheduleBlockedReason: 'limit',
+      reschedulesLeft: 0,
+    });
     expect(response.status).toBe(409);
     expect(response.body).toEqual({
       message: 'Este agendamento já foi reagendado o máximo de vezes permitido.',
