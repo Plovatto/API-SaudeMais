@@ -19,6 +19,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Pedido de consulta só em vaga gerada, com exclusion constraints que impedem horário duplicado para o médico e para o paciente, mesmo com pedidos simultâneos, e limite de 5 agendamentos ativos por paciente
 - Agendamento de exames nas vagas geradas pelo horário da unidade, com os lugares restantes de cada vaga, capacidade garantida por raias e exclusion constraint mesmo com pedidos simultâneos, código público para apresentar na unidade e cancelamento pelo paciente
 - Início e agendamentos do paciente nas abas agendados e realizados, com filtros, totais e as ações permitidas calculadas pela política; cancelamento pelo paciente ou pelo médico, condicionado ao horário que a tela mostrava, com aviso à outra parte e marcação de cancelamento tardio
+- Reagendamento de consultas e exames pelo paciente, na mesma linha e em uma transação, até o limite de reagendamentos e, se confirmado, fora da janela da política: a consulta volta a pendente e avisa o médico, o exame continua confirmado e mantém o lugar quando livre, e a vaga antiga só é liberada se a nova for garantida
 - Início e agenda do médico nas abas a confirmar, confirmadas e histórico, com o resumo de hoje no fuso de São Paulo, totais e as ações permitidas; confirmação pelo médico condicionada ao horário que a tela mostrava, com aviso ao paciente
 - Desativar uma conta ou remover o perfil médico cancela os agendamentos ativos futuros e avisa a outra parte; especialidade, unidade, tipo de exame ou oferta com agendamento futuro não podem ser desativados, e a capacidade da oferta não fica abaixo de um lugar ocupado por exame que ainda não terminou
 - Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
@@ -217,15 +218,17 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | GET | `/api/units` | Unidades ativas com horários (filtro `examTypeId`) |
 | GET | `/api/exam-types` | Tipos de exame ativos |
 | GET | `/api/doctors` | Médicos com especialidade e unidade (filtros `specialtyId`, `search`; paciente) |
-| GET | `/api/doctors/{id}/availability` | Vagas livres de um médico entre `from` e `to`, até 31 dias (paciente) |
+| GET | `/api/doctors/{id}/availability` | Vagas livres de um médico entre `from` e `to`, até 31 dias; `rescheduling` libera a vaga da própria consulta na tela de reagendar (paciente) |
 | POST | `/api/appointments` | Pede uma consulta em uma vaga livre; nasce pendente e avisa o médico (paciente) |
 | GET | `/api/appointments/{id}` | Detalhe e histórico da consulta (paciente dela ou médico que a atende) |
 | POST | `/api/appointments/{id}/confirm` | Confirma um pedido pendente e avisa o paciente (médico que a atende) |
 | POST | `/api/appointments/{id}/cancel` | Cancela a consulta e avisa a outra parte; motivo obrigatório para o médico (paciente dela ou médico que a atende) |
-| GET | `/api/exam-availability` | Vagas de um exame na unidade entre `from` e `to`, até 31 dias, com os lugares restantes (paciente) |
+| POST | `/api/appointments/{id}/reschedule` | Troca o horário dentro da política de reagendamento; volta a pendente e avisa o médico (paciente dela) |
+| GET | `/api/exam-availability` | Vagas de um exame na unidade entre `from` e `to`, até 31 dias, com os lugares restantes; `rescheduling` libera o lugar do próprio exame na tela de reagendar (paciente) |
 | POST | `/api/exam-bookings` | Agenda um exame em uma vaga com lugar; nasce confirmado, com código público (paciente) |
 | GET | `/api/exam-bookings/{id}` | Detalhe, preparo e histórico do exame (paciente dele) |
 | POST | `/api/exam-bookings/{id}/cancel` | Cancela o exame e libera o lugar (paciente dele) |
+| POST | `/api/exam-bookings/{id}/reschedule` | Troca o horário dentro da política de reagendamento; continua confirmado, sujeito à capacidade (paciente dele) |
 | GET | `/api/patient/home` | Próximos agendamentos, totais das abas e último aviso (paciente) |
 | GET | `/api/patient/bookings` | Agendamentos do paciente por aba `scope`, com filtros `kind` e `status` e ações permitidas (paciente) |
 | GET, POST | `/api/admin/specialties` | Lista e cria especialidades (admin) |
