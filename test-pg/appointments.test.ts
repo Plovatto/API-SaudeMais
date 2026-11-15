@@ -6,7 +6,7 @@ import { createDb } from '@/database/pg-client.js';
 import { DEMO_ACCOUNTS, DEMO_DOCTOR } from '@/modules/users/user.demo.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
-import { as, signUp, START } from '../test/support/users.js';
+import { as, HOUR, signUp, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
@@ -113,7 +113,7 @@ describe('appointments on PostgreSQL', () => {
           [id],
         )
       ).rows.map((row) => row.event_type);
-    return { patient, doctor, act, events };
+    return { id, startsAt, patient, doctor, act, events };
   }
 
   it('confirms a request only once when two confirmations race', async () => {
@@ -141,10 +141,12 @@ describe('appointments on PostgreSQL', () => {
   async function startedBooking() {
     const booking = await demoBooking();
     await booking.act('confirm', booking.doctor).expect(200);
+    const startsAt = new Date(Date.parse(booking.startsAt) - 96 * HOUR).toISOString();
     await pool.query(
-      "update bookings set starts_at = starts_at - interval '4 days', ends_at = ends_at - interval '4 days'",
+      'update bookings set starts_at = $2, ends_at = $2::timestamptz + (ends_at - starts_at) where id = $1',
+      [booking.id, startsAt],
     );
-    return { ...booking, startsAt: '2026-11-19T11:00:00.000Z' };
+    return { ...booking, startsAt };
   }
 
   it('records only one outcome when a completion and a no-show race', async () => {
