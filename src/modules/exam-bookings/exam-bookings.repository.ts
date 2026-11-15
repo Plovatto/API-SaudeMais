@@ -1,6 +1,6 @@
 import { and, eq, gt, lt, sql } from 'drizzle-orm';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
-import { bookings, effectiveStatus } from '../../database/schema/bookings.js';
+import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, unitExamOffers, units } from '../../database/schema/catalog.js';
 import type { SlotRequest } from '../../lib/time-slots.js';
 import {
@@ -17,7 +17,7 @@ import { slotPolicy } from '../doctors/doctors.repository.js';
 import { newPublicCode } from './exam-bookings.code.js';
 import type { ExamBooking } from './exam-bookings.model.js';
 
-export interface Offer {
+interface Offer {
   unitId: string;
   examTypeId: string;
 }
@@ -28,7 +28,7 @@ export interface LaneUse {
   lane: number;
 }
 
-export type ExamSlotContext = Pick<
+type ExamSlotContext = Pick<
   SlotRequest,
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays'
 > & { capacity: number };
@@ -140,12 +140,12 @@ export class ExamBookingsRepository {
     return (await this.db.$count(bookings, examWith(id, patientId))) > 0;
   }
 
-  find(id: string, patientId: string, now: Date): Promise<ExamBooking | undefined> {
+  find(id: string, patientId: string): Promise<ExamBooking | undefined> {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .select({
           id: bookings.id,
-          status: effectiveStatus(now),
+          status: sql<ExamBooking['status']>`${bookings.status}`,
           publicCode: sql<string>`${bookings.publicCode}`,
           startsAt: bookings.startsAt,
           endsAt: bookings.endsAt,

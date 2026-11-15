@@ -76,7 +76,7 @@ export class ExamBookingsService {
   }
 
   async detail(id: string, patientId: string): Promise<ExamBooking> {
-    const exam = await this.repository.find(id, patientId, this.clock.now());
+    const exam = await this.repository.find(id, patientId);
     if (!exam) throw notFound(examBookingNotFound);
     return exam;
   }

@@ -1,12 +1,16 @@
 import '../../docs/zod-extend.js';
 import { z } from 'zod';
-import { bookingStatuses } from '../../database/schema/bookings.js';
+import type { BookingStatus } from '../../database/schema/bookings.js';
 import { registry } from '../../docs/registry.js';
 import { uuidParam } from '../../lib/params.js';
 import { boundedText } from '../../lib/text.js';
 import { bookingEventSchema, cancellationSchema, instant, seenStartsAt } from '../appointments/appointments.model.js';
 import { examTypeSchema } from '../catalog/catalog.model.js';
 import { doctorSchema, periodShape, slotSchema, withPeriodRules } from '../doctors/doctors.model.js';
+
+const examStatuses = ['confirmed', 'cancelled', 'completed'] as const satisfies readonly BookingStatus[];
+
+const PUBLIC_CODE_PATTERN = /^EX-[0-9A-HJKMNP-TV-Z]{6}$/;
 
 const offerShape = {
   unitId: uuidParam.openapi({ description: 'Unidade escolhida.' }),
@@ -26,7 +30,7 @@ export const examAvailabilitySchema = registry.register(
             .array(
               slotSchema.extend({
                 remaining: z.int().positive().openapi({
-                  description: 'Lugares livres na vaga: a capacidade da oferta menos os exames que a ocupam.',
+                  description: 'Lugares livres na vaga: a capacidade menos os lugares (raias) ocupados no intervalo.',
                   example: 3,
                 }),
               }),
@@ -55,11 +59,14 @@ export const examBookingSchema = registry.register(
   'ExamBooking',
   z.object({
     id: z.uuid(),
-    status: z.enum(bookingStatuses).openapi({
+    status: z.enum(examStatuses).openapi({
       description: 'Situação do exame: nasce `confirmed` e pode ser `cancelled` ou `completed`.',
       example: 'confirmed',
     }),
-    publicCode: z.string().openapi({ description: 'Código para apresentar na unidade.', example: 'EX-7F3K2Q' }),
+    publicCode: z
+      .string()
+      .regex(PUBLIC_CODE_PATTERN)
+      .openapi({ description: 'Código para apresentar na unidade.', example: 'EX-7F3K2Q' }),
     startsAt: z.iso.datetime().openapi({ example: '2026-11-23T11:00:00.000Z' }),
     endsAt: z.iso.datetime().openapi({ example: '2026-11-23T11:10:00.000Z' }),
     notes: z.string().nullable().openapi({ description: 'Observações do paciente.' }),
