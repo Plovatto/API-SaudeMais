@@ -5,13 +5,11 @@ import { examTypes, unitExamOffers, units } from '../../database/schema/catalog.
 import type { SlotRequest } from '../../lib/time-slots.js';
 import {
   actionsAt,
-  asPatient,
   cancellationColumns,
   eventsOf,
   placeColumns,
   recordCreated,
   viewOf,
-  type LockedPatient,
 } from '../bookings/bookings.repository.js';
 import { hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
 import { slotPolicy } from '../doctors/doctors.repository.js';
@@ -86,10 +84,6 @@ export class ExamBookingsRepository {
       if (!sizing) return undefined;
       return { ...(await slotFrame(tx, offer.unitId, sizing)), lanes: await this.lanesInUse(tx, offer, period) };
     }, readSnapshot);
-  }
-
-  book<T>(patientId: string, work: (tx: Transaction, patient: LockedPatient) => Promise<T>) {
-    return asPatient(this.db, patientId, work);
   }
 
   async lockOffer(tx: Transaction, { unitId, examTypeId }: Offer): Promise<ExamSlotContext | undefined> {

@@ -1,11 +1,10 @@
+import type { Transaction } from '../../database/pg-client.js';
 import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
-import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
-import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import { CLINIC_TIME_ZONE, DAY, instantOfWallClock } from '../../lib/time.js';
 import { slotAt, slotDays } from '../../lib/time-slots.js';
-import { unauthenticated } from '../../middleware/auth.js';
 import { patientConflict } from '../bookings/bookings.messages.js';
+import type { LockedPatient } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import {
   examBookingNotFound,
@@ -67,11 +66,9 @@ export class ExamBookingsService {
   }
 
   async book(patientId: string, input: BookExamInput): Promise<ExamBooking> {
-    const id = await withConstraintConflicts(
-      () => retryOnDeadlock(() => this.create(patientId, input)),
-      exclusionConflicts,
+    const id = await this.bookings.writeAsPatient(patientId, exclusionConflicts, (tx, patient) =>
+      this.create(tx, patient, patientId, input),
     );
-    if (!id) throw unauthenticated();
     return this.detail(id, patientId);
   }
 
@@ -91,29 +88,32 @@ export class ExamBookingsService {
     return this.detail(id, patientId);
   }
 
-  private create(patientId: string, { unitId, examTypeId, notes, ...input }: BookExamInput) {
-    return this.repository.book(patientId, async (tx, patient) => {
-      await this.bookings.ensureActiveLimit(tx, patientId, patient);
-      const now = this.clock.now();
-      const context = await this.repository.lockOffer(tx, { unitId, examTypeId });
-      if (!context) throw notFound(examOfferNotFound);
-      const startsAt = new Date(input.startsAt);
-      const slot = slotAt({ ...context, now, timeZone: CLINIC_TIME_ZONE }, startsAt);
-      if (!slot) throw unprocessableField(outsideExamAvailability);
-      const endsAt = new Date(slot.endsAt);
-      const lanes = await this.repository.lanesInUse(tx, { unitId, examTypeId }, { from: startsAt, to: endsAt });
-      const [lane] = freeLanes(context.capacity, lanes, startsAt, endsAt);
-      if (lane === undefined) throw conflictError(examConflicts.noCapacity);
-      return this.repository.create(tx, {
-        unitId,
-        examTypeId,
-        patientId,
-        lane,
-        startsAt,
-        endsAt,
-        notes: notes || null,
-        now,
-      });
+  private async create(
+    tx: Transaction,
+    patient: LockedPatient,
+    patientId: string,
+    { unitId, examTypeId, notes, ...input }: BookExamInput,
+  ) {
+    await this.bookings.ensureActiveLimit(tx, patientId, patient);
+    const now = this.clock.now();
+    const context = await this.repository.lockOffer(tx, { unitId, examTypeId });
+    if (!context) throw notFound(examOfferNotFound);
+    const startsAt = new Date(input.startsAt);
+    const slot = slotAt({ ...context, now, timeZone: CLINIC_TIME_ZONE }, startsAt);
+    if (!slot) throw unprocessableField(outsideExamAvailability);
+    const endsAt = new Date(slot.endsAt);
+    const lanes = await this.repository.lanesInUse(tx, { unitId, examTypeId }, { from: startsAt, to: endsAt });
+    const [lane] = freeLanes(context.capacity, lanes, startsAt, endsAt);
+    if (lane === undefined) throw conflictError(examConflicts.noCapacity);
+    return this.repository.create(tx, {
+      unitId,
+      examTypeId,
+      patientId,
+      lane,
+      startsAt,
+      endsAt,
+      notes: notes || null,
+      now,
     });
   }
 }

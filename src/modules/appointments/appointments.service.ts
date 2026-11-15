@@ -1,13 +1,11 @@
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
 import { AppError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
-import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
-import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import { CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotAt } from '../../lib/time-slots.js';
-import { forbidden, unauthenticated } from '../../middleware/auth.js';
+import { forbidden } from '../../middleware/auth.js';
 import { patientConflict } from '../bookings/bookings.messages.js';
-import type { BookingSide } from '../bookings/bookings.repository.js';
+import type { BookingSide, LockedPatient } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { SlotContext } from '../doctors/doctors.repository.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
@@ -48,13 +46,11 @@ export class AppointmentsService {
 
   async book(patientId: string, input: BookAppointmentInput): Promise<Appointment> {
     if (input.doctorId === patientId) throw unprocessableField(appointmentRules.selfBooking);
-    const result = await withConstraintConflicts(
-      () => retryOnDeadlock(() => this.create(patientId, input)),
-      exclusionConflicts,
+    const { id, afterCommit } = await this.bookings.writeAsPatient(patientId, exclusionConflicts, (tx, patient) =>
+      this.create(tx, patient, patientId, input),
     );
-    if (!result) throw unauthenticated();
-    runAfterCommit(result.afterCommit);
-    return this.detail(result.id, { userId: patientId, roles: ['patient'] });
+    runAfterCommit(afterCommit);
+    return this.detail(id, { userId: patientId, roles: ['patient'] });
   }
 
   async detail(id: string, viewer: Viewer): Promise<Appointment> {
@@ -99,38 +95,41 @@ export class AppointmentsService {
     return appointment;
   }
 
-  private create(patientId: string, { doctorId, specialtyId, visitType, notes, ...input }: BookAppointmentInput) {
-    return this.repository.book(patientId, async (tx, patient) => {
-      await this.bookings.ensureActiveLimit(tx, patientId, patient);
-      const now = this.clock.now();
-      const context = await this.repository.lockDoctor(tx, {
-        doctorId,
-        specialtyId,
-        includeProtected: patient.isProtected,
-      });
-      if (!context) throw notFound(doctorNotFound);
-      if (context.specialtyId !== specialtyId) throw unprocessableField(appointmentRules.specialtyMismatch);
-      const startsAt = new Date(input.startsAt);
-      const endsAt = slotEnd(context, startsAt, now);
-      const id = await this.repository.create(tx, {
-        patientId,
-        doctorId,
-        visitType,
-        startsAt,
-        endsAt,
-        notes: notes || null,
-        now,
-      });
-      const afterCommit = await this.notifications.notify(tx, [
-        {
-          userId: doctorId,
-          audienceRole: 'doctor',
-          type: 'appointment_requested',
-          bookingId: id,
-          params: { startsAt: startsAt.toISOString() },
-        },
-      ]);
-      return { id, afterCommit };
+  private async create(
+    tx: Transaction,
+    patient: LockedPatient,
+    patientId: string,
+    { doctorId, specialtyId, visitType, notes, ...input }: BookAppointmentInput,
+  ) {
+    await this.bookings.ensureActiveLimit(tx, patientId, patient);
+    const now = this.clock.now();
+    const context = await this.repository.lockDoctor(tx, {
+      doctorId,
+      specialtyId,
+      includeProtected: patient.isProtected,
     });
+    if (!context) throw notFound(doctorNotFound);
+    if (context.specialtyId !== specialtyId) throw unprocessableField(appointmentRules.specialtyMismatch);
+    const startsAt = new Date(input.startsAt);
+    const endsAt = slotEnd(context, startsAt, now);
+    const id = await this.repository.create(tx, {
+      patientId,
+      doctorId,
+      visitType,
+      startsAt,
+      endsAt,
+      notes: notes || null,
+      now,
+    });
+    const afterCommit = await this.notifications.notify(tx, [
+      {
+        userId: doctorId,
+        audienceRole: 'doctor',
+        type: 'appointment_requested',
+        bookingId: id,
+        params: { startsAt: startsAt.toISOString() },
+      },
+    ]);
+    return { id, afterCommit };
   }
 }

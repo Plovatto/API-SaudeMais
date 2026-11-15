@@ -7,7 +7,6 @@ import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { users, type Role } from '../../database/schema/users.js';
 import {
   actionsAt,
-  asPatient,
   cancellationColumns,
   eventsOf,
   ofAccount,
@@ -15,7 +14,6 @@ import {
   recordCreated,
   viewOf,
   type BookingSide,
-  type LockedPatient,
 } from '../bookings/bookings.repository.js';
 import { slotContext, type SlotContext } from '../doctors/doctors.repository.js';
 import type { Appointment } from './appointments.model.js';
@@ -53,10 +51,6 @@ const appointmentWith = (id: string) => and(eq(bookings.id, id), eq(bookings.kin
 
 export class AppointmentsRepository {
   constructor(private readonly db: Database) {}
-
-  book<T>(patientId: string, work: (tx: Transaction, patient: LockedPatient) => Promise<T>) {
-    return asPatient(this.db, patientId, work);
-  }
 
   async lockDoctor(
     tx: Transaction,

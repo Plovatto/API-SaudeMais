@@ -2,11 +2,14 @@ import type { SQL } from 'drizzle-orm';
 import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
 import { conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
+import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
+import { unauthenticated } from '../../middleware/auth.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import { ACTIVE_LIMIT, activeLimit } from './bookings.messages.js';
 import {
   activeFutureCount,
+  asPatient,
   cancelActiveFuture,
   confirmPending,
   ofAccount,
@@ -56,6 +59,19 @@ export class BookingsService {
     private readonly notifications: NotificationsService,
     private readonly clock: Clock,
   ) {}
+
+  async writeAsPatient<T>(
+    patientId: string,
+    conflicts: Record<string, FieldConflict>,
+    work: (tx: Transaction, patient: LockedPatient) => Promise<T>,
+  ): Promise<T> {
+    const result = await withConstraintConflicts(
+      () => retryOnDeadlock(() => asPatient(this.db, patientId, work)),
+      conflicts,
+    );
+    if (result === undefined) throw unauthenticated();
+    return result;
+  }
 
   async ensureActiveLimit(tx: Transaction, patientId: string, { isProtected }: LockedPatient): Promise<void> {
     if (!isProtected && (await activeFutureCount(tx, patientId, this.clock.now())) >= ACTIVE_LIMIT) {
