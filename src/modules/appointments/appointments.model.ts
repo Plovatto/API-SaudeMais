@@ -116,6 +116,30 @@ export const bookingActionsSchema = z
   })
   .openapi({ description: 'O que o paciente pode fazer, calculado pela política de agendamento.' });
 
+export const doctorActionsSchema = registry.register(
+  'DoctorActions',
+  z
+    .object({
+      canConfirm: z.boolean().openapi({
+        description: 'Se o médico pode confirmar: pedido pendente que ainda não começou.',
+        example: true,
+      }),
+      canCancel: z.boolean().openapi({
+        description: 'Se o médico pode cancelar, com motivo: pendente ou confirmada que ainda não começou.',
+        example: true,
+      }),
+      canComplete: z.boolean().openapi({
+        description: 'Se o médico pode concluir: confirmada que já começou e aguarda registro.',
+        example: false,
+      }),
+      canNoShow: z.boolean().openapi({
+        description: 'Se o médico pode registrar falta: confirmada que já começou e aguarda registro.',
+        example: false,
+      }),
+    })
+    .openapi({ description: 'O que o médico que atende a consulta pode fazer com ela.' }),
+);
+
 export const bookingEventSchema = z.object({
   type: z.enum(bookingEventTypes).openapi({ example: 'created' }),
   actorType: z.enum(bookingActorTypes).openapi({ example: 'patient' }),
@@ -144,12 +168,10 @@ export const appointmentSchema = registry.register(
     unit: doctorSchema.shape.unit,
     cancellation: cancellationSchema,
     createdAt: z.iso.datetime(),
-    actions: bookingActionsSchema
-      .nullable()
-      .openapi({
-        description:
-          'Ações do paciente sobre a consulta, pela política de agendamento; nulo quando quem vê é o médico.',
-      }),
+    actions: z.union([bookingActionsSchema, doctorActionsSchema]).openapi({
+      description:
+        'O que quem vê pode fazer: para o paciente dela, as ações da política de agendamento (`canReschedule`, `reschedulesLeft` e afins); para o médico que a atende, `canConfirm`, `canCancel`, `canComplete` e `canNoShow`.',
+    }),
     events: z
       .array(bookingEventSchema)
       .openapi({ description: 'Histórico da consulta, do mais antigo para o mais novo.' }),

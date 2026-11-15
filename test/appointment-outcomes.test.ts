@@ -64,11 +64,17 @@ describe('POST /api/appointments/:id/complete and /no-show', () => {
   it('completes a started appointment, records the event, notifies nobody and moves it to the history', async () => {
     const awaiting = await started(slot('2026-12-07', '11:00'), slot('2026-11-19', '11:00'));
     const notices = await noticesOf(awaiting.id);
+    const shownToDoctor = await request(context.app)
+      .get(`/api/appointments/${awaiting.id}`)
+      .set(as(doctor))
+      .expect(200);
     const before = (await list(doctor, { tab: 'awaiting' }).expect(200)).body as AgendaPage;
 
     const response = await record(doctor, 'complete', awaiting.id, { startsAt: awaiting.startsAt });
 
     expect(before.items.find((item) => item.id === awaiting.id)?.actions).toEqual(RECORDABLE);
+    expect((shownToDoctor.body as Item).actions).toEqual(RECORDABLE);
+    expect((response.body as Item).actions).toEqual(NO_ACTIONS);
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.body).toMatchObject({ id: awaiting.id, status: 'completed', startsAt: awaiting.startsAt });
@@ -91,7 +97,10 @@ describe('POST /api/appointments/:id/complete and /no-show', () => {
       actions: NO_ACTIONS,
     });
     const shown = await request(context.app).get(`/api/appointments/${awaiting.id}`).set(as(patient)).expect(200);
-    expect(shown.body).toMatchObject({ status: 'completed' });
+    expect(shown.body).toMatchObject({
+      status: 'completed',
+      actions: { canCancel: false, cancelBlockedReason: 'closed', canReschedule: false },
+    });
   });
 
   it('records a no-show from the very start of the appointment', async () => {

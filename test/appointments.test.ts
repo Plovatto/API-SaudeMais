@@ -312,7 +312,12 @@ describe('GET /api/appointments/:id', () => {
       id: created.id,
       notes: 'Retorno anual.',
       patient: { fullName: 'Ana Maria Silva' },
-      actions: null,
+    });
+    expect((asDoctor.body as { actions: unknown }).actions).toEqual({
+      canConfirm: true,
+      canCancel: true,
+      canComplete: false,
+      canNoShow: false,
     });
     expect(asStranger.status).toBe(404);
     expect(asStranger.body).toEqual({ message: 'Consulta não encontrada.', code: 'NOT_FOUND' });

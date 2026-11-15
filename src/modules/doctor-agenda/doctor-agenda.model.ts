@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { nullableRef } from '../../docs/common-schemas.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
-import { appointmentSchema, person } from '../appointments/appointments.model.js';
+import { appointmentSchema, doctorActionsSchema, person } from '../appointments/appointments.model.js';
 import { civilDay } from '../doctors/doctors.model.js';
 import { notificationSchema } from '../notifications/notifications.model.js';
 
@@ -50,24 +50,7 @@ export const doctorAppointmentSchema = registry.register(
           example: '+5511987654321',
         }),
       }),
-      actions: z.object({
-        canConfirm: z.boolean().openapi({
-          description: 'Se o médico pode confirmar: pedido pendente que ainda não começou.',
-          example: true,
-        }),
-        canCancel: z.boolean().openapi({
-          description: 'Se o médico pode cancelar, com motivo: pendente ou confirmada que ainda não começou.',
-          example: true,
-        }),
-        canComplete: z.boolean().openapi({
-          description: 'Se o médico pode concluir: confirmada que já começou e aguarda registro.',
-          example: false,
-        }),
-        canNoShow: z.boolean().openapi({
-          description: 'Se o médico pode registrar falta: confirmada que já começou e aguarda registro.',
-          example: false,
-        }),
-      }),
+      actions: doctorActionsSchema,
     }),
 );
 
