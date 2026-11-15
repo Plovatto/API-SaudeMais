@@ -59,6 +59,14 @@ export const doctorAppointmentSchema = registry.register(
           description: 'Se o médico pode cancelar, com motivo: pendente ou confirmada que ainda não começou.',
           example: true,
         }),
+        canComplete: z.boolean().openapi({
+          description: 'Se o médico pode concluir: confirmada que já começou e aguarda registro.',
+          example: false,
+        }),
+        canNoShow: z.boolean().openapi({
+          description: 'Se o médico pode registrar falta: confirmada que já começou e aguarda registro.',
+          example: false,
+        }),
       }),
     }),
 );

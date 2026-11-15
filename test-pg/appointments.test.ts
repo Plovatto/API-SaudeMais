@@ -104,8 +104,8 @@ describe('appointments on PostgreSQL', () => {
     const [patient, doctor] = await Promise.all([signIn(demoPatient), signIn(DEMO_DOCTOR)]);
     const startsAt = '2026-11-23T11:00:00.000Z';
     const { id } = (await book(patient, demoDoctor, startsAt).expect(201)).body as { id: string };
-    const act = (action: string, token: string) =>
-      request(app).post(`/api/appointments/${id}/${action}`).set(as(token)).send({ startsAt });
+    const act = (action: string, token: string, seen = startsAt) =>
+      request(app).post(`/api/appointments/${id}/${action}`).set(as(token)).send({ startsAt: seen });
     const events = async () =>
       (
         await pool.query<{ event_type: string }>(
@@ -138,6 +138,40 @@ describe('appointments on PostgreSQL', () => {
     expect(status.rows.map((row) => row.status)).toEqual(['cancelled']);
   });
 
+  async function startedBooking() {
+    const booking = await demoBooking();
+    await booking.act('confirm', booking.doctor).expect(200);
+    await pool.query(
+      "update bookings set starts_at = starts_at - interval '4 days', ends_at = ends_at - interval '4 days'",
+    );
+    return { ...booking, startsAt: '2026-11-19T11:00:00.000Z' };
+  }
+
+  it('records only one outcome when a completion and a no-show race', async () => {
+    const { doctor, act, events, startsAt } = await startedBooking();
+
+    const responses = await Promise.all([act('complete', doctor, startsAt), act('no-show', doctor, startsAt)]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(responses.find((response) => response.status === 409)?.body).toMatchObject({ code: 'INVALID_STATE' });
+    const winner = responses.find((response) => response.status === 200)?.body as { status: string };
+    expect(await events()).toEqual(['confirmed', winner.status]);
+  });
+
+  it('keeps the completion when a patient cancellation races it after the start', async () => {
+    const { patient, doctor, act, events, startsAt } = await startedBooking();
+
+    const [completed, cancelled] = await Promise.all([
+      act('complete', doctor, startsAt),
+      act('cancel', patient, startsAt),
+    ]);
+
+    expect(completed.status).toBe(200);
+    expect(cancelled.status).toBe(409);
+    expect(cancelled.body).toMatchObject({ code: 'INVALID_STATE' });
+    expect(await events()).toEqual(['confirmed', 'completed']);
+  });
+
   it('serves the doctor agenda tabs and home from PostgreSQL', async () => {
     const { doctor, act } = await demoBooking();
     await act('confirm', doctor).expect(200);
@@ -153,7 +187,12 @@ describe('appointments on PostgreSQL', () => {
     expect(tabs.map((response) => (response.body as { total: number }).total)).toEqual([0, 1, 0, 0]);
     expect(tabs[1]?.body).toMatchObject({
       counts: { pending: 0, confirmed: 1, awaiting: 0, history: 0 },
-      items: [{ status: 'confirmed', actions: { canConfirm: false, canCancel: true } }],
+      items: [
+        {
+          status: 'confirmed',
+          actions: { canConfirm: false, canCancel: true, canComplete: false, canNoShow: false },
+        },
+      ],
     });
     expect(home).toMatchObject({
       today: { date: '2026-11-20', total: 0 },

@@ -2,31 +2,19 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import {
+  agendaHelpers,
+  ids,
+  NO_ACTIONS,
+  RECORDABLE,
+  slot,
+  UNKNOWN_ID,
+  type AgendaPage,
+  type Counts,
+  type Item,
+} from './support/agenda.js';
 import { createDoctor, doctorNamed, setupClinic, type Clinic, type Doctor } from './support/doctors.js';
 import { as, login, signUp, START } from './support/users.js';
-
-interface Item {
-  id: string;
-  status: string;
-  startsAt: string;
-  actions: { canConfirm: boolean; canCancel: boolean };
-  [key: string]: unknown;
-}
-
-interface Counts {
-  pending: number;
-  confirmed: number;
-  awaiting: number;
-  history: number;
-}
-
-interface AgendaPage {
-  items: Item[];
-  page: number;
-  pageSize: number;
-  total: number;
-  counts: Counts;
-}
 
 interface Home {
   today: Record<string, unknown>;
@@ -36,7 +24,6 @@ interface Home {
   lastNotification: { type: string; bookingId: string } | null;
 }
 
-const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 const NOT_CONFIRMABLE = 'Esta consulta mudou ou não pode mais ser confirmada. Atualize a página.';
 
 let context: Clinic;
@@ -50,38 +37,12 @@ beforeAll(async () => {
   helper = await signUp(context.app, 'apoio@email.com');
 }, 60_000);
 
-const slot = (date: string, time: string) => `${date}T${time}:00.000Z`;
-
-async function book(token: string, doctor: Doctor, startsAt: string, notes?: string): Promise<Item> {
-  const response = await request(context.app)
-    .post('/api/appointments')
-    .set(as(token))
-    .send({ doctorId: doctor.id, specialtyId: doctor.specialty.id, visitType: 'routine', startsAt, notes })
-    .expect(201);
-  return response.body as Item;
-}
-
-const list = (token: string, query: Record<string, string | number> = {}) =>
-  request(context.app).get('/api/doctor/appointments').query(query).set(as(token));
+const { book, list, confirm, cancel, moveTo } = agendaHelpers(() => context);
 
 const home = (token: string) => request(context.app).get('/api/doctor/home').set(as(token));
 
-const confirm = (token: string, id: string, body: Record<string, unknown>) =>
-  request(context.app).post(`/api/appointments/${id}/confirm`).set(as(token)).send(body);
-
-const cancel = (token: string, id: string, startsAt: string) =>
-  request(context.app).post(`/api/appointments/${id}/cancel`).set(as(token)).send({ startsAt }).expect(200);
-
 const setStatus = (id: string, status: string) =>
   context.db.execute(sql`update bookings set status = ${status} where id = ${id}`);
-
-const moveTo = (id: string, startsAt: string) =>
-  context.db.execute(sql`
-    update bookings set starts_at = ${startsAt}::timestamptz, ends_at = ${startsAt}::timestamptz + (ends_at - starts_at)
-    where id = ${id}
-  `);
-
-const ids = (items: Item[]) => items.map((item) => item.id);
 
 describe('doctor agenda routes', () => {
   it('require a session and the doctor role', async () => {
@@ -161,7 +122,7 @@ describe('GET /api/doctor/appointments', () => {
       specialty: owner.specialty,
       unit: owner.unit,
       cancellation: null,
-      actions: { canConfirm: true, canCancel: true },
+      actions: { canConfirm: true, canCancel: true, canComplete: false, canNoShow: false },
     });
   });
 
@@ -170,7 +131,7 @@ describe('GET /api/doctor/appointments', () => {
 
     expect(ids(page.items)).toEqual([confirmedSoon.id, confirmedLater.id]);
     for (const item of page.items) {
-      expect(item).toMatchObject({ status: 'confirmed', actions: { canConfirm: false, canCancel: true } });
+      expect(item).toMatchObject({ status: 'confirmed', actions: { ...NO_ACTIONS, canCancel: true } });
     }
   });
 
@@ -189,18 +150,14 @@ describe('GET /api/doctor/appointments', () => {
       late: false,
       cancelledAt: START.toISOString(),
     });
-    for (const item of page.items) expect(item.actions).toEqual({ canConfirm: false, canCancel: false });
+    for (const item of page.items) expect(item.actions).toEqual(item.id === awaiting.id ? RECORDABLE : NO_ACTIONS);
   });
 
   it('lists started confirmed appointments awaiting record oldest first', async () => {
     const page = (await list(doctor, { tab: 'awaiting' }).expect(200)).body as AgendaPage;
 
     expect(page).toMatchObject({ total: 1, counts: { awaiting: 1, history: 4 } });
-    expect(page.items[0]).toMatchObject({
-      id: awaiting.id,
-      status: 'confirmed',
-      actions: { canConfirm: false, canCancel: false },
-    });
+    expect(page.items[0]).toMatchObject({ id: awaiting.id, status: 'confirmed', actions: RECORDABLE });
   });
 
   it('shows the phone only while the patient may still need to be reached or was seen', async () => {
@@ -310,8 +267,9 @@ describe('GET /api/doctor/home', () => {
       expired: 1,
     });
     expect(ids(body.pending)).toEqual([pendingToday.id, lateToday.id, tomorrow.id]);
-    expect(body.pending[0]?.actions).toEqual({ canConfirm: true, canCancel: true });
+    expect(body.pending[0]?.actions).toEqual({ ...NO_ACTIONS, canConfirm: true, canCancel: true });
     expect(ids(body.awaitingRecord)).toEqual([awaiting.id]);
+    expect(body.awaitingRecord[0]?.actions).toEqual(RECORDABLE);
     expect(body.counts).toEqual({ pending: 4, confirmed: 1, awaiting: 1, history: 6 });
     expect(body.lastNotification).toMatchObject({ type: 'appointment_cancelled_by_patient', bookingId: cancelled.id });
   });

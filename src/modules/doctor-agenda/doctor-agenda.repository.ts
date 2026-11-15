@@ -75,10 +75,18 @@ async function list(tx: Transaction, { doctorId, tab, from, now, ...pagination }
   const page = await pageOf(select, pagination, () => tx.$count(bookings, where));
   return {
     ...page,
-    items: page.items.map(({ active, ...row }) => ({
-      ...viewOf(row),
-      actions: { canConfirm: row.status === 'pending', canCancel: active },
-    })),
+    items: page.items.map(({ active, ...row }) => {
+      const awaiting = row.status === 'confirmed' && !active;
+      return {
+        ...viewOf(row),
+        actions: {
+          canConfirm: row.status === 'pending',
+          canCancel: active,
+          canComplete: awaiting,
+          canNoShow: awaiting,
+        },
+      };
+    }),
   };
 }
 
