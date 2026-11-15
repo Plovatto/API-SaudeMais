@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { isLateCancellation, type BookingStatus } from '@/database/schema/bookings.js';
+import { settings as settingsTable } from '@/database/schema/catalog.js';
 import { bookingActions, type PolicySubject } from '@/modules/bookings/booking-policy.js';
 import { createTestDb } from './support/create-test-db.js';
 import { HOUR, START } from './support/users.js';
@@ -92,6 +93,8 @@ describe('booking policy', () => {
 
   it('agrees with the late cancellation the database records', async () => {
     const db = await createTestDb();
+    const [stored] = await db.select().from(settingsTable);
+    if (!stored) throw new Error('Settings row is missing');
     const lateInDatabase = async ({ kind, status, startsAt }: PolicySubject) => {
       const rows = await db.execute<{ late: boolean }>(sql`
         select ${isLateCancellation(START)} as late
@@ -101,7 +104,7 @@ describe('booking policy', () => {
     };
 
     for (const [name, booking] of table) {
-      const { lateCancellation } = bookingActions(booking, settings, START);
+      const { lateCancellation } = bookingActions(booking, stored, START);
       expect(await lateInDatabase(booking), name).toBe(lateCancellation);
     }
   });
