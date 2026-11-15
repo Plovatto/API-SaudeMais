@@ -53,7 +53,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`NAME_TAKEN\` | 409 | Já existe um cadastro com esse nome, sem distinguir maiúsculas |
 | \`CODE_TAKEN\` | 409 | Já existe um tipo de exame com esse código |
 | \`EXAM_TYPE_INACTIVE\` | 409 | O tipo de exame está inativo e não pode ter oferta ativa |
-| \`IN_USE\` | 409 | Há agendamento futuro ativo ligado ao cadastro; ele não pode ser desativado |
+| \`IN_USE\` | 409 | Há agendamento futuro ativo ligado ao cadastro; ele não pode ser desativado, nem a oferta pode ter a capacidade reduzida abaixo de um lugar ocupado |
 | \`COUNCIL_IN_USE\` | 409 | A especialidade tem médicos; o conselho não pode mudar |
 | \`SELF_OR_LAST_ADMIN\` | 409 | O administrador não pode desativar nem rebaixar a si mesmo nem deixar o sistema sem administradores |
 | \`USER_INACTIVE\` | 403 ou 409 | Conta desativada: login recusado (403) ou ação que exige conta ativa (409) |
@@ -62,12 +62,13 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`HAS_FUTURE_APPOINTMENTS\` | 409 | O médico tem consultas futuras que impedem a mudança |
 | \`RESET_NOT_SENT\` | 409 | Um link de redefinição foi enviado há pouco ou o limite do dia foi atingido |
 | \`SLOT_TAKEN\` | 409 | O horário escolhido acabou de ser ocupado na agenda do médico |
+| \`NO_CAPACITY\` | 409 | Não há mais lugares na vaga de exame escolhida |
 | \`PATIENT_CONFLICT\` | 409 | O paciente já tem um agendamento ativo que coincide com o horário |
 | \`INVALID_STATE\` | 409 | O agendamento mudou, já foi confirmado, já começou ou já foi encerrado desde que foi exibido; atualize e tente de novo |
 | \`SPECIALTY_UNAVAILABLE\`, \`UNIT_UNAVAILABLE\` | 422 | A especialidade ou a unidade escolhida está inativa ou não existe |
 | \`OVERLAP\` | 422 | Faixas de horário do mesmo dia se sobrepõem; veja \`fields\` |
 | \`OUTSIDE_UNIT_HOURS\` | 422 | A faixa de horário fica fora do horário da unidade; veja \`fields\` |
-| \`OUTSIDE_AVAILABILITY\` | 422 | O horário não é uma vaga gerada pela agenda do médico |
+| \`OUTSIDE_AVAILABILITY\` | 422 | O horário não é uma vaga gerada pela agenda do médico ou, no exame, pelo horário da unidade |
 | \`ACTIVE_LIMIT\` | 422 | O paciente já tem 5 agendamentos ativos futuros |
 | \`SPECIALTY_MISMATCH\` | 422 | O médico escolhido não atende a especialidade escolhida |
 | \`SELF_BOOKING\` | 422 | O médico tentou marcar consulta consigo mesmo |
