@@ -42,7 +42,7 @@ describe('GET /api/admin/home', () => {
     expect(response.body).toEqual({ patients: 1, doctors: 0, appointmentsToday: 0 });
   });
 
-  it('counts the appointments of the São Paulo day, without the cancelled and the demo ones', async () => {
+  it('counts the appointments of the São Paulo day, without the cancelled, the expired and the demo ones', async () => {
     const context = await withAdmin();
     await context.modules.demo.service.seed();
     await request(context.app)
@@ -60,6 +60,8 @@ describe('GET /api/admin/home', () => {
       `);
     await insert('ana@email.com', '2026-11-20T02:30:00Z', 'completed');
     await insert('ana@email.com', '2026-11-20T03:00:00Z', 'completed');
+    await insert('ana@email.com', '2026-11-20T10:00:00Z', 'pending');
+    await insert('ana@email.com', '2026-11-20T11:00:00Z', 'no_show');
     await insert('ana@email.com', '2026-11-20T13:00:00Z', 'pending');
     await insert('ana@email.com', '2026-11-20T14:00:00Z', 'cancelled');
     await insert('ana@email.com', '2026-11-21T02:30:00Z');
@@ -68,7 +70,7 @@ describe('GET /api/admin/home', () => {
 
     const response = await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${context.token}`);
 
-    expect(response.body).toMatchObject({ appointmentsToday: 3 });
+    expect(response.body).toMatchObject({ appointmentsToday: 4 });
   });
 
   it('is only for admins', async () => {

@@ -10,10 +10,11 @@ export class AdminHomeService {
   ) {}
 
   async summary(): Promise<AdminHome> {
+    const now = this.clock.now();
     const [patients, doctors, appointmentsToday] = await Promise.all([
       this.repository.activeAccounts('patient'),
       this.repository.activeAccounts('doctor'),
-      this.repository.appointmentsBetween(dayRangeIn(CLINIC_TIME_ZONE, this.clock.now())),
+      this.repository.appointmentsBetween(dayRangeIn(CLINIC_TIME_ZONE, now), now),
     ]);
     return { patients, doctors, appointmentsToday };
   }
