@@ -7,7 +7,7 @@ import { CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotAt } from '../../lib/time-slots.js';
 import { forbidden, unauthenticated } from '../../middleware/auth.js';
 import { patientConflict } from '../bookings/bookings.messages.js';
-import type { BookingSide } from '../bookings/bookings.repository.js';
+import type { BookingSide, Outcome, SeenBooking } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { SlotContext } from '../doctors/doctors.repository.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
@@ -17,7 +17,7 @@ import type {
   Appointment,
   BookAppointmentInput,
   CancelAppointmentInput,
-  ConfirmAppointmentInput,
+  SeenAppointmentInput,
 } from './appointments.model.js';
 import type { AppointmentsRepository, Viewer } from './appointments.repository.js';
 
@@ -71,14 +71,27 @@ export class AppointmentsService {
     });
   }
 
-  confirm(id: string, doctorId: string, { startsAt }: ConfirmAppointmentInput): Promise<Appointment> {
-    const viewer: Viewer = { userId: doctorId, roles: ['doctor'] };
-    return this.change(
-      id,
-      viewer,
-      appointmentConflicts.notConfirmable,
-      () => (tx) => this.bookings.confirmSeen(tx, { id, startsAt: new Date(startsAt) }, doctorId),
+  confirm(id: string, doctorId: string, input: SeenAppointmentInput): Promise<Appointment> {
+    return this.changeAsDoctor(id, doctorId, input, appointmentConflicts.notConfirmable, (tx, seen) =>
+      this.bookings.confirmSeen(tx, seen, doctorId),
     );
+  }
+
+  record(id: string, doctorId: string, outcome: Outcome, input: SeenAppointmentInput): Promise<Appointment> {
+    return this.changeAsDoctor(id, doctorId, input, appointmentConflicts.notRecordable, (tx, seen) =>
+      this.bookings.recordSeen(tx, seen, doctorId, outcome),
+    );
+  }
+
+  private changeAsDoctor(
+    id: string,
+    doctorId: string,
+    { startsAt }: SeenAppointmentInput,
+    conflict: FieldConflict,
+    work: (tx: Transaction, seen: SeenBooking) => Promise<AfterCommit | undefined>,
+  ): Promise<Appointment> {
+    const seen = { id, startsAt: new Date(startsAt) };
+    return this.change(id, { userId: doctorId, roles: ['doctor'] }, conflict, () => (tx) => work(tx, seen));
   }
 
   private async change(

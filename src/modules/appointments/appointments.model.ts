@@ -39,10 +39,11 @@ export const seenStartsAt = instant(
   'Início do agendamento como o cliente o exibiu. Se ele mudou desde então, a resposta é `INVALID_STATE`.',
 );
 
-export const confirmAppointmentSchema = registry.register(
-  'ConfirmAppointmentRequest',
-  z.strictObject({ startsAt: seenStartsAt }),
-);
+const seenRequest = () => z.strictObject({ startsAt: seenStartsAt });
+
+export const confirmAppointmentSchema = registry.register('ConfirmAppointmentRequest', seenRequest());
+
+export const recordAppointmentSchema = registry.register('RecordAppointmentRequest', seenRequest());
 
 export const cancelAppointmentSchema = registry.register(
   'CancelAppointmentRequest',
@@ -105,6 +106,6 @@ export const appointmentSchema = registry.register(
 );
 
 export type BookAppointmentInput = z.infer<typeof bookAppointmentSchema>;
-export type ConfirmAppointmentInput = z.infer<typeof confirmAppointmentSchema>;
+export type SeenAppointmentInput = z.infer<typeof confirmAppointmentSchema>;
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
 export type Appointment = z.infer<typeof appointmentSchema>;

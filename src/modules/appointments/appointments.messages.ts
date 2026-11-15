@@ -18,6 +18,11 @@ export const appointmentConflicts = {
     field: '_root',
     message: 'Esta consulta mudou ou não pode mais ser confirmada. Atualize a página.',
   },
+  notRecordable: {
+    code: 'INVALID_STATE',
+    field: '_root',
+    message: 'Esta consulta mudou ou já foi registrada. Atualize a página.',
+  },
 } satisfies Record<string, FieldConflict>;
 
 export const appointmentRules = {

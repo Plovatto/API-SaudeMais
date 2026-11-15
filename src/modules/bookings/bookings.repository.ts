@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import {
@@ -13,6 +13,8 @@ import { specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
 
 export type BookingSide = 'patient' | 'doctor';
+
+export type Outcome = Extract<BookingStatus, 'completed' | 'no_show'>;
 
 export interface Canceller {
   role: CancellerRole;
@@ -96,6 +98,10 @@ export function seenBy(userId: string, side: BookingSide, { id, startsAt }: Seen
 
 export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
   return (await db.$count(bookings, and(isActiveFuture(now), scope))) > 0;
+}
+
+export function hasUpcomingConfirmed(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
+  return hasActiveFuture(db, sql`${eq(bookings.status, 'confirmed')} and ${scope}`, now);
 }
 
 export async function futureBookingCounts(db: Pick<Database, 'select'>, userId: string, now: Date) {
@@ -209,5 +215,19 @@ export function confirmPending(tx: Transaction, scope: SQL, doctorId: string, no
     set: { status: 'confirmed' },
     where: and(eq(bookings.status, 'pending'), gt(bookings.startsAt, now), scope),
     event: { eventType: 'confirmed', actorType: 'doctor', actorUserId: doctorId, createdAt: now },
+  });
+}
+
+export function recordStarted(
+  tx: Transaction,
+  scope: SQL,
+  outcome: Outcome,
+  doctorId: string,
+  now: Date,
+): Promise<ChangedBooking[]> {
+  return change(tx, {
+    set: { status: outcome },
+    where: and(eq(bookings.status, 'confirmed'), lte(bookings.startsAt, now), scope),
+    event: { eventType: outcome, actorType: 'doctor', actorUserId: doctorId, createdAt: now },
   });
 }

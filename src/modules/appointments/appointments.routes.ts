@@ -7,7 +7,7 @@ import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
-import { ACTIVE_LIMIT, patientConflict } from '../bookings/bookings.messages.js';
+import { ACTIVE_LIMIT, notStarted, patientConflict } from '../bookings/bookings.messages.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { AppointmentsController } from './appointments.controller.js';
 import { appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
@@ -16,6 +16,7 @@ import {
   bookAppointmentSchema,
   cancelAppointmentSchema,
   confirmAppointmentSchema,
+  recordAppointmentSchema,
 } from './appointments.model.js';
 
 const path = '/api/appointments';
@@ -106,6 +107,46 @@ documentOperation({
   },
 });
 
+const outcomes = [
+  {
+    action: 'complete',
+    operationId: 'completeAppointment',
+    summary: 'Concluir uma consulta',
+    status: 'completed',
+    done: 'Consulta concluída.',
+  },
+  {
+    action: 'no-show',
+    operationId: 'recordAppointmentNoShow',
+    summary: 'Registrar falta em uma consulta',
+    status: 'no_show',
+    done: 'Falta registrada.',
+  },
+] as const;
+
+for (const { action, operationId, summary, status, done } of outcomes) {
+  documentOperation({
+    method: 'post',
+    path: `${path}/{id}/${action}`,
+    operationId,
+    tag: tags.doctor.name,
+    summary,
+    description: `Muda uma consulta confirmada (\`confirmed\`) que já começou para \`${status}\` e registra o evento \`${status}\` com o médico como autor; ninguém é avisado. Só o médico que atende a consulta registra, e só a partir do horário de início. Envie em \`startsAt\` o início que a tela mostrava: se a consulta está confirmada com esse horário, mas ainda não começou, a resposta é \`NOT_STARTED\`; se o horário mudou, se ela não está confirmada ou se já foi concluída ou marcada como falta, a resposta é \`INVALID_STATE\`. Nos dois casos nada muda. Conclusão e falta disputam a mesma consulta, e só a primeira vale. Responde o detalhe atualizado; para os demais médicos, responde como inexistente. Limite: 60 requisições por minuto por IP.`,
+    params: idParams,
+    body: recordAppointmentSchema,
+    success: { status: 200, description: done, schema: appointmentSchema },
+    errors: {
+      403: forbiddenResponse,
+      404: notFoundResponse(appointmentNotFound),
+      409: {
+        ...conflictResponse(appointmentConflicts.notRecordable, notStarted),
+        description:
+          'O `startsAt` enviado está desatualizado, a consulta não está confirmada ou já foi registrada (`INVALID_STATE`), ou ela ainda não começou (`NOT_STARTED`).',
+      },
+    },
+  });
+}
+
 export interface AppointmentsRouterDeps {
   controller: AppointmentsController;
   requireAuth: RequestHandler;
@@ -126,5 +167,7 @@ export function createAppointmentsRouter({
   router.get(`${path}/:id`, readLimit, noStore, requireAuth, controller.detail);
   router.post(`${path}/:id/confirm`, writeLimit, noStore, requireAuth, requireDoctor, controller.confirm);
   router.post(`${path}/:id/cancel`, writeLimit, noStore, requireAuth, controller.cancel);
+  router.post(`${path}/:id/complete`, writeLimit, noStore, requireAuth, requireDoctor, controller.complete);
+  router.post(`${path}/:id/no-show`, writeLimit, noStore, requireAuth, requireDoctor, controller.noShow);
   return router;
 }

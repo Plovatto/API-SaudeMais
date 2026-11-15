@@ -4,17 +4,20 @@ import { conflictError, unprocessableField, type FieldConflict } from '../../lib
 import type { Clock } from '../../lib/clock.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
-import { ACTIVE_LIMIT, activeLimit } from './bookings.messages.js';
+import { ACTIVE_LIMIT, activeLimit, notStarted } from './bookings.messages.js';
 import {
   activeFutureCount,
   cancelActiveFuture,
   confirmPending,
+  hasUpcomingConfirmed,
   ofAccount,
+  recordStarted,
   seenBy,
   type BookingSide,
   type ChangedBooking,
   type Canceller,
   type LockedPatient,
+  type Outcome,
   type SeenBooking,
 } from './bookings.repository.js';
 
@@ -104,6 +107,19 @@ export class BookingsService {
         params: { startsAt: booking.startsAt.toISOString() },
       })),
     );
+  }
+
+  async recordSeen(
+    tx: Transaction,
+    seen: SeenBooking,
+    doctorId: string,
+    outcome: Outcome,
+  ): Promise<AfterCommit | undefined> {
+    const now = this.clock.now();
+    const scope = seenBy(doctorId, 'doctor', seen);
+    if ((await recordStarted(tx, scope, outcome, doctorId, now)).length > 0) return () => undefined;
+    if (await hasUpcomingConfirmed(tx, scope, now)) throw conflictError(notStarted);
+    return undefined;
   }
 
   private async cancel(tx: Transaction, scope: SQL, userId: string, canceller: Canceller) {
