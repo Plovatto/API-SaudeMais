@@ -18,7 +18,8 @@ export const adminHomeSchema = registry.register(
       .nonnegative()
       .openapi({ description: 'Contas ativas com o perfil de médico, sem a conta de demonstração.', example: 61 }),
     appointmentsToday: z.int().nonnegative().openapi({
-      description: 'Consultas de hoje no fuso de São Paulo. Fica em 0 até existirem agendamentos.',
+      description:
+        'Consultas que começam hoje no fuso de São Paulo pendentes, confirmadas, concluídas ou com falta registrada, sem as canceladas, as não confirmadas a tempo e as de pacientes de demonstração.',
       example: 24,
     }),
   }),

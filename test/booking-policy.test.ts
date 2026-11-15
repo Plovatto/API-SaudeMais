@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { isLateCancellation, type BookingStatus } from '@/database/schema/bookings.js';
 import { settings as settingsTable } from '@/database/schema/catalog.js';
-import { bookingActions, type PolicySubject } from '@/modules/bookings/booking-policy.js';
+import { bookingActions, doctorActions, type PolicySubject } from '@/modules/bookings/booking-policy.js';
 import { createTestDb } from './support/create-test-db.js';
 import { HOUR, START } from './support/users.js';
 
@@ -89,6 +89,33 @@ describe('booking policy', () => {
       lateCancellation: true,
       rescheduleBlockedReason: 'window_closed',
     });
+  });
+
+  it.each([
+    ['pending, not started', 'pending', 1, { canConfirm: true, canCancel: true, canComplete: false, canNoShow: false }],
+    [
+      'confirmed, not started',
+      'confirmed',
+      1,
+      { canConfirm: false, canCancel: true, canComplete: false, canNoShow: false },
+    ],
+    [
+      'confirmed, starting now',
+      'confirmed',
+      0,
+      { canConfirm: false, canCancel: false, canComplete: true, canNoShow: true },
+    ],
+    [
+      'confirmed, started',
+      'confirmed',
+      -1,
+      { canConfirm: false, canCancel: false, canComplete: true, canNoShow: true },
+    ],
+    ['expired', 'expired', -1, { canConfirm: false, canCancel: false, canComplete: false, canNoShow: false }],
+    ['completed', 'completed', -1, { canConfirm: false, canCancel: false, canComplete: false, canNoShow: false }],
+    ['cancelled', 'cancelled', 1, { canConfirm: false, canCancel: false, canComplete: false, canNoShow: false }],
+  ] as const)('gives the doctor the actions of a %s appointment', (_name, status, hoursAhead, expected) => {
+    expect(doctorActions(subject('appointment', status, hoursAhead), START)).toEqual(expected);
   });
 
   it('agrees with the late cancellation the database records', async () => {

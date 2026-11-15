@@ -6,7 +6,7 @@ import { createDb } from '@/database/pg-client.js';
 import { DEMO_ACCOUNTS, DEMO_DOCTOR } from '@/modules/users/user.demo.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
-import { as, signUp, START } from '../test/support/users.js';
+import { as, HOUR, signUp, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
@@ -104,8 +104,8 @@ describe('appointments on PostgreSQL', () => {
     const [patient, doctor] = await Promise.all([signIn(demoPatient), signIn(DEMO_DOCTOR)]);
     const startsAt = '2026-11-23T11:00:00.000Z';
     const { id } = (await book(patient, demoDoctor, startsAt).expect(201)).body as { id: string };
-    const act = (action: string, token: string) =>
-      request(app).post(`/api/appointments/${id}/${action}`).set(as(token)).send({ startsAt });
+    const act = (action: string, token: string, seen = startsAt) =>
+      request(app).post(`/api/appointments/${id}/${action}`).set(as(token)).send({ startsAt: seen });
     const events = async () =>
       (
         await pool.query<{ event_type: string }>(
@@ -113,7 +113,7 @@ describe('appointments on PostgreSQL', () => {
           [id],
         )
       ).rows.map((row) => row.event_type);
-    return { patient, doctor, act, events };
+    return { id, startsAt, patient, doctor, act, events };
   }
 
   it('confirms a request only once when two confirmations race', async () => {
@@ -138,6 +138,42 @@ describe('appointments on PostgreSQL', () => {
     expect(status.rows.map((row) => row.status)).toEqual(['cancelled']);
   });
 
+  async function startedBooking() {
+    const booking = await demoBooking();
+    await booking.act('confirm', booking.doctor).expect(200);
+    const startsAt = new Date(Date.parse(booking.startsAt) - 96 * HOUR).toISOString();
+    await pool.query(
+      'update bookings set starts_at = $2, ends_at = $2::timestamptz + (ends_at - starts_at) where id = $1',
+      [booking.id, startsAt],
+    );
+    return { ...booking, startsAt };
+  }
+
+  it('records only one outcome when a completion and a no-show race', async () => {
+    const { doctor, act, events, startsAt } = await startedBooking();
+
+    const responses = await Promise.all([act('complete', doctor, startsAt), act('no-show', doctor, startsAt)]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(responses.find((response) => response.status === 409)?.body).toMatchObject({ code: 'INVALID_STATE' });
+    const winner = responses.find((response) => response.status === 200)?.body as { status: string };
+    expect(await events()).toEqual(['confirmed', winner.status]);
+  });
+
+  it('keeps the completion when a patient cancellation races it after the start', async () => {
+    const { patient, doctor, act, events, startsAt } = await startedBooking();
+
+    const [completed, cancelled] = await Promise.all([
+      act('complete', doctor, startsAt),
+      act('cancel', patient, startsAt),
+    ]);
+
+    expect(completed.status).toBe(200);
+    expect(cancelled.status).toBe(409);
+    expect(cancelled.body).toMatchObject({ code: 'INVALID_STATE' });
+    expect(await events()).toEqual(['confirmed', 'completed']);
+  });
+
   it('serves the doctor agenda tabs and home from PostgreSQL', async () => {
     const { doctor, act } = await demoBooking();
     await act('confirm', doctor).expect(200);
@@ -153,7 +189,12 @@ describe('appointments on PostgreSQL', () => {
     expect(tabs.map((response) => (response.body as { total: number }).total)).toEqual([0, 1, 0, 0]);
     expect(tabs[1]?.body).toMatchObject({
       counts: { pending: 0, confirmed: 1, awaiting: 0, history: 0 },
-      items: [{ status: 'confirmed', actions: { canConfirm: false, canCancel: true } }],
+      items: [
+        {
+          status: 'confirmed',
+          actions: { canConfirm: false, canCancel: true, canComplete: false, canNoShow: false },
+        },
+      ],
     });
     expect(home).toMatchObject({
       today: { date: '2026-11-20', total: 0 },

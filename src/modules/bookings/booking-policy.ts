@@ -26,9 +26,32 @@ export interface BookingActions {
   reschedulesLeft: number;
 }
 
+export interface DoctorActions {
+  canConfirm: boolean;
+  canCancel: boolean;
+  canComplete: boolean;
+  canNoShow: boolean;
+}
+
+type Timing = Pick<PolicySubject, 'status' | 'startsAt'>;
+
+const isActive = ({ status, startsAt }: Timing, now: Date) =>
+  (status === 'pending' || status === 'confirmed') && startsAt > now;
+
+export function doctorActions(booking: Timing, now: Date): DoctorActions {
+  const active = isActive(booking, now);
+  const awaitingRecord = booking.status === 'confirmed' && !active;
+  return {
+    canConfirm: active && booking.status === 'pending',
+    canCancel: active,
+    canComplete: awaitingRecord,
+    canNoShow: awaitingRecord,
+  };
+}
+
 export function bookingActions(booking: PolicySubject, settings: PolicySettings, now: Date): BookingActions {
   const { kind, status, startsAt, rescheduleCount } = booking;
-  const active = (status === 'pending' || status === 'confirmed') && startsAt > now;
+  const active = isActive(booking, now);
   const windowHours = kind === 'exam' ? settings.examLateWindowHours : settings.appointmentLateWindowHours;
   const late = active && status === 'confirmed' && startsAt.getTime() - windowHours * HOUR < now.getTime();
   const reschedulesLeft = Math.max(0, settings.maxReschedules - rescheduleCount);

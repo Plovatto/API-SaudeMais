@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import {
@@ -14,6 +14,8 @@ import { users } from '../../database/schema/users.js';
 import { bookingActions, type BookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
 
 export type BookingSide = 'patient' | 'doctor';
+
+export type Outcome = Extract<BookingStatus, 'completed' | 'no_show'>;
 
 export interface Canceller {
   role: CancellerRole;
@@ -122,10 +124,10 @@ export async function actionsAt(db: Pick<Database, 'select'>, now: Date) {
   return (booking: PolicySubject) => bookingActions(booking, current, now);
 }
 
-export function splitActions<T extends Omit<PolicySubject, 'kind'>>(
+export function splitActions<T extends Omit<PolicySubject, 'kind'>, A = BookingActions>(
   row: T,
   kind: PolicySubject['kind'],
-  actionsOf: (booking: PolicySubject) => BookingActions,
+  actionsOf: (booking: PolicySubject) => A,
 ) {
   const { rescheduleCount: _rescheduleCount, ...view } = row;
   return { view, actions: actionsOf({ ...row, kind }) };
@@ -135,7 +137,11 @@ export function exceptOwn(patientId: string, id: string | undefined): SQL | unde
   return id === undefined ? undefined : sql`not (${eq(bookings.id, id)} and ${eq(bookings.patientId, patientId)})`;
 }
 
-export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
+export async function hasActiveFuture(
+  db: Pick<Database, '$count'>,
+  scope: SQL | undefined,
+  now: Date,
+): Promise<boolean> {
   return (await db.$count(bookings, and(isActiveFuture(now), scope))) > 0;
 }
 
@@ -250,6 +256,20 @@ export function confirmPending(tx: Transaction, scope: SQL, doctorId: string, no
     set: { status: 'confirmed' },
     where: and(eq(bookings.status, 'pending'), gt(bookings.startsAt, now), scope),
     event: { eventType: 'confirmed', actorType: 'doctor', actorUserId: doctorId, createdAt: now },
+  });
+}
+
+export function recordStarted(
+  tx: Transaction,
+  scope: SQL,
+  outcome: Outcome,
+  doctorId: string,
+  now: Date,
+): Promise<ChangedBooking[]> {
+  return change(tx, {
+    set: { status: outcome },
+    where: and(eq(bookings.status, 'confirmed'), lte(bookings.startsAt, now), scope),
+    event: { eventType: outcome, actorType: 'doctor', actorUserId: doctorId, createdAt: now },
   });
 }
 

@@ -3,7 +3,6 @@ import { readSnapshot, type Database, type Transaction } from '../../database/pg
 import {
   bookings,
   effectiveStatus,
-  isActiveFuture,
   notActiveFuture,
   type BookingStatus,
   type VisitType,
@@ -12,6 +11,7 @@ import { specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf, type Pagination } from '../../lib/pagination.js';
 import { CLINIC_TIME_ZONE, instantOfWallClock, type DayRange } from '../../lib/time.js';
+import { doctorActions } from '../bookings/booking-policy.js';
 import { cancellationColumns, countWhere, placeColumns, viewOf } from '../bookings/bookings.repository.js';
 import type { AgendaTab, DoctorAppointmentPage, DoctorAppointmentsQuery } from './doctor-agenda.model.js';
 
@@ -63,7 +63,6 @@ async function list(tx: Transaction, { doctorId, tab, from, now, ...pagination }
       patient: { id: users.id, fullName: users.fullName, phone: reachablePhone(now) },
       ...placeColumns,
       cancellation: cancellationColumns,
-      active: sql<boolean>`${isActiveFuture(now)}`,
     })
     .from(bookings)
     .innerJoin(users, eq(users.id, bookings.patientId))
@@ -75,10 +74,7 @@ async function list(tx: Transaction, { doctorId, tab, from, now, ...pagination }
   const page = await pageOf(select, pagination, () => tx.$count(bookings, where));
   return {
     ...page,
-    items: page.items.map(({ active, ...row }) => ({
-      ...viewOf(row),
-      actions: { canConfirm: row.status === 'pending', canCancel: active },
-    })),
+    items: page.items.map((row) => ({ ...viewOf(row), actions: doctorActions(row, now) })),
   };
 }
 

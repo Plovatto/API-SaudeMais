@@ -5,6 +5,7 @@ import { bookings, effectiveStatus, type VisitType } from '../../database/schema
 import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { users, type Role } from '../../database/schema/users.js';
+import { doctorActions } from '../bookings/booking-policy.js';
 import {
   actionsAt,
   cancellationColumns,
@@ -139,11 +140,13 @@ export class AppointmentsRepository {
         .innerJoin(units, eq(units.id, bookings.unitId))
         .where(and(appointmentWith(id), visibleTo(viewer)));
       if (!row) return undefined;
-      const { view, actions } = splitActions(row, 'appointment', await actionsAt(tx, now));
+      const isPatient = row.patient.id === viewer.userId;
+      const { view, actions } = splitActions(row, 'appointment', isPatient ? await actionsAt(tx, now) : () => null);
       return {
         ...viewOf(view),
         createdAt: row.createdAt.toISOString(),
-        actions: row.patient.id === viewer.userId ? actions : null,
+        patientActions: actions,
+        doctorActions: isPatient ? null : doctorActions(row, now),
         events: await eventsOf(tx, id),
       };
     }, readSnapshot);

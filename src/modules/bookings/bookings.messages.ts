@@ -15,6 +15,12 @@ export const activeLimit: FieldConflict = {
   message: `Você já tem ${ACTIVE_LIMIT} agendamentos ativos. Cancele um ou aguarde a data de um deles para marcar outro.`,
 };
 
+export const notStarted: FieldConflict = {
+  code: 'NOT_STARTED',
+  field: '_root',
+  message: 'Esta consulta ainda não começou. Conclua ou registre a falta a partir do horário de início.',
+};
+
 export const rescheduleConflicts = {
   windowClosed: {
     code: 'RESCHEDULE_WINDOW_CLOSED',

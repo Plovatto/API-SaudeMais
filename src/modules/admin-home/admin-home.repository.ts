@@ -1,7 +1,10 @@
-import { and, countDistinct, eq, isNull } from 'drizzle-orm';
+import { and, count, countDistinct, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
+import { bookings, effectiveStatus, type BookingStatus } from '../../database/schema/bookings.js';
 import { userRoles, users, type Role } from '../../database/schema/users.js';
 import type { DayRange } from '../../lib/time.js';
+
+const countedToday: BookingStatus[] = ['pending', 'confirmed', 'completed', 'no_show'];
 
 export class AdminHomeRepository {
   constructor(private readonly db: Database) {}
@@ -15,7 +18,20 @@ export class AdminHomeRepository {
     return row?.total ?? 0;
   }
 
-  appointmentsBetween(_range: DayRange): Promise<number> {
-    return Promise.resolve(0);
+  async appointmentsBetween({ start, end }: DayRange, now: Date): Promise<number> {
+    const [row] = await this.db
+      .select({ total: count() })
+      .from(bookings)
+      .innerJoin(users, eq(users.id, bookings.patientId))
+      .where(
+        and(
+          eq(bookings.kind, 'appointment'),
+          inArray(effectiveStatus(now), countedToday),
+          eq(users.isProtected, false),
+          gte(bookings.startsAt, start),
+          lt(bookings.startsAt, end),
+        ),
+      );
+    return row?.total ?? 0;
   }
 }

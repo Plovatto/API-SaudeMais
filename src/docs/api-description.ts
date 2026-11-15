@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários, a agenda semanal do médico, a lista de médicos com as vagas livres de cada um, o pedido de consulta com o detalhe, a confirmação e o cancelamento dela, o início e os agendamentos do paciente, o início e a agenda do médico e as notificações, além de \`/health\` e desta documentação. Cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários, a agenda semanal do médico, a lista de médicos com as vagas livres de cada um, o pedido de consulta com o detalhe, a confirmação, o cancelamento, a conclusão e o registro de falta dela, o início e os agendamentos do paciente, o início e a agenda do médico e as notificações, além de \`/health\` e desta documentação. Cada rota lista o que realmente pode devolver.
 
 ## Erros
 
@@ -67,6 +67,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`RESCHEDULE_WINDOW_CLOSED\` | 409 | O agendamento confirmado está dentro da janela da política e só pode ser cancelado, não reagendado |
 | \`RESCHEDULE_LIMIT\` | 409 | O agendamento já foi reagendado o máximo de vezes da política |
 | \`INVALID_STATE\` | 409 | O agendamento mudou, já foi confirmado, já começou ou já foi encerrado desde que foi exibido; atualize e tente de novo |
+| \`NOT_STARTED\` | 409 | A consulta confirmada ainda não começou; conclusão e falta só valem a partir do horário de início |
 | \`SPECIALTY_UNAVAILABLE\`, \`UNIT_UNAVAILABLE\` | 422 | A especialidade ou a unidade escolhida está inativa ou não existe |
 | \`OVERLAP\` | 422 | Faixas de horário do mesmo dia se sobrepõem; veja \`fields\` |
 | \`OUTSIDE_UNIT_HOURS\` | 422 | A faixa de horário fica fora do horário da unidade; veja \`fields\` |

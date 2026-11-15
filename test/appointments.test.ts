@@ -99,7 +99,7 @@ describe('POST /api/appointments', () => {
       unit: carlos.unit,
       cancellation: null,
       createdAt: START.toISOString(),
-      actions: {
+      patientActions: {
         canCancel: true,
         lateCancellation: false,
         cancelBlockedReason: null,
@@ -107,6 +107,7 @@ describe('POST /api/appointments', () => {
         rescheduleBlockedReason: null,
         reschedulesLeft: 2,
       },
+      doctorActions: null,
       events: [
         {
           type: 'created',
@@ -312,7 +313,10 @@ describe('GET /api/appointments/:id', () => {
       id: created.id,
       notes: 'Retorno anual.',
       patient: { fullName: 'Ana Maria Silva' },
-      actions: null,
+    });
+    expect(asDoctor.body).toMatchObject({
+      patientActions: null,
+      doctorActions: { canConfirm: true, canCancel: true, canComplete: false, canNoShow: false },
     });
     expect(asStranger.status).toBe(404);
     expect(asStranger.body).toEqual({ message: 'Consulta não encontrada.', code: 'NOT_FOUND' });

@@ -1,5 +1,6 @@
-import type { SQL } from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
 import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
+import { bookings } from '../../database/schema/bookings.js';
 import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -7,22 +8,25 @@ import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import type { BookingActions } from './booking-policy.js';
-import { ACTIVE_LIMIT, activeLimit, rescheduleConflicts, sameSlot } from './bookings.messages.js';
+import { ACTIVE_LIMIT, activeLimit, notStarted, rescheduleConflicts, sameSlot } from './bookings.messages.js';
 import {
   actionsAt,
   activeFutureCount,
   asPatient,
   cancelActiveFuture,
   confirmPending,
+  hasActiveFuture,
   lockSeen,
   moveBooking,
   ofAccount,
+  recordStarted,
   seenBy,
   type BookingSide,
   type ChangedBooking,
   type Canceller,
   type LockedBooking,
   type LockedPatient,
+  type Outcome,
   type Move,
   type SeenBooking,
 } from './bookings.repository.js';
@@ -39,6 +43,8 @@ const rescheduleBlocks: Partial<Record<NonNullable<BookingActions['rescheduleBlo
   window_closed: rescheduleConflicts.windowClosed,
   limit: rescheduleConflicts.limit,
 };
+
+const nothingAfterCommit: AfterCommit = () => undefined;
 
 function onNewStartsAt(error: unknown): unknown {
   if (!(error instanceof AppError) || error.fields?.startsAt === undefined) return error;
@@ -173,6 +179,19 @@ export class BookingsService {
         params: { startsAt: booking.startsAt.toISOString() },
       })),
     );
+  }
+
+  async recordSeen(
+    tx: Transaction,
+    seen: SeenBooking,
+    doctorId: string,
+    outcome: Outcome,
+  ): Promise<AfterCommit | undefined> {
+    const now = this.clock.now();
+    const scope = seenBy(doctorId, 'doctor', seen);
+    if ((await recordStarted(tx, scope, outcome, doctorId, now)).length > 0) return nothingAfterCommit;
+    if (await hasActiveFuture(tx, and(eq(bookings.status, 'confirmed'), scope), now)) throw conflictError(notStarted);
+    return undefined;
   }
 
   private async cancel(tx: Transaction, scope: SQL, userId: string, canceller: Canceller) {
