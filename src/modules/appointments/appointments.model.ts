@@ -10,6 +10,7 @@ import {
 import { registry } from '../../docs/registry.js';
 import { uuidParam } from '../../lib/params.js';
 import { boundedText } from '../../lib/text.js';
+import { cancelBlockedReasons, rescheduleBlockedReasons } from '../bookings/booking-policy.js';
 import { doctorSchema } from '../doctors/doctors.model.js';
 
 export const visitType = z.enum(visitTypes, { error: 'Escolha o tipo de consulta.' }).openapi({
@@ -56,6 +57,17 @@ export const cancelAppointmentSchema = registry.register(
   }),
 );
 
+export const rescheduleSchema = registry.register(
+  'RescheduleRequest',
+  z.strictObject({
+    startsAt: seenStartsAt,
+    newStartsAt: instant(
+      'Envie o startsAt de uma vaga da lista.',
+      'Início da nova vaga, como veio da lista de vagas aberta com `rescheduling`.',
+    ),
+  }),
+);
+
 export const person = z.object({ id: z.uuid(), fullName: z.string().openapi({ example: 'Ana Maria Silva' }) });
 
 export const cancellationSchema = z
@@ -70,6 +82,39 @@ export const cancellationSchema = z
   })
   .nullable()
   .openapi({ description: 'Dados do cancelamento; nulo enquanto não foi cancelado. Só as partes veem o motivo.' });
+
+export const bookingActionsSchema = z
+  .object({
+    canCancel: z.boolean().openapi({
+      description: 'Se o paciente ainda pode cancelar: consulta ou exame ativo que ainda não começou.',
+      example: true,
+    }),
+    lateCancellation: z.boolean().openapi({
+      description:
+        'Se cancelar agora fica marcado como tardio: agendamento confirmado dentro da janela da política. O cliente avisa antes de confirmar.',
+      example: false,
+    }),
+    cancelBlockedReason: z.enum(cancelBlockedReasons).nullable().openapi({
+      description:
+        'Por que não dá para cancelar: já começou (`started`) ou já foi encerrado (`closed`). Nulo quando `canCancel` é verdadeiro.',
+      example: null,
+    }),
+    canReschedule: z.boolean().openapi({
+      description:
+        'Se o paciente ainda pode reagendar: agendamento ativo que ainda não começou, fora da janela da política quando confirmado e com reagendamentos restantes.',
+      example: true,
+    }),
+    rescheduleBlockedReason: z.enum(rescheduleBlockedReasons).nullable().openapi({
+      description:
+        'Por que não dá para reagendar: confirmado dentro da janela da política (`window_closed`), sem reagendamentos restantes (`limit`), já começou (`started`) ou já foi encerrado (`closed`). Nulo quando `canReschedule` é verdadeiro.',
+      example: null,
+    }),
+    reschedulesLeft: z.int().nonnegative().openapi({
+      description: 'Quantos reagendamentos ainda cabem pelo limite da política (`maxReschedules`).',
+      example: 2,
+    }),
+  })
+  .openapi({ description: 'O que o paciente pode fazer, calculado pela política de agendamento.' });
 
 export const bookingEventSchema = z.object({
   type: z.enum(bookingEventTypes).openapi({ example: 'created' }),
@@ -99,6 +144,12 @@ export const appointmentSchema = registry.register(
     unit: doctorSchema.shape.unit,
     cancellation: cancellationSchema,
     createdAt: z.iso.datetime(),
+    actions: bookingActionsSchema
+      .nullable()
+      .openapi({
+        description:
+          'Ações do paciente sobre a consulta, pela política de agendamento; nulo quando quem vê é o médico.',
+      }),
     events: z
       .array(bookingEventSchema)
       .openapi({ description: 'Histórico da consulta, do mais antigo para o mais novo.' }),
@@ -108,4 +159,5 @@ export const appointmentSchema = registry.register(
 export type BookAppointmentInput = z.infer<typeof bookAppointmentSchema>;
 export type SeenAppointmentInput = z.infer<typeof confirmAppointmentSchema>;
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
+export type RescheduleInput = z.infer<typeof rescheduleSchema>;
 export type Appointment = z.infer<typeof appointmentSchema>;

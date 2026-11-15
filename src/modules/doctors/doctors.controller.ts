@@ -11,7 +11,7 @@ export function createDoctorsController(service: DoctorsService) {
     }) satisfies RequestHandler,
     availability: (async (req, res) => {
       const { id } = idParams.parse(req.params);
-      res.json(await service.availability(id, availabilityQuery.parse(req.query), authOf(req).isProtected));
+      res.json(await service.availability(id, availabilityQuery.parse(req.query), authOf(req)));
     }) satisfies RequestHandler,
   };
 }

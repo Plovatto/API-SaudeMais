@@ -64,12 +64,15 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`SLOT_TAKEN\` | 409 | O horário escolhido acabou de ser ocupado na agenda do médico |
 | \`NO_CAPACITY\` | 409 | Não há mais lugares na vaga de exame escolhida |
 | \`PATIENT_CONFLICT\` | 409 | O paciente já tem um agendamento ativo que coincide com o horário |
+| \`RESCHEDULE_WINDOW_CLOSED\` | 409 | O agendamento confirmado está dentro da janela da política e só pode ser cancelado, não reagendado |
+| \`RESCHEDULE_LIMIT\` | 409 | O agendamento já foi reagendado o máximo de vezes da política |
 | \`INVALID_STATE\` | 409 | O agendamento mudou, já foi confirmado, já começou ou já foi encerrado desde que foi exibido; atualize e tente de novo |
 | \`NOT_STARTED\` | 409 | A consulta confirmada ainda não começou; conclusão e falta só valem a partir do horário de início |
 | \`SPECIALTY_UNAVAILABLE\`, \`UNIT_UNAVAILABLE\` | 422 | A especialidade ou a unidade escolhida está inativa ou não existe |
 | \`OVERLAP\` | 422 | Faixas de horário do mesmo dia se sobrepõem; veja \`fields\` |
 | \`OUTSIDE_UNIT_HOURS\` | 422 | A faixa de horário fica fora do horário da unidade; veja \`fields\` |
 | \`OUTSIDE_AVAILABILITY\` | 422 | O horário não é uma vaga gerada pela agenda do médico ou, no exame, pelo horário da unidade |
+| \`SAME_SLOT\` | 422 | O novo horário pedido no reagendamento é o horário atual |
 | \`ACTIVE_LIMIT\` | 422 | O paciente já tem 5 agendamentos ativos futuros |
 | \`SPECIALTY_MISMATCH\` | 422 | O médico escolhido não atende a especialidade escolhida |
 | \`SELF_BOOKING\` | 422 | O médico tentou marcar consulta consigo mesmo |

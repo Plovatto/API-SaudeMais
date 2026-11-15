@@ -1,3 +1,4 @@
+import { errorResponse } from '../../docs/common-schemas.js';
 import type { FieldConflict } from '../../lib/app-error.js';
 
 export const ACTIVE_LIMIT = 5;
@@ -19,3 +20,26 @@ export const notStarted: FieldConflict = {
   field: '_root',
   message: 'Esta consulta ainda não começou. Conclua ou registre a falta a partir do horário de início.',
 };
+export const rescheduleConflicts = {
+  windowClosed: {
+    code: 'RESCHEDULE_WINDOW_CLOSED',
+    field: '_root',
+    message: 'Falta pouco para o horário e este agendamento não pode mais ser reagendado. Você ainda pode cancelá-lo.',
+  },
+  limit: {
+    code: 'RESCHEDULE_LIMIT',
+    field: '_root',
+    message: 'Este agendamento já foi reagendado o máximo de vezes permitido.',
+  },
+} satisfies Record<string, FieldConflict>;
+
+export const sameSlot: FieldConflict = {
+  code: 'SAME_SLOT',
+  field: 'newStartsAt',
+  message: 'Escolha um horário diferente do atual.',
+};
+
+export const sameSlotResponse = errorResponse(
+  'A nova vaga não existe (`OUTSIDE_AVAILABILITY`) ou é o horário atual (`SAME_SLOT`).',
+  { message: sameSlot.message, code: sameSlot.code, fields: { [sameSlot.field]: sameSlot.message } },
+);

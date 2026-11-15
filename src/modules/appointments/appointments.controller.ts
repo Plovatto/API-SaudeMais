@@ -7,6 +7,7 @@ import {
   cancelAppointmentSchema,
   confirmAppointmentSchema,
   recordAppointmentSchema,
+  rescheduleSchema,
 } from './appointments.model.js';
 import type { Viewer } from './appointments.repository.js';
 import type { AppointmentsService } from './appointments.service.js';
@@ -39,6 +40,10 @@ export function createAppointmentsController(service: AppointmentsService) {
     }) satisfies RequestHandler,
     complete: record('completed'),
     noShow: record('no_show'),
+    reschedule: (async (req, res) => {
+      const { id } = idParams.parse(req.params);
+      res.json(await service.reschedule(id, authOf(req).user.id, rescheduleSchema.parse(req.body)));
+    }) satisfies RequestHandler,
   };
 }
 
