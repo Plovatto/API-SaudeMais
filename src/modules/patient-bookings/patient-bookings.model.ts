@@ -4,12 +4,11 @@ import { bookingKinds, bookingStatuses } from '../../database/schema/bookings.js
 import { nullableRef } from '../../docs/common-schemas.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
-import { cancellationSchema, person, visitType } from '../appointments/appointments.model.js';
+import { bookingActionsSchema, cancellationSchema, person, visitType } from '../appointments/appointments.model.js';
 import { doctorSchema } from '../doctors/doctors.model.js';
 import { notificationSchema } from '../notifications/notifications.model.js';
 
 export const bookingScopes = ['upcoming', 'past'] as const;
-const cancelBlockedReasons = ['started', 'closed'] as const;
 
 export const patientBookingsQuery = paginationQuery.extend({
   scope: z.enum(bookingScopes, { error: 'Escolha entre agendados e realizados.' }).default('upcoming').openapi({
@@ -52,22 +51,7 @@ export const patientBookingSchema = registry.register(
       .openapi({ description: 'Código do exame para apresentar na unidade; nulo em consultas.', example: null }),
     unit: doctorSchema.shape.unit,
     cancellation: cancellationSchema,
-    actions: z.object({
-      canCancel: z.boolean().openapi({
-        description: 'Se o paciente ainda pode cancelar: consulta ou exame ativo que ainda não começou.',
-        example: true,
-      }),
-      lateCancellation: z.boolean().openapi({
-        description:
-          'Se cancelar agora fica marcado como tardio: agendamento confirmado dentro da janela da política. O cliente avisa antes de confirmar.',
-        example: false,
-      }),
-      cancelBlockedReason: z.enum(cancelBlockedReasons).nullable().openapi({
-        description:
-          'Por que não dá para cancelar: já começou (`started`) ou já foi encerrado (`closed`). Nulo quando `canCancel` é verdadeiro.',
-        example: null,
-      }),
-    }),
+    actions: bookingActionsSchema,
   }),
 );
 

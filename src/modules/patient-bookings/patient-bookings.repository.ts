@@ -5,15 +5,13 @@ import {
   bookings,
   effectiveStatus,
   isActiveFuture,
-  isLateCancellation,
   notActiveFuture,
-  type BookingStatus,
   type VisitType,
 } from '../../database/schema/bookings.js';
 import { examTypes, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf } from '../../lib/pagination.js';
-import { cancellationColumns, countWhere, placeColumns, viewOf } from '../bookings/bookings.repository.js';
+import { actionsAt, cancellationColumns, countWhere, placeColumns, viewOf } from '../bookings/bookings.repository.js';
 import type { BookingScope, PatientBookingPage, PatientBookingsQuery } from './patient-bookings.model.js';
 
 const doctorUsers = alias(users, 'doctor_users');
@@ -29,10 +27,6 @@ async function countsOf(tx: Transaction, patientId: string, now: Date) {
     .from(bookings)
     .where(eq(bookings.patientId, patientId));
   return row ?? { upcoming: 0, past: 0 };
-}
-
-function blockedReason(status: BookingStatus) {
-  return status === 'confirmed' ? ('started' as const) : ('closed' as const);
 }
 
 export class PatientBookingsRepository {
@@ -62,8 +56,7 @@ export class PatientBookingsRepository {
           publicCode: bookings.publicCode,
           ...placeColumns,
           cancellation: cancellationColumns,
-          active: sql<boolean>`${isActiveFuture(now)}`,
-          lateCancellation: sql<boolean>`${isLateCancellation(now)}`,
+          rescheduleCount: bookings.rescheduleCount,
         })
         .from(bookings)
         .innerJoin(units, eq(units.id, bookings.unitId))
@@ -74,15 +67,12 @@ export class PatientBookingsRepository {
         .orderBy(order, asc(bookings.id))
         .$dynamic();
       const page = await pageOf(select, pagination, () => tx.$count(bookings, where));
+      const actionsOf = await actionsAt(tx, now);
       return {
         ...page,
-        items: page.items.map(({ active, lateCancellation, ...row }) => ({
+        items: page.items.map(({ rescheduleCount, ...row }) => ({
           ...viewOf(row),
-          actions: {
-            canCancel: active,
-            lateCancellation: active && lateCancellation,
-            cancelBlockedReason: active ? null : blockedReason(row.status),
-          },
+          actions: actionsOf({ ...row, rescheduleCount }),
         })),
         counts: await countsOf(tx, patientId, now),
       };

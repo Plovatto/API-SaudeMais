@@ -4,6 +4,7 @@ import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, unitExamOffers, units } from '../../database/schema/catalog.js';
 import type { SlotRequest } from '../../lib/time-slots.js';
 import {
+  actionsAt,
   asPatient,
   cancellationColumns,
   eventsOf,
@@ -140,7 +141,7 @@ export class ExamBookingsRepository {
     return (await this.db.$count(bookings, examWith(id, patientId))) > 0;
   }
 
-  find(id: string, patientId: string): Promise<ExamBooking | undefined> {
+  find(id: string, patientId: string, now: Date): Promise<ExamBooking | undefined> {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .select({
@@ -159,13 +160,20 @@ export class ExamBookingsRepository {
           unit: placeColumns.unit,
           cancellation: cancellationColumns,
           createdAt: bookings.createdAt,
+          rescheduleCount: bookings.rescheduleCount,
         })
         .from(bookings)
         .innerJoin(units, eq(units.id, bookings.unitId))
         .innerJoin(examTypes, eq(examTypes.id, bookings.examTypeId))
         .where(examWith(id, patientId));
       if (!row) return undefined;
-      return { ...viewOf(row), createdAt: row.createdAt.toISOString(), events: await eventsOf(tx, id) };
+      const { rescheduleCount: _rescheduleCount, ...view } = row;
+      return {
+        ...viewOf(view),
+        createdAt: row.createdAt.toISOString(),
+        actions: (await actionsAt(tx, now))({ ...row, kind: 'exam' }),
+        events: await eventsOf(tx, id),
+      };
     }, readSnapshot);
   }
 }

@@ -283,6 +283,14 @@ describe('POST /api/exam-bookings', () => {
       unit: centralUnit,
       cancellation: null,
       createdAt: START.toISOString(),
+      actions: {
+        canCancel: true,
+        lateCancellation: false,
+        cancelBlockedReason: null,
+        canReschedule: true,
+        rescheduleBlockedReason: null,
+        reschedulesLeft: 2,
+      },
       events: [
         {
           type: 'created',
@@ -542,8 +550,30 @@ describe('exams in the patient list', () => {
     ).body as { items: { id: string; publicCode: string; actions: Record<string, unknown> }[] };
 
     expect(page.items.map((item) => [item.id, item.publicCode, item.actions])).toEqual([
-      [soon.id, soon.publicCode, { canCancel: true, lateCancellation: true, cancelBlockedReason: null }],
-      [later.id, later.publicCode, { canCancel: true, lateCancellation: false, cancelBlockedReason: null }],
+      [
+        soon.id,
+        soon.publicCode,
+        {
+          canCancel: true,
+          lateCancellation: true,
+          cancelBlockedReason: null,
+          canReschedule: false,
+          rescheduleBlockedReason: 'window_closed',
+          reschedulesLeft: 2,
+        },
+      ],
+      [
+        later.id,
+        later.publicCode,
+        {
+          canCancel: true,
+          lateCancellation: false,
+          cancelBlockedReason: null,
+          canReschedule: true,
+          rescheduleBlockedReason: null,
+          reschedulesLeft: 2,
+        },
+      ],
     ]);
   });
 });

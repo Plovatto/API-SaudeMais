@@ -9,8 +9,9 @@ import {
   type BookingStatus,
   type CancellerRole,
 } from '../../database/schema/bookings.js';
-import { specialties, units } from '../../database/schema/catalog.js';
+import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
+import { bookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
 
 export type BookingSide = 'patient' | 'doctor';
 
@@ -92,6 +93,23 @@ export function ofAccount(userId: string, sides: BookingSide[]): SQL {
 
 export function seenBy(userId: string, side: BookingSide, { id, startsAt }: SeenBooking): SQL {
   return sql`${ofAccount(userId, [side])} and ${eq(bookings.id, id)} and ${eq(bookings.startsAt, startsAt)}`;
+}
+
+export async function policySettings(db: Pick<Database, 'select'>): Promise<PolicySettings> {
+  const [row] = await db
+    .select({
+      appointmentLateWindowHours: settings.appointmentLateWindowHours,
+      examLateWindowHours: settings.examLateWindowHours,
+      maxReschedules: settings.maxReschedules,
+    })
+    .from(settings);
+  if (!row) throw new Error('Settings row is missing');
+  return row;
+}
+
+export async function actionsAt(db: Pick<Database, 'select'>, now: Date) {
+  const current = await policySettings(db);
+  return (booking: PolicySubject) => bookingActions(booking, current, now);
 }
 
 export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {

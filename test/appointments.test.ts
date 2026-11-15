@@ -99,6 +99,14 @@ describe('POST /api/appointments', () => {
       unit: carlos.unit,
       cancellation: null,
       createdAt: START.toISOString(),
+      actions: {
+        canCancel: true,
+        lateCancellation: false,
+        cancelBlockedReason: null,
+        canReschedule: true,
+        rescheduleBlockedReason: null,
+        reschedulesLeft: 2,
+      },
       events: [
         {
           type: 'created',

@@ -6,6 +6,7 @@ import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { users, type Role } from '../../database/schema/users.js';
 import {
+  actionsAt,
   asPatient,
   cancellationColumns,
   eventsOf,
@@ -123,6 +124,7 @@ export class AppointmentsRepository {
           ...placeColumns,
           cancellation: cancellationColumns,
           createdAt: bookings.createdAt,
+          rescheduleCount: bookings.rescheduleCount,
         })
         .from(bookings)
         .innerJoin(users, eq(users.id, bookings.patientId))
@@ -131,7 +133,14 @@ export class AppointmentsRepository {
         .innerJoin(units, eq(units.id, bookings.unitId))
         .where(and(appointmentWith(id), visibleTo(viewer)));
       if (!row) return undefined;
-      return { ...viewOf(row), createdAt: row.createdAt.toISOString(), events: await eventsOf(tx, id) };
+      const { rescheduleCount: _rescheduleCount, ...view } = row;
+      const actionsOf = row.patient.id === viewer.userId ? await actionsAt(tx, now) : undefined;
+      return {
+        ...viewOf(view),
+        createdAt: row.createdAt.toISOString(),
+        actions: actionsOf?.({ ...row, kind: 'appointment' }) ?? null,
+        events: await eventsOf(tx, id),
+      };
     }, readSnapshot);
   }
 }
