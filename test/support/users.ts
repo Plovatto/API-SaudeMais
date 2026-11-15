@@ -1,4 +1,6 @@
 import request from 'supertest';
+import { loginSchema, registerSchema } from '@/modules/users/user.model.js';
+import type { UserService } from '@/modules/users/user.service.js';
 import { buildTestApp } from './build-test-app.js';
 import { createTestDb } from './create-test-db.js';
 import { fixedClock } from './fixed-clock.js';
@@ -48,4 +50,10 @@ export async function registerAndLogin(app: App, body: Record<string, unknown> =
 export async function signUp(app: App, email: string, fullName = 'Paciente de Teste') {
   await request(app).post('/api/users/register').send(registration({ email, fullName })).expect(201);
   return ((await login(app, { email }).expect(200)).body as { token: string }).token;
+}
+
+export async function createPatient({ auth }: { auth: UserService }, email: string) {
+  await auth.register(registerSchema.parse(registration({ email })));
+  const credentials = loginSchema.parse({ email, password: registration().password });
+  return (await auth.login(credentials, { ip: null, userAgent: null })).token;
 }
