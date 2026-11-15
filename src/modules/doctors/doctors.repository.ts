@@ -120,10 +120,16 @@ export async function slotContext(
       ),
     )
     .where(and(eq(doctorScheduleRanges.doctorId, doctorId), eq(doctorScheduleDays.isActive, true)));
+  const { durationMin, specialtyId, unitId } = doctor;
+  return { durationMin, specialtyId, ranges, unitHours: await hoursOf(db, unitId), ...(await slotPolicy(db)) };
+}
+
+export async function slotPolicy(
+  db: Pick<Database, 'select'>,
+): Promise<Pick<SlotRequest, 'minLeadMinutes' | 'bookingHorizonDays'>> {
   const [policy] = await db
     .select({ minLeadMinutes: settings.minLeadMinutes, bookingHorizonDays: settings.bookingHorizonDays })
     .from(settings);
   if (!policy) throw new Error('Settings row is missing');
-  const { durationMin, specialtyId, unitId } = doctor;
-  return { durationMin, specialtyId, ranges, unitHours: await hoursOf(db, unitId), ...policy };
+  return policy;
 }

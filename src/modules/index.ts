@@ -29,7 +29,7 @@ export function createModules(deps: ModulesDeps) {
   const notifications = createNotificationsModule(deps);
   const users = createUsersModule({ ...deps, notifications: notifications.service, sessions });
   const passwordReset = createPasswordResetModule({ ...deps, sessions });
-  const bookings = createBookingsModule({ clock: deps.clock, notifications: notifications.service });
+  const bookings = createBookingsModule({ db: deps.db, clock: deps.clock, notifications: notifications.service });
   const catalog = createCatalogModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminUsers = createAdminUsersModule({
     db: deps.db,

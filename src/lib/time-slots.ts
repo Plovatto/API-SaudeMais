@@ -93,3 +93,10 @@ export function slotDays(request: SlotRequest): SlotDay[] {
   }
   return days;
 }
+
+export function slotAt(request: Omit<SlotRequest, 'from' | 'to' | 'busy'>, startsAt: Date): Slot | undefined {
+  const date = civilDate(wallClockIn(request.timeZone, startsAt));
+  return slotDays({ ...request, from: date, to: date, busy: [] })
+    .flatMap((day) => day.slots)
+    .find((slot) => slot.startsAt === startsAt.toISOString());
+}
