@@ -4,9 +4,15 @@ import type { BookingStatus } from '../../database/schema/bookings.js';
 import { registry } from '../../docs/registry.js';
 import { uuidParam } from '../../lib/params.js';
 import { boundedText } from '../../lib/text.js';
-import { bookingEventSchema, cancellationSchema, instant, seenStartsAt } from '../appointments/appointments.model.js';
+import {
+  bookingActionsSchema,
+  bookingEventSchema,
+  cancellationSchema,
+  instant,
+  seenStartsAt,
+} from '../appointments/appointments.model.js';
 import { examTypeSchema } from '../catalog/catalog.model.js';
-import { doctorSchema, periodShape, slotSchema, withPeriodRules } from '../doctors/doctors.model.js';
+import { doctorSchema, periodShape, reschedulingShape, slotSchema, withPeriodRules } from '../doctors/doctors.model.js';
 
 const examStatuses = ['confirmed', 'cancelled', 'completed'] as const satisfies readonly BookingStatus[];
 
@@ -17,7 +23,9 @@ const offerShape = {
   examTypeId: uuidParam.openapi({ description: 'Tipo de exame escolhido.' }),
 };
 
-export const examAvailabilityQuery = withPeriodRules(z.strictObject({ ...offerShape, ...periodShape }));
+export const examAvailabilityQuery = withPeriodRules(
+  z.strictObject({ ...offerShape, ...periodShape, ...reschedulingShape }),
+);
 
 export const examAvailabilitySchema = registry.register(
   'ExamAvailability',
@@ -74,6 +82,7 @@ export const examBookingSchema = registry.register(
     unit: doctorSchema.shape.unit,
     cancellation: cancellationSchema,
     createdAt: z.iso.datetime(),
+    actions: bookingActionsSchema,
     events: z
       .array(bookingEventSchema)
       .openapi({ description: 'Histórico do exame, do mais antigo para o mais novo.' }),

@@ -6,15 +6,15 @@ import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { users, type Role } from '../../database/schema/users.js';
 import {
-  asPatient,
+  actionsAt,
   cancellationColumns,
   eventsOf,
   ofAccount,
   placeColumns,
   recordCreated,
+  splitActions,
   viewOf,
   type BookingSide,
-  type LockedPatient,
 } from '../bookings/bookings.repository.js';
 import { slotContext, type SlotContext } from '../doctors/doctors.repository.js';
 import type { Appointment } from './appointments.model.js';
@@ -35,6 +35,12 @@ interface DoctorLock {
   includeProtected: boolean;
 }
 
+interface Party {
+  side: BookingSide;
+  doctorId: string;
+  specialtyId: string;
+}
+
 export interface Viewer {
   userId: string;
   roles: Role[];
@@ -52,10 +58,6 @@ const appointmentWith = (id: string) => and(eq(bookings.id, id), eq(bookings.kin
 
 export class AppointmentsRepository {
   constructor(private readonly db: Database) {}
-
-  book<T>(patientId: string, work: (tx: Transaction, patient: LockedPatient) => Promise<T>) {
-    return asPatient(this.db, patientId, work);
-  }
 
   async lockDoctor(
     tx: Transaction,
@@ -99,13 +101,18 @@ export class AppointmentsRepository {
     return row.id;
   }
 
-  async sideOf(id: string, viewer: Viewer): Promise<BookingSide | undefined> {
+  async partyOf(id: string, viewer: Viewer): Promise<Party | undefined> {
     const [row] = await this.db
-      .select({ patientId: bookings.patientId })
+      .select({
+        patientId: bookings.patientId,
+        doctorId: sql<string>`${bookings.doctorId}`,
+        specialtyId: sql<string>`${bookings.specialtyId}`,
+      })
       .from(bookings)
       .where(and(appointmentWith(id), visibleTo(viewer)));
     if (!row) return undefined;
-    return row.patientId === viewer.userId ? 'patient' : 'doctor';
+    const { patientId, ...place } = row;
+    return { ...place, side: patientId === viewer.userId ? 'patient' : 'doctor' };
   }
 
   find(id: string, viewer: Viewer, now: Date): Promise<Appointment | undefined> {
@@ -123,6 +130,7 @@ export class AppointmentsRepository {
           ...placeColumns,
           cancellation: cancellationColumns,
           createdAt: bookings.createdAt,
+          rescheduleCount: bookings.rescheduleCount,
         })
         .from(bookings)
         .innerJoin(users, eq(users.id, bookings.patientId))
@@ -131,7 +139,13 @@ export class AppointmentsRepository {
         .innerJoin(units, eq(units.id, bookings.unitId))
         .where(and(appointmentWith(id), visibleTo(viewer)));
       if (!row) return undefined;
-      return { ...viewOf(row), createdAt: row.createdAt.toISOString(), events: await eventsOf(tx, id) };
+      const { view, actions } = splitActions(row, 'appointment', await actionsAt(tx, now));
+      return {
+        ...viewOf(view),
+        createdAt: row.createdAt.toISOString(),
+        actions: row.patient.id === viewer.userId ? actions : null,
+        events: await eventsOf(tx, id),
+      };
     }, readSnapshot);
   }
 }

@@ -1,23 +1,23 @@
-import { and, eq, gt, lt, sql } from 'drizzle-orm';
+import { and, eq, gt, lt, sql, type SQL } from 'drizzle-orm';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, unitExamOffers, units } from '../../database/schema/catalog.js';
 import type { SlotRequest } from '../../lib/time-slots.js';
 import {
-  asPatient,
+  actionsAt,
   cancellationColumns,
   eventsOf,
   placeColumns,
   recordCreated,
+  splitActions,
   viewOf,
-  type LockedPatient,
 } from '../bookings/bookings.repository.js';
 import { hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
 import { slotPolicy } from '../doctors/doctors.repository.js';
 import { newPublicCode } from './exam-bookings.code.js';
 import type { ExamBooking } from './exam-bookings.model.js';
 
-interface Offer {
+export interface Offer {
   unitId: string;
   examTypeId: string;
 }
@@ -28,7 +28,7 @@ export interface LaneUse {
   lane: number;
 }
 
-type ExamSlotContext = Pick<
+export type ExamSlotContext = Pick<
   SlotRequest,
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays'
 > & { capacity: number };
@@ -66,7 +66,11 @@ const examWith = (id: string, patientId: string) =>
 export class ExamBookingsRepository {
   constructor(private readonly db: Database) {}
 
-  availabilityContext(offer: Offer, period: Period): Promise<(ExamSlotContext & { lanes: LaneUse[] }) | undefined> {
+  availabilityContext(
+    offer: Offer,
+    period: Period,
+    except: SQL | undefined,
+  ): Promise<(ExamSlotContext & { lanes: LaneUse[] }) | undefined> {
     return this.db.transaction(async (tx) => {
       const [sizing] = await tx
         .select({ capacity: unitExamOffers.capacityPerSlot, durationMin: examTypes.durationMin })
@@ -83,12 +87,11 @@ export class ExamBookingsRepository {
           ),
         );
       if (!sizing) return undefined;
-      return { ...(await slotFrame(tx, offer.unitId, sizing)), lanes: await this.lanesInUse(tx, offer, period) };
+      return {
+        ...(await slotFrame(tx, offer.unitId, sizing)),
+        lanes: await this.lanesInUse(tx, offer, period, except),
+      };
     }, readSnapshot);
-  }
-
-  book<T>(patientId: string, work: (tx: Transaction, patient: LockedPatient) => Promise<T>) {
-    return asPatient(this.db, patientId, work);
   }
 
   async lockOffer(tx: Transaction, { unitId, examTypeId }: Offer): Promise<ExamSlotContext | undefined> {
@@ -107,7 +110,7 @@ export class ExamBookingsRepository {
     return slotFrame(tx, unitId, { capacity: offer.capacity, durationMin: examType.durationMin });
   }
 
-  lanesInUse(tx: Transaction, { unitId, examTypeId }: Offer, { from, to }: Period): Promise<LaneUse[]> {
+  lanesInUse(tx: Transaction, { unitId, examTypeId }: Offer, { from, to }: Period, except?: SQL): Promise<LaneUse[]> {
     return tx
       .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt, lane: sql<number>`${bookings.lane}` })
       .from(bookings)
@@ -119,6 +122,7 @@ export class ExamBookingsRepository {
           eq(bookings.status, 'confirmed'),
           lt(bookings.startsAt, to),
           gt(bookings.endsAt, from),
+          except,
         ),
       );
   }
@@ -136,11 +140,15 @@ export class ExamBookingsRepository {
     return row.id;
   }
 
-  async owns(id: string, patientId: string): Promise<boolean> {
-    return (await this.db.$count(bookings, examWith(id, patientId))) > 0;
+  async offerOf(id: string, patientId: string): Promise<Offer | undefined> {
+    const [row] = await this.db
+      .select({ unitId: bookings.unitId, examTypeId: sql<string>`${bookings.examTypeId}` })
+      .from(bookings)
+      .where(examWith(id, patientId));
+    return row;
   }
 
-  find(id: string, patientId: string): Promise<ExamBooking | undefined> {
+  find(id: string, patientId: string, now: Date): Promise<ExamBooking | undefined> {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .select({
@@ -159,13 +167,20 @@ export class ExamBookingsRepository {
           unit: placeColumns.unit,
           cancellation: cancellationColumns,
           createdAt: bookings.createdAt,
+          rescheduleCount: bookings.rescheduleCount,
         })
         .from(bookings)
         .innerJoin(units, eq(units.id, bookings.unitId))
         .innerJoin(examTypes, eq(examTypes.id, bookings.examTypeId))
         .where(examWith(id, patientId));
       if (!row) return undefined;
-      return { ...viewOf(row), createdAt: row.createdAt.toISOString(), events: await eventsOf(tx, id) };
+      const { view, actions } = splitActions(row, 'exam', await actionsAt(tx, now));
+      return {
+        ...viewOf(view),
+        createdAt: row.createdAt.toISOString(),
+        actions,
+        events: await eventsOf(tx, id),
+      };
     }, readSnapshot);
   }
 }

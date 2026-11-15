@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type * as publicCode from '@/modules/exam-bookings/exam-bookings.code.js';
 import { newPublicCode } from '@/modules/exam-bookings/exam-bookings.code.js';
 import { doctorNamed, setupClinic, type Clinic } from './support/doctors.js';
+import { offerOf, type Offer } from './support/exams.js';
 import { as, createPatient, HOUR, START } from './support/users.js';
 
 vi.mock('@/modules/exam-bookings/exam-bookings.code.js', async (importOriginal) => {
@@ -26,11 +27,6 @@ interface ExamAvailability {
   days: { date: string; slots: { startsAt: string; endsAt: string; remaining: number }[] }[];
 }
 
-interface Offer {
-  unitId: string;
-  examTypeId: string;
-}
-
 const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 const PUBLIC_CODE = /^EX-[0-9A-HJKMNP-TV-Z]{6}$/;
 
@@ -43,17 +39,6 @@ let raioX: Offer;
 let glicemia: Offer;
 let southUltrassom: Offer;
 
-async function offerOf(unit: string, code: string): Promise<Offer> {
-  const rows = await context.db.execute<{ unit_id: string; exam_type_id: string }>(sql`
-    select o.unit_id, o.exam_type_id from unit_exam_offers o
-    join units u on u.id = o.unit_id join exam_types e on e.id = o.exam_type_id
-    where u.name = ${unit} and e.code = ${code}
-  `);
-  const row = rows.rows[0];
-  if (!row) throw new Error(`${unit} does not offer ${code}`);
-  return { unitId: row.unit_id, examTypeId: row.exam_type_id };
-}
-
 beforeAll(async () => {
   context = await setupClinic();
   admin = await createPatient(context, 'admin.exames@email.com');
@@ -61,11 +46,11 @@ beforeAll(async () => {
     update user_roles set role = 'admin'
     where role = 'patient' and user_id = (select id from users where email = 'admin.exames@email.com')
   `);
-  hemograma = await offerOf('Unidade Central', 'hemograma');
-  ultrassom = await offerOf('Unidade Central', 'ultrassom');
-  raioX = await offerOf('Unidade Central', 'raio_x');
-  glicemia = await offerOf('Unidade Central', 'glicemia');
-  southUltrassom = await offerOf('Unidade Sul', 'ultrassom');
+  hemograma = await offerOf(context, 'Unidade Central', 'hemograma');
+  ultrassom = await offerOf(context, 'Unidade Central', 'ultrassom');
+  raioX = await offerOf(context, 'Unidade Central', 'raio_x');
+  glicemia = await offerOf(context, 'Unidade Central', 'glicemia');
+  southUltrassom = await offerOf(context, 'Unidade Sul', 'ultrassom');
   centralUnit = (await doctorNamed(context, 'Dr. Carlos Mendes')).unit;
 }, 60_000);
 
@@ -283,6 +268,14 @@ describe('POST /api/exam-bookings', () => {
       unit: centralUnit,
       cancellation: null,
       createdAt: START.toISOString(),
+      actions: {
+        canCancel: true,
+        lateCancellation: false,
+        cancelBlockedReason: null,
+        canReschedule: true,
+        rescheduleBlockedReason: null,
+        reschedulesLeft: 2,
+      },
       events: [
         {
           type: 'created',
@@ -542,8 +535,30 @@ describe('exams in the patient list', () => {
     ).body as { items: { id: string; publicCode: string; actions: Record<string, unknown> }[] };
 
     expect(page.items.map((item) => [item.id, item.publicCode, item.actions])).toEqual([
-      [soon.id, soon.publicCode, { canCancel: true, lateCancellation: true, cancelBlockedReason: null }],
-      [later.id, later.publicCode, { canCancel: true, lateCancellation: false, cancelBlockedReason: null }],
+      [
+        soon.id,
+        soon.publicCode,
+        {
+          canCancel: true,
+          lateCancellation: true,
+          cancelBlockedReason: null,
+          canReschedule: false,
+          rescheduleBlockedReason: 'window_closed',
+          reschedulesLeft: 2,
+        },
+      ],
+      [
+        later.id,
+        later.publicCode,
+        {
+          canCancel: true,
+          lateCancellation: false,
+          cancelBlockedReason: null,
+          canReschedule: true,
+          rescheduleBlockedReason: null,
+          reschedulesLeft: 2,
+        },
+      ],
     ]);
   });
 });

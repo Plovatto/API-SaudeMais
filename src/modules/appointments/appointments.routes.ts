@@ -7,7 +7,7 @@ import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
-import { ACTIVE_LIMIT, patientConflict } from '../bookings/bookings.messages.js';
+import { ACTIVE_LIMIT, patientConflict, rescheduleConflicts, sameSlotResponse } from '../bookings/bookings.messages.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { AppointmentsController } from './appointments.controller.js';
 import { appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
@@ -16,6 +16,7 @@ import {
   bookAppointmentSchema,
   cancelAppointmentSchema,
   confirmAppointmentSchema,
+  rescheduleSchema,
 } from './appointments.model.js';
 
 const path = '/api/appointments';
@@ -106,6 +107,31 @@ documentOperation({
   },
 });
 
+documentOperation({
+  method: 'post',
+  path: `${path}/{id}/reschedule`,
+  operationId: 'rescheduleAppointment',
+  tag: tags.scheduling.name,
+  summary: 'Reagendar uma consulta',
+  description:
+    'Troca o horário de uma consulta pendente ou confirmada que ainda não começou, na mesma linha e em uma única transação: a consulta volta a pendente (`pending`) até o médico confirmar de novo, `reschedule_count` aumenta, o evento `rescheduled` guarda o horário anterior e o novo, e o médico recebe `appointment_rescheduled` depois do commit. A vaga antiga só fica livre se a nova for garantida. Só o paciente dela reagenda. Envie em `startsAt` o início que a tela mostrava (se mudou, a resposta é `INVALID_STATE`) e em `newStartsAt` o início de uma vaga devolvida por `GET /api/doctors/{id}/availability?rescheduling={id}`, em que a própria consulta não ocupa a agenda. Consulta confirmada dentro da janela da política (`appointmentLateWindowHours`) não pode ser reagendada (`RESCHEDULE_WINDOW_CLOSED`), só cancelada, e cada consulta aceita até `maxReschedules` reagendamentos (`RESCHEDULE_LIMIT`). Erros sobre a nova vaga vêm em `fields.newStartsAt`. Responde o detalhe atualizado; para os demais usuários, responde como inexistente. Limite: 60 requisições por minuto por IP.',
+  params: idParams,
+  body: rescheduleSchema,
+  success: { status: 200, description: 'Consulta reagendada.', schema: appointmentSchema },
+  errors: {
+    403: forbiddenResponse,
+    404: notFoundResponse(appointmentNotFound),
+    409: conflictResponse(
+      rescheduleConflicts.windowClosed,
+      rescheduleConflicts.limit,
+      appointmentConflicts.slotTaken,
+      patientConflict,
+      appointmentConflicts.notReschedulable,
+    ),
+    422: sameSlotResponse,
+  },
+});
+
 export interface AppointmentsRouterDeps {
   controller: AppointmentsController;
   requireAuth: RequestHandler;
@@ -126,5 +152,6 @@ export function createAppointmentsRouter({
   router.get(`${path}/:id`, readLimit, noStore, requireAuth, controller.detail);
   router.post(`${path}/:id/confirm`, writeLimit, noStore, requireAuth, requireDoctor, controller.confirm);
   router.post(`${path}/:id/cancel`, writeLimit, noStore, requireAuth, controller.cancel);
+  router.post(`${path}/:id/reschedule`, writeLimit, noStore, requireAuth, requirePatient, controller.reschedule);
   return router;
 }

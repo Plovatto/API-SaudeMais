@@ -99,6 +99,14 @@ describe('POST /api/appointments', () => {
       unit: carlos.unit,
       cancellation: null,
       createdAt: START.toISOString(),
+      actions: {
+        canCancel: true,
+        lateCancellation: false,
+        cancelBlockedReason: null,
+        canReschedule: true,
+        rescheduleBlockedReason: null,
+        reschedulesLeft: 2,
+      },
       events: [
         {
           type: 'created',
@@ -304,6 +312,7 @@ describe('GET /api/appointments/:id', () => {
       id: created.id,
       notes: 'Retorno anual.',
       patient: { fullName: 'Ana Maria Silva' },
+      actions: null,
     });
     expect(asStranger.status).toBe(404);
     expect(asStranger.body).toEqual({ message: 'Consulta não encontrada.', code: 'NOT_FOUND' });

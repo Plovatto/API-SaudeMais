@@ -1,22 +1,50 @@
 import type { SQL } from 'drizzle-orm';
 import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
-import { conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
+import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
+import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
+import { unauthenticated } from '../../middleware/auth.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
-import { ACTIVE_LIMIT, activeLimit } from './bookings.messages.js';
+import type { BookingActions } from './booking-policy.js';
+import { ACTIVE_LIMIT, activeLimit, rescheduleConflicts, sameSlot } from './bookings.messages.js';
 import {
+  actionsAt,
   activeFutureCount,
+  asPatient,
   cancelActiveFuture,
   confirmPending,
+  lockSeen,
+  moveBooking,
   ofAccount,
   seenBy,
   type BookingSide,
   type ChangedBooking,
   type Canceller,
+  type LockedBooking,
   type LockedPatient,
+  type Move,
   type SeenBooking,
 } from './bookings.repository.js';
+
+type Placement = Omit<Move, 'startsAt'>;
+
+interface Reschedule extends SeenBooking {
+  patientId: string;
+  newStartsAt: Date;
+  now: Date;
+}
+
+const rescheduleBlocks: Partial<Record<NonNullable<BookingActions['rescheduleBlockedReason']>, FieldConflict>> = {
+  window_closed: rescheduleConflicts.windowClosed,
+  limit: rescheduleConflicts.limit,
+};
+
+function onNewStartsAt(error: unknown): unknown {
+  if (!(error instanceof AppError) || error.fields?.startsAt === undefined) return error;
+  const { startsAt, ...fields } = error.fields;
+  return new AppError(error.status, error.code, error.message, { ...fields, newStartsAt: startsAt });
+}
 
 function counterparts(booking: ChangedBooking, userId: string, canceller: Canceller) {
   const notice = {
@@ -57,8 +85,49 @@ export class BookingsService {
     private readonly clock: Clock,
   ) {}
 
-  async ensureActiveLimit(tx: Transaction, patientId: string, { isProtected }: LockedPatient): Promise<void> {
-    if (!isProtected && (await activeFutureCount(tx, patientId, this.clock.now())) >= ACTIVE_LIMIT) {
+  async writeAsPatient<T>(
+    patientId: string,
+    conflicts: Record<string, FieldConflict>,
+    work: (tx: Transaction, patient: LockedPatient) => Promise<T>,
+  ): Promise<T> {
+    const result = await withConstraintConflicts(
+      () => retryOnDeadlock(() => asPatient(this.db, patientId, work)),
+      conflicts,
+    );
+    if (result === undefined) throw unauthenticated();
+    return result;
+  }
+
+  async rescheduleAsPatient<T>(
+    patientId: string,
+    conflicts: Record<string, FieldConflict>,
+    work: (tx: Transaction, patient: LockedPatient) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await this.writeAsPatient(patientId, conflicts, work);
+    } catch (error) {
+      throw onNewStartsAt(error);
+    }
+  }
+
+  async moveSeen(
+    tx: Transaction,
+    { patientId, newStartsAt, now, ...seen }: Reschedule,
+    invalidState: FieldConflict,
+    place: (booking: LockedBooking) => Placement | Promise<Placement>,
+  ): Promise<ChangedBooking & { fromStartsAt: Date }> {
+    const booking = await lockSeen(tx, patientId, seen);
+    if (!booking) throw conflictError(invalidState);
+    const { rescheduleBlockedReason } = (await actionsAt(tx, now))(booking);
+    if (rescheduleBlockedReason) throw conflictError(rescheduleBlocks[rescheduleBlockedReason] ?? invalidState);
+    if (newStartsAt.getTime() === booking.startsAt.getTime()) throw unprocessableField(sameSlot);
+    const moved = await moveBooking(tx, booking, { ...(await place(booking)), startsAt: newStartsAt }, patientId, now);
+    if (!moved) throw conflictError(invalidState);
+    return { ...moved, fromStartsAt: booking.startsAt };
+  }
+
+  async ensureActiveLimit(tx: Transaction, patientId: string, { isProtected }: LockedPatient, now: Date) {
+    if (!isProtected && (await activeFutureCount(tx, patientId, now)) >= ACTIVE_LIMIT) {
       throw unprocessableField(activeLimit);
     }
   }

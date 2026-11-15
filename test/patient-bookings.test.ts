@@ -18,7 +18,7 @@ interface Booking {
   kind: string;
   status: string;
   startsAt: string;
-  actions: { canCancel: boolean; lateCancellation: boolean; cancelBlockedReason: string | null };
+  actions: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -149,7 +149,14 @@ describe('GET /api/patient/bookings', () => {
       publicCode: null,
       unit: carlos.unit,
       cancellation: null,
-      actions: { canCancel: true, lateCancellation: false, cancelBlockedReason: null },
+      actions: {
+        canCancel: true,
+        lateCancellation: false,
+        cancelBlockedReason: null,
+        canReschedule: true,
+        rescheduleBlockedReason: null,
+        reschedulesLeft: 2,
+      },
     });
     expect(page.items[1]).toMatchObject({ status: 'confirmed', actions: { canCancel: true, lateCancellation: false } });
   });
@@ -169,7 +176,14 @@ describe('GET /api/patient/bookings', () => {
       examType: { id: expect.any(String) as unknown, name: expect.any(String) as unknown },
       publicCode: 'EX-7F3K2Q',
       unit: { address: expect.any(String) as unknown, phone: expect.any(String) as unknown },
-      actions: { canCancel: true, lateCancellation: false, cancelBlockedReason: null },
+      actions: {
+        canCancel: true,
+        lateCancellation: false,
+        cancelBlockedReason: null,
+        canReschedule: true,
+        rescheduleBlockedReason: null,
+        reschedulesLeft: 2,
+      },
     });
   });
 
@@ -208,7 +222,14 @@ describe('GET /api/patient/bookings', () => {
     });
     expect(page.items[1]?.cancellation).toBeNull();
     for (const item of page.items) {
-      expect(item.actions).toEqual({ canCancel: false, lateCancellation: false, cancelBlockedReason: 'closed' });
+      expect(item.actions).toEqual({
+        canCancel: false,
+        lateCancellation: false,
+        cancelBlockedReason: 'closed',
+        canReschedule: false,
+        rescheduleBlockedReason: 'closed',
+        reschedulesLeft: 2,
+      });
     }
   });
 
@@ -251,6 +272,9 @@ describe('allowed actions', () => {
       canCancel: true,
       lateCancellation: true,
       cancelBlockedReason: null,
+      canReschedule: false,
+      rescheduleBlockedReason: 'window_closed',
+      reschedulesLeft: 2,
     });
     expect(items.find((item) => item.id === early.id)?.actions.lateCancellation).toBe(false);
 
@@ -260,7 +284,12 @@ describe('allowed actions', () => {
     expect(past[0]).toMatchObject({
       id: late.id,
       status: 'confirmed',
-      actions: { canCancel: false, lateCancellation: false, cancelBlockedReason: 'started' },
+      actions: {
+        canCancel: false,
+        lateCancellation: false,
+        cancelBlockedReason: 'started',
+        rescheduleBlockedReason: 'started',
+      },
     });
   });
 

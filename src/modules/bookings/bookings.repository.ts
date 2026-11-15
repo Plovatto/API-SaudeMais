@@ -9,8 +9,9 @@ import {
   type BookingStatus,
   type CancellerRole,
 } from '../../database/schema/bookings.js';
-import { specialties, units } from '../../database/schema/catalog.js';
+import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
+import { bookingActions, type BookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
 
 export type BookingSide = 'patient' | 'doctor';
 
@@ -43,10 +44,20 @@ export interface SeenBooking {
   startsAt: Date;
 }
 
+export interface Move {
+  startsAt: Date;
+  endsAt: Date;
+  status?: BookingStatus;
+  lane?: number;
+}
+
 interface Change {
   set: PgUpdateSetSource<typeof bookings>;
   where: SQL | undefined;
-  event: Pick<typeof bookingEvents.$inferInsert, 'eventType' | 'actorType' | 'actorUserId' | 'createdAt'>;
+  event: Pick<
+    typeof bookingEvents.$inferInsert,
+    'eventType' | 'actorType' | 'actorUserId' | 'createdAt' | 'fromStartsAt' | 'toStartsAt'
+  >;
 }
 
 export const placeColumns = {
@@ -92,6 +103,36 @@ export function ofAccount(userId: string, sides: BookingSide[]): SQL {
 
 export function seenBy(userId: string, side: BookingSide, { id, startsAt }: SeenBooking): SQL {
   return sql`${ofAccount(userId, [side])} and ${eq(bookings.id, id)} and ${eq(bookings.startsAt, startsAt)}`;
+}
+
+async function policySettings(db: Pick<Database, 'select'>): Promise<PolicySettings> {
+  const [row] = await db
+    .select({
+      appointmentLateWindowHours: settings.appointmentLateWindowHours,
+      examLateWindowHours: settings.examLateWindowHours,
+      maxReschedules: settings.maxReschedules,
+    })
+    .from(settings);
+  if (!row) throw new Error('Settings row is missing');
+  return row;
+}
+
+export async function actionsAt(db: Pick<Database, 'select'>, now: Date) {
+  const current = await policySettings(db);
+  return (booking: PolicySubject) => bookingActions(booking, current, now);
+}
+
+export function splitActions<T extends Omit<PolicySubject, 'kind'>>(
+  row: T,
+  kind: PolicySubject['kind'],
+  actionsOf: (booking: PolicySubject) => BookingActions,
+) {
+  const { rescheduleCount: _rescheduleCount, ...view } = row;
+  return { view, actions: actionsOf({ ...row, kind }) };
+}
+
+export function exceptOwn(patientId: string, id: string | undefined): SQL | undefined {
+  return id === undefined ? undefined : sql`not (${eq(bookings.id, id)} and ${eq(bookings.patientId, patientId)})`;
 }
 
 export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
@@ -210,4 +251,44 @@ export function confirmPending(tx: Transaction, scope: SQL, doctorId: string, no
     where: and(eq(bookings.status, 'pending'), gt(bookings.startsAt, now), scope),
     event: { eventType: 'confirmed', actorType: 'doctor', actorUserId: doctorId, createdAt: now },
   });
+}
+
+export async function lockSeen(tx: Transaction, patientId: string, seen: SeenBooking) {
+  const [row] = await tx
+    .select({
+      id: bookings.id,
+      kind: bookings.kind,
+      status: bookings.status,
+      startsAt: bookings.startsAt,
+      rescheduleCount: bookings.rescheduleCount,
+      lane: bookings.lane,
+    })
+    .from(bookings)
+    .where(seenBy(patientId, 'patient', seen))
+    .for('no key update');
+  return row;
+}
+
+export type LockedBooking = NonNullable<Awaited<ReturnType<typeof lockSeen>>>;
+
+export async function moveBooking(
+  tx: Transaction,
+  booking: LockedBooking,
+  move: Move,
+  patientId: string,
+  now: Date,
+): Promise<ChangedBooking | undefined> {
+  const [moved] = await change(tx, {
+    set: { ...move, rescheduleCount: sql`${bookings.rescheduleCount} + 1` },
+    where: eq(bookings.id, booking.id),
+    event: {
+      eventType: 'rescheduled',
+      actorType: 'patient',
+      actorUserId: patientId,
+      createdAt: now,
+      fromStartsAt: booking.startsAt,
+      toStartsAt: move.startsAt,
+    },
+  });
+  return moved;
 }

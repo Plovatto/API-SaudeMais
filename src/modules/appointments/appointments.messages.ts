@@ -13,6 +13,11 @@ export const appointmentConflicts = {
     field: '_root',
     message: 'Esta consulta mudou ou não pode mais ser cancelada. Atualize a página.',
   },
+  notReschedulable: {
+    code: 'INVALID_STATE',
+    field: '_root',
+    message: 'Esta consulta mudou ou não pode mais ser reagendada. Atualize a página.',
+  },
   notConfirmable: {
     code: 'INVALID_STATE',
     field: '_root',

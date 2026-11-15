@@ -1,0 +1,46 @@
+import type { BookingStatus, bookingKinds } from '../../database/schema/bookings.js';
+import { HOUR } from '../../lib/time.js';
+
+export const cancelBlockedReasons = ['started', 'closed'] as const;
+export const rescheduleBlockedReasons = ['window_closed', 'limit', ...cancelBlockedReasons] as const;
+
+export interface PolicySettings {
+  appointmentLateWindowHours: number;
+  examLateWindowHours: number;
+  maxReschedules: number;
+}
+
+export interface PolicySubject {
+  kind: (typeof bookingKinds)[number];
+  status: BookingStatus;
+  startsAt: Date;
+  rescheduleCount: number;
+}
+
+export interface BookingActions {
+  canCancel: boolean;
+  lateCancellation: boolean;
+  cancelBlockedReason: (typeof cancelBlockedReasons)[number] | null;
+  canReschedule: boolean;
+  rescheduleBlockedReason: (typeof rescheduleBlockedReasons)[number] | null;
+  reschedulesLeft: number;
+}
+
+export function bookingActions(booking: PolicySubject, settings: PolicySettings, now: Date): BookingActions {
+  const { kind, status, startsAt, rescheduleCount } = booking;
+  const active = (status === 'pending' || status === 'confirmed') && startsAt > now;
+  const windowHours = kind === 'exam' ? settings.examLateWindowHours : settings.appointmentLateWindowHours;
+  const late = active && status === 'confirmed' && startsAt.getTime() - windowHours * HOUR < now.getTime();
+  const reschedulesLeft = Math.max(0, settings.maxReschedules - rescheduleCount);
+  const cancelBlockedReason = active ? null : status === 'confirmed' ? 'started' : 'closed';
+  const rescheduleBlockedReason =
+    cancelBlockedReason ?? (late ? 'window_closed' : reschedulesLeft === 0 ? 'limit' : null);
+  return {
+    canCancel: active,
+    lateCancellation: late,
+    cancelBlockedReason,
+    canReschedule: rescheduleBlockedReason === null,
+    rescheduleBlockedReason,
+    reschedulesLeft,
+  };
+}
