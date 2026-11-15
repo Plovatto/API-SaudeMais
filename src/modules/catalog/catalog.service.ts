@@ -14,7 +14,6 @@ import type {
 import {
   councilInUse,
   examTypeInactive,
-  inUse,
   notFoundMessages,
   uniqueConflicts,
   type CatalogEntity,
@@ -35,7 +34,7 @@ async function translated<T>(write: () => Promise<T>): Promise<T> {
   try {
     return await withConstraintConflicts(write, constraintConflicts);
   } catch (error) {
-    if (error instanceof InUseError) throw conflictError(inUse);
+    if (error instanceof InUseError) throw conflictError(error.conflict);
     throw error;
   }
 }

@@ -9,7 +9,7 @@ import { doctorSchema } from '../doctors/doctors.model.js';
 import { notificationSchema } from '../notifications/notifications.model.js';
 
 export const bookingScopes = ['upcoming', 'past'] as const;
-const cancelBlockedReasons = ['started', 'closed', 'unavailable'] as const;
+const cancelBlockedReasons = ['started', 'closed'] as const;
 
 export const patientBookingsQuery = paginationQuery.extend({
   scope: z.enum(bookingScopes, { error: 'Escolha entre agendados e realizados.' }).default('upcoming').openapi({
@@ -54,8 +54,7 @@ export const patientBookingSchema = registry.register(
     cancellation: cancellationSchema,
     actions: z.object({
       canCancel: z.boolean().openapi({
-        description:
-          'Se o paciente ainda pode cancelar. Por enquanto só consultas; o cancelamento de exames chega na Fase 7.',
+        description: 'Se o paciente ainda pode cancelar: consulta ou exame ativo que ainda não começou.',
         example: true,
       }),
       lateCancellation: z.boolean().openapi({
@@ -65,7 +64,7 @@ export const patientBookingSchema = registry.register(
       }),
       cancelBlockedReason: z.enum(cancelBlockedReasons).nullable().openapi({
         description:
-          'Por que não dá para cancelar: já começou (`started`), já foi encerrado (`closed`) ou o cancelamento de exames ainda não existe (`unavailable`). Nulo quando `canCancel` é verdadeiro.',
+          'Por que não dá para cancelar: já começou (`started`) ou já foi encerrado (`closed`). Nulo quando `canCancel` é verdadeiro.',
         example: null,
       }),
     }),

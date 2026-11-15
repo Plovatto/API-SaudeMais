@@ -31,8 +31,7 @@ async function countsOf(tx: Transaction, patientId: string, now: Date) {
   return row ?? { upcoming: 0, past: 0 };
 }
 
-function blockedReason(status: BookingStatus, active: boolean) {
-  if (active) return 'unavailable' as const;
+function blockedReason(status: BookingStatus) {
   return status === 'confirmed' ? ('started' as const) : ('closed' as const);
 }
 
@@ -77,17 +76,14 @@ export class PatientBookingsRepository {
       const page = await pageOf(select, pagination, () => tx.$count(bookings, where));
       return {
         ...page,
-        items: page.items.map(({ active, lateCancellation, ...row }) => {
-          const canCancel = active && row.kind === 'appointment';
-          return {
-            ...viewOf(row),
-            actions: {
-              canCancel,
-              lateCancellation: canCancel && lateCancellation,
-              cancelBlockedReason: canCancel ? null : blockedReason(row.status, active),
-            },
-          };
-        }),
+        items: page.items.map(({ active, lateCancellation, ...row }) => ({
+          ...viewOf(row),
+          actions: {
+            canCancel: active,
+            lateCancellation: active && lateCancellation,
+            cancelBlockedReason: active ? null : blockedReason(row.status),
+          },
+        })),
         counts: await countsOf(tx, patientId, now),
       };
     }, readSnapshot);
