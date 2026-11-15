@@ -8,7 +8,7 @@ import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import { rescheduleSchema } from '../appointments/appointments.model.js';
-import { ACTIVE_LIMIT, patientConflict, rescheduleConflicts, sameSlot } from '../bookings/bookings.messages.js';
+import { ACTIVE_LIMIT, patientConflict, rescheduleConflicts, sameSlotResponse } from '../bookings/bookings.messages.js';
 import { MAX_AVAILABILITY_DAYS } from '../doctors/doctors.model.js';
 import type { ExamBookingsController } from './exam-bookings.controller.js';
 import {
@@ -112,11 +112,7 @@ documentOperation({
       rescheduleConflicts.limit,
       examConflicts.notReschedulable,
     ),
-    422: errorResponse('A nova vaga não existe (`OUTSIDE_AVAILABILITY`) ou é o horário atual (`SAME_SLOT`).', {
-      message: sameSlot.message,
-      code: sameSlot.code,
-      fields: { [sameSlot.field]: sameSlot.message },
-    }),
+    422: sameSlotResponse,
   },
 });
 

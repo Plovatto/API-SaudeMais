@@ -145,7 +145,10 @@ export const appointmentSchema = registry.register(
     createdAt: z.iso.datetime(),
     actions: bookingActionsSchema
       .nullable()
-      .openapi({ description: 'O que o paciente pode fazer com a consulta; nulo para o médico.' }),
+      .openapi({
+        description:
+          'Ações do paciente sobre a consulta, pela política de agendamento; nulo quando quem vê é o médico.',
+      }),
     events: z
       .array(bookingEventSchema)
       .openapi({ description: 'Histórico da consulta, do mais antigo para o mais novo.' }),

@@ -7,7 +7,7 @@ import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
-import { ACTIVE_LIMIT, patientConflict, rescheduleConflicts, sameSlot } from '../bookings/bookings.messages.js';
+import { ACTIVE_LIMIT, patientConflict, rescheduleConflicts, sameSlotResponse } from '../bookings/bookings.messages.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { AppointmentsController } from './appointments.controller.js';
 import { appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
@@ -128,11 +128,7 @@ documentOperation({
       patientConflict,
       appointmentConflicts.notReschedulable,
     ),
-    422: errorResponse('A nova vaga não existe (`OUTSIDE_AVAILABILITY`) ou é o horário atual (`SAME_SLOT`).', {
-      message: sameSlot.message,
-      code: sameSlot.code,
-      fields: { [sameSlot.field]: sameSlot.message },
-    }),
+    422: sameSlotResponse,
   },
 });
 
