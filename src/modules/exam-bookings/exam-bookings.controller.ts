@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import { idParams } from '../../lib/params.js';
 import { authOf } from '../../middleware/auth.js';
+import { rescheduleSchema } from '../appointments/appointments.model.js';
 import { bookExamSchema, cancelExamSchema, examAvailabilityQuery } from './exam-bookings.model.js';
 import type { ExamBookingsService } from './exam-bookings.service.js';
 
@@ -18,6 +19,10 @@ export function createExamBookingsController(service: ExamBookingsService) {
     cancel: (async (req, res) => {
       const { id } = idParams.parse(req.params);
       res.json(await service.cancel(id, authOf(req).user.id, cancelExamSchema.parse(req.body)));
+    }) satisfies RequestHandler,
+    reschedule: (async (req, res) => {
+      const { id } = idParams.parse(req.params);
+      res.json(await service.reschedule(id, authOf(req).user.id, rescheduleSchema.parse(req.body)));
     }) satisfies RequestHandler,
   };
 }

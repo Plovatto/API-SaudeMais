@@ -4,7 +4,7 @@ import type { Clock } from '../../lib/clock.js';
 import { CLINIC_TIME_ZONE, DAY, instantOfWallClock } from '../../lib/time.js';
 import { slotAt, slotDays } from '../../lib/time-slots.js';
 import { patientConflict } from '../bookings/bookings.messages.js';
-import type { LockedPatient } from '../bookings/bookings.repository.js';
+import { exceptOwn, type LockedPatient } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import {
   examBookingNotFound,
@@ -19,7 +19,8 @@ import type {
   ExamAvailabilityQuery,
   ExamBooking,
 } from './exam-bookings.model.js';
-import type { ExamBookingsRepository, LaneUse } from './exam-bookings.repository.js';
+import type { RescheduleInput } from '../appointments/appointments.model.js';
+import type { ExamBookingsRepository, ExamSlotContext, LaneUse, Offer } from './exam-bookings.repository.js';
 
 const exclusionConflicts = {
   bookings_exam_lane_no_overlap_excl: examConflicts.noCapacity,
@@ -79,12 +80,29 @@ export class ExamBookingsService {
   }
 
   async cancel(id: string, patientId: string, { startsAt }: CancelExamInput): Promise<ExamBooking> {
-    if (!(await this.repository.owns(id, patientId))) throw notFound(examBookingNotFound);
+    if (!(await this.repository.offerOf(id, patientId))) throw notFound(examBookingNotFound);
     const canceller = { role: 'patient' as const, userId: patientId, reason: null };
     await this.bookings.commitSeen(
       (tx) => this.bookings.cancelSeen(tx, { id, startsAt: new Date(startsAt) }, canceller),
       examConflicts.invalidState,
     );
+    return this.detail(id, patientId);
+  }
+
+  async reschedule(id: string, patientId: string, { startsAt, newStartsAt }: RescheduleInput): Promise<ExamBooking> {
+    const offer = await this.repository.offerOf(id, patientId);
+    if (!offer) throw notFound(examBookingNotFound);
+    const target = new Date(newStartsAt);
+    await this.bookings.rescheduleAsPatient(patientId, exclusionConflicts, async (tx) => {
+      const context = await this.repository.lockOffer(tx, offer);
+      if (!context) throw notFound(examOfferNotFound);
+      return this.bookings.moveSeen(
+        tx,
+        { id, patientId, startsAt: new Date(startsAt), newStartsAt: target },
+        examConflicts.notReschedulable,
+        ({ lane }) => this.seat(tx, context, offer, target, { id, patientId, lane }),
+      );
+    });
     return this.detail(id, patientId);
   }
 
@@ -95,25 +113,36 @@ export class ExamBookingsService {
     { unitId, examTypeId, notes, ...input }: BookExamInput,
   ) {
     await this.bookings.ensureActiveLimit(tx, patientId, patient);
-    const now = this.clock.now();
-    const context = await this.repository.lockOffer(tx, { unitId, examTypeId });
+    const offer = { unitId, examTypeId };
+    const context = await this.repository.lockOffer(tx, offer);
     if (!context) throw notFound(examOfferNotFound);
     const startsAt = new Date(input.startsAt);
-    const slot = slotAt({ ...context, now, timeZone: CLINIC_TIME_ZONE }, startsAt);
+    const seat = await this.seat(tx, context, offer, startsAt);
+    return this.repository.create(tx, {
+      ...offer,
+      ...seat,
+      patientId,
+      startsAt,
+      notes: notes || null,
+      now: this.clock.now(),
+    });
+  }
+
+  private async seat(
+    tx: Transaction,
+    context: ExamSlotContext,
+    offer: Offer,
+    startsAt: Date,
+    current?: { id: string; patientId: string; lane: number | null },
+  ) {
+    const slot = slotAt({ ...context, now: this.clock.now(), timeZone: CLINIC_TIME_ZONE }, startsAt);
     if (!slot) throw unprocessableField(outsideExamAvailability);
     const endsAt = new Date(slot.endsAt);
-    const lanes = await this.repository.lanesInUse(tx, { unitId, examTypeId }, { from: startsAt, to: endsAt });
-    const [lane] = freeLanes(context.capacity, lanes, startsAt, endsAt);
+    const except = current && exceptOwn(current.patientId, current.id);
+    const lanes = await this.repository.lanesInUse(tx, offer, { from: startsAt, to: endsAt }, except);
+    const free = freeLanes(context.capacity, lanes, startsAt, endsAt);
+    const lane = current?.lane && free.includes(current.lane) ? current.lane : free[0];
     if (lane === undefined) throw conflictError(examConflicts.noCapacity);
-    return this.repository.create(tx, {
-      unitId,
-      examTypeId,
-      patientId,
-      lane,
-      startsAt,
-      endsAt,
-      notes: notes || null,
-      now,
-    });
+    return { endsAt, lane };
   }
 }

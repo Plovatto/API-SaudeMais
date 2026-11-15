@@ -15,6 +15,11 @@ export const examConflicts = {
     field: '_root',
     message: 'Este exame mudou ou não pode mais ser cancelado. Atualize a página.',
   },
+  notReschedulable: {
+    code: 'INVALID_STATE',
+    field: '_root',
+    message: 'Este exame mudou ou não pode mais ser reagendado. Atualize a página.',
+  },
 } satisfies Record<string, FieldConflict>;
 
 export const outsideExamAvailability: FieldConflict = {

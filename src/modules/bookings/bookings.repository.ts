@@ -122,6 +122,10 @@ export async function actionsAt(db: Pick<Database, 'select'>, now: Date) {
   return (booking: PolicySubject) => bookingActions(booking, current, now);
 }
 
+export function exceptOwn(patientId: string, id: string | undefined): SQL | undefined {
+  return id === undefined ? undefined : sql`not (${eq(bookings.id, id)} and ${eq(bookings.patientId, patientId)})`;
+}
+
 export async function hasActiveFuture(db: Pick<Database, '$count'>, scope: SQL, now: Date): Promise<boolean> {
   return (await db.$count(bookings, and(isActiveFuture(now), scope))) > 0;
 }

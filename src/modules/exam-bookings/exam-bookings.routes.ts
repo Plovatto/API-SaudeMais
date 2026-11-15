@@ -7,7 +7,8 @@ import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
-import { ACTIVE_LIMIT, patientConflict } from '../bookings/bookings.messages.js';
+import { rescheduleSchema } from '../appointments/appointments.model.js';
+import { ACTIVE_LIMIT, patientConflict, rescheduleConflicts, sameSlot } from '../bookings/bookings.messages.js';
 import { MAX_AVAILABILITY_DAYS } from '../doctors/doctors.model.js';
 import type { ExamBookingsController } from './exam-bookings.controller.js';
 import {
@@ -90,6 +91,35 @@ documentOperation({
   },
 });
 
+documentOperation({
+  method: 'post',
+  path: `${path}/{id}/reschedule`,
+  operationId: 'rescheduleExamBooking',
+  tag: tags.scheduling.name,
+  summary: 'Reagendar um exame',
+  description:
+    'Troca o horário de um exame confirmado que ainda não começou, na mesma linha e em uma única transação: o exame continua confirmado e com o mesmo código, `reschedule_count` aumenta e o evento `rescheduled` guarda o horário anterior e o novo. O exame mantém o lugar (raia) atual se ele estiver livre no novo horário; senão, ocupa o menor lugar livre, até a capacidade da oferta. O lugar antigo só fica livre se o novo for garantido. Só o paciente dele reagenda. Envie em `startsAt` o início que a tela mostrava (se mudou, a resposta é `INVALID_STATE`) e em `newStartsAt` o início de uma vaga devolvida por `GET /api/exam-availability?rescheduling={id}`, em que o próprio exame não ocupa lugar. Dentro da janela da política (`examLateWindowHours`) o exame não pode ser reagendado (`RESCHEDULE_WINDOW_CLOSED`), só cancelado, e cada exame aceita até `maxReschedules` reagendamentos (`RESCHEDULE_LIMIT`). Erros sobre a nova vaga vêm em `fields.newStartsAt`. Responde o detalhe atualizado; para os demais usuários, responde como inexistente. Limite: 60 requisições por minuto por IP.',
+  params: idParams,
+  body: rescheduleSchema,
+  success: { status: 200, description: 'Exame reagendado.', schema: examBookingSchema },
+  errors: {
+    403: forbiddenResponse,
+    404: notFoundResponse(examBookingNotFound),
+    409: conflictResponse(
+      examConflicts.noCapacity,
+      patientConflict,
+      rescheduleConflicts.windowClosed,
+      rescheduleConflicts.limit,
+      examConflicts.notReschedulable,
+    ),
+    422: errorResponse('A nova vaga não existe (`OUTSIDE_AVAILABILITY`) ou é o horário atual (`SAME_SLOT`).', {
+      message: sameSlot.message,
+      code: sameSlot.code,
+      fields: { [sameSlot.field]: sameSlot.message },
+    }),
+  },
+});
+
 export interface ExamBookingsRouterDeps {
   controller: ExamBookingsController;
   requireAuth: RequestHandler;
@@ -105,5 +135,6 @@ export function createExamBookingsRouter({ controller, requireAuth, requirePatie
   router.post(path, writeLimit, ...patientOnly, controller.book);
   router.get(`${path}/:id`, readLimit, ...patientOnly, controller.detail);
   router.post(`${path}/:id/cancel`, writeLimit, ...patientOnly, controller.cancel);
+  router.post(`${path}/:id/reschedule`, writeLimit, ...patientOnly, controller.reschedule);
   return router;
 }

@@ -1,4 +1,4 @@
-import { and, eq, gt, lt, sql } from 'drizzle-orm';
+import { and, eq, gt, lt, sql, type SQL } from 'drizzle-orm';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, unitExamOffers, units } from '../../database/schema/catalog.js';
@@ -16,7 +16,7 @@ import { slotPolicy } from '../doctors/doctors.repository.js';
 import { newPublicCode } from './exam-bookings.code.js';
 import type { ExamBooking } from './exam-bookings.model.js';
 
-interface Offer {
+export interface Offer {
   unitId: string;
   examTypeId: string;
 }
@@ -27,7 +27,7 @@ export interface LaneUse {
   lane: number;
 }
 
-type ExamSlotContext = Pick<
+export type ExamSlotContext = Pick<
   SlotRequest,
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays'
 > & { capacity: number };
@@ -102,7 +102,7 @@ export class ExamBookingsRepository {
     return slotFrame(tx, unitId, { capacity: offer.capacity, durationMin: examType.durationMin });
   }
 
-  lanesInUse(tx: Transaction, { unitId, examTypeId }: Offer, { from, to }: Period): Promise<LaneUse[]> {
+  lanesInUse(tx: Transaction, { unitId, examTypeId }: Offer, { from, to }: Period, except?: SQL): Promise<LaneUse[]> {
     return tx
       .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt, lane: sql<number>`${bookings.lane}` })
       .from(bookings)
@@ -114,6 +114,7 @@ export class ExamBookingsRepository {
           eq(bookings.status, 'confirmed'),
           lt(bookings.startsAt, to),
           gt(bookings.endsAt, from),
+          except,
         ),
       );
   }
@@ -131,8 +132,12 @@ export class ExamBookingsRepository {
     return row.id;
   }
 
-  async owns(id: string, patientId: string): Promise<boolean> {
-    return (await this.db.$count(bookings, examWith(id, patientId))) > 0;
+  async offerOf(id: string, patientId: string): Promise<Offer | undefined> {
+    const [row] = await this.db
+      .select({ unitId: bookings.unitId, examTypeId: sql<string>`${bookings.examTypeId}` })
+      .from(bookings)
+      .where(examWith(id, patientId));
+    return row;
   }
 
   find(id: string, patientId: string, now: Date): Promise<ExamBooking | undefined> {
