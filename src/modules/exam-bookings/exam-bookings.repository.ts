@@ -33,6 +33,8 @@ export type ExamSlotContext = Pick<
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays'
 > & { capacity: number };
 
+const CODE_ATTEMPTS = 5;
+
 interface Period {
   from: Date;
   to: Date;
@@ -121,14 +123,15 @@ export class ExamBookingsRepository {
       );
   }
 
-  async create(tx: Transaction, exam: NewExam): Promise<string> {
+  async create(tx: Transaction, exam: NewExam, attempt = 1): Promise<string> {
     const { patientId, now, ...fields } = exam;
     const [row] = await tx
       .insert(bookings)
       .values({ ...fields, kind: 'exam', status: 'confirmed', patientId, publicCode: newPublicCode(), createdAt: now })
       .onConflictDoNothing({ target: bookings.publicCode })
       .returning({ id: bookings.id });
-    if (!row) return this.create(tx, exam);
+    if (!row && attempt >= CODE_ATTEMPTS) throw new Error(`No free public code after ${CODE_ATTEMPTS} attempts`);
+    if (!row) return this.create(tx, exam, attempt + 1);
     await recordCreated(tx, { bookingId: row.id, patientId, status: 'confirmed', now });
     return row.id;
   }

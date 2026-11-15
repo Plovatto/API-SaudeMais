@@ -206,7 +206,7 @@ document({
   operationId: 'adminSaveExamOffer',
   summary: 'Oferecer um exame na unidade',
   description:
-    'Cria ou altera a oferta do exame na unidade. Um tipo de exame inativo só pode ter oferta inativa. Desativar a oferta é recusado (`IN_USE`) enquanto houver exame futuro ativo nela, e reduzir `capacityPerSlot` também é recusado (`IN_USE`) quando algum exame futuro ocupa um lugar acima da nova capacidade. Devolve todas as ofertas da unidade.',
+    'Cria ou altera a oferta do exame na unidade. Um tipo de exame inativo só pode ter oferta inativa. Desativar a oferta é recusado (`IN_USE`) enquanto houver exame futuro ativo nela, e reduzir `capacityPerSlot` também é recusado (`IN_USE`) quando algum exame confirmado que ainda não terminou ocupa um lugar acima da nova capacidade. Devolve todas as ofertas da unidade.',
   params: offerParams,
   body: saveOfferSchema,
   success: { status: 200, description: 'Ofertas da unidade.', schema: z.array(examOfferSchema) },

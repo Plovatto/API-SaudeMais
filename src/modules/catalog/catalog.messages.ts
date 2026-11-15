@@ -40,5 +40,5 @@ export const inUse: Conflict = {
 export const capacityInUse: Conflict = {
   code: 'IN_USE',
   field: 'capacityPerSlot',
-  message: 'Há exames futuros marcados acima desta capacidade; ela não pode ser reduzida.',
+  message: 'Há exames marcados ou em andamento acima desta capacidade; ela não pode ser reduzida.',
 };

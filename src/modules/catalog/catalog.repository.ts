@@ -217,7 +217,13 @@ export class CatalogRepository {
     return this.db.transaction(async (tx) => {
       await lockRow(tx, 'unit', unitId);
       const offer = and(eq(bookings.unitId, unitId), eq(bookings.examTypeId, examTypeId));
-      await this.ensureUnused(tx, and(offer, gt(bookings.lane, input.capacityPerSlot)), capacityInUse);
+      const lanesAbove = and(
+        offer,
+        eq(bookings.status, 'confirmed'),
+        gt(bookings.endsAt, this.clock.now()),
+        gt(bookings.lane, input.capacityPerSlot),
+      );
+      if ((await tx.$count(bookings, lanesAbove)) > 0) throw new InUseError(capacityInUse);
       await tx
         .insert(unitExamOffers)
         .values({ unitId, examTypeId, ...input })
@@ -255,8 +261,8 @@ export class CatalogRepository {
     });
   }
 
-  private async ensureUnused(tx: Transaction, scope: SQL | undefined, conflict?: Conflict): Promise<void> {
-    if (scope && (await hasActiveFuture(tx, scope, this.clock.now()))) throw new InUseError(conflict);
+  private async ensureUnused(tx: Transaction, scope: SQL | undefined): Promise<void> {
+    if (scope && (await hasActiveFuture(tx, scope, this.clock.now()))) throw new InUseError();
   }
 
   private createAudited<Row extends { id: string }>(

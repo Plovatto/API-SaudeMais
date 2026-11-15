@@ -406,6 +406,24 @@ describe('POST /api/exam-bookings', () => {
     expect([first.publicCode, second.publicCode]).toEqual(['EX-C0FFEE', 'EX-BEEF42']);
   });
 
+  it('gives up after five taken codes without booking', async () => {
+    const patient = await createPatient(context, 'colisao.exame@email.com');
+    const draws = vi.mocked(newPublicCode);
+    for (let attempt = 0; attempt < 6; attempt += 1) draws.mockReturnValueOnce('EX-C0FFEE');
+    const before = draws.mock.calls.length;
+
+    const response = await book(patient, hemograma, slot('2026-12-01', '13:20'));
+    const leftover = draws();
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({ code: 'INTERNAL_ERROR' });
+    expect(draws.mock.calls.length - before).toBe(6);
+    expect(leftover).toBe('EX-C0FFEE');
+    expect(await slotsOn(patient, hemograma, '2026-12-01')).toContainEqual(
+      expect.objectContaining({ startsAt: slot('2026-12-01', '13:20'), remaining: 4 }),
+    );
+  });
+
   it('draws codes only from the allowed alphabet', async () => {
     const { newPublicCode: draw } = await vi.importActual<typeof publicCode>(
       '@/modules/exam-bookings/exam-bookings.code.js',
@@ -531,7 +549,7 @@ describe('exams in the patient list', () => {
 });
 
 describe('exam offer capacity', () => {
-  it('refuses lowering the capacity below a lane taken by a future exam', async () => {
+  it('refuses lowering the capacity below a lane taken by a future or in-progress exam', async () => {
     const first = await createPatient(context, 'capacidade.1@email.com');
     const second = await createPatient(context, 'capacidade.2@email.com');
     const startsAt = slot('2026-12-04', '13:00');
@@ -545,15 +563,25 @@ describe('exam offer capacity', () => {
 
     const refused = await save(1);
     await cancel(second, upper.id, upper.startsAt).expect(200);
+    await context.db.execute(sql`
+      insert into bookings (kind, patient_id, unit_id, exam_type_id, public_code, lane, starts_at, ends_at, status)
+      select 'exam', id, ${glicemia.unitId}, ${glicemia.examTypeId}, 'EX-1NPR0G', 2, '2026-11-20T11:55:00Z', '2026-11-20T12:05:00Z', 'confirmed'
+      from users where email = 'capacidade.2@email.com'
+    `);
+    const inProgress = await save(1);
+    await context.db.execute(sql`delete from bookings where public_code = 'EX-1NPR0G'`);
     const lowered = await save(1);
     await save(4).expect(200);
 
     expect(refused.status).toBe(409);
     expect(refused.body).toEqual({
       code: 'IN_USE',
-      message: 'Há exames futuros marcados acima desta capacidade; ela não pode ser reduzida.',
-      fields: { capacityPerSlot: 'Há exames futuros marcados acima desta capacidade; ela não pode ser reduzida.' },
+      message: 'Há exames marcados ou em andamento acima desta capacidade; ela não pode ser reduzida.',
+      fields: {
+        capacityPerSlot: 'Há exames marcados ou em andamento acima desta capacidade; ela não pode ser reduzida.',
+      },
     });
+    expect(inProgress.status).toBe(409);
     expect(lowered.status).toBe(200);
   });
 });
