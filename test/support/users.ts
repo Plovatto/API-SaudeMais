@@ -41,15 +41,18 @@ export function login(app: App, body: Record<string, unknown> = {}) {
     });
 }
 
-export async function registerAndLogin(app: App, body: Record<string, unknown> = {}) {
-  await request(app).post('/api/users/register').send(registration()).expect(201);
-  const response = await login(app, body);
+export async function registerAndLogin(
+  app: App,
+  body: Record<string, unknown> = {},
+  account: Record<string, unknown> = {},
+) {
+  await request(app).post('/api/users/register').send(registration(account)).expect(201);
+  const response = await login(app, { email: registration(account).email, ...body }).expect(200);
   return (response.body as { token: string }).token;
 }
 
-export async function signUp(app: App, email: string, fullName = 'Paciente de Teste') {
-  await request(app).post('/api/users/register').send(registration({ email, fullName })).expect(201);
-  return ((await login(app, { email }).expect(200)).body as { token: string }).token;
+export function signUp(app: App, email: string, fullName = 'Paciente de Teste') {
+  return registerAndLogin(app, {}, { email, fullName });
 }
 
 export async function createPatient({ auth }: { auth: UserService }, email: string) {

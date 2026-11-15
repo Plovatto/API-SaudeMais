@@ -432,7 +432,7 @@ describe('POST /api/exam-bookings', () => {
     const codes = Array.from({ length: 500 }, () => draw());
 
     expect(codes.every((code) => PUBLIC_CODE.test(code))).toBe(true);
-    expect(new Set(codes.join('').slice(3)).size).toBeGreaterThan(20);
+    expect(new Set(codes.flatMap((code) => [...code.slice(3)])).size).toBeGreaterThan(20);
   });
 });
 
