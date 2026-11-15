@@ -15,7 +15,7 @@ export const tags = {
   scheduling: {
     name: 'Agendamento',
     description:
-      'Médicos, vagas livres, pedidos de consulta e cancelamento. Exige o perfil de paciente; o detalhe e o cancelamento de uma consulta também abrem para o médico que a atende.',
+      'Médicos, vagas livres, pedidos de consulta, agendamento de exames e cancelamento. Exige o perfil de paciente; o detalhe e o cancelamento de uma consulta também abrem para o médico que a atende.',
   },
   patient: {
     name: 'Paciente',

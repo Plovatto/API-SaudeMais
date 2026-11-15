@@ -1,17 +1,18 @@
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
-import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
+import { AppError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
-import { civilDate, CLINIC_TIME_ZONE, wallClockIn } from '../../lib/time.js';
-import { slotDays } from '../../lib/time-slots.js';
+import { CLINIC_TIME_ZONE } from '../../lib/time.js';
+import { slotAt } from '../../lib/time-slots.js';
 import { forbidden, unauthenticated } from '../../middleware/auth.js';
+import { patientConflict } from '../bookings/bookings.messages.js';
 import type { BookingSide } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { SlotContext } from '../doctors/doctors.repository.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
-import { ACTIVE_LIMIT, appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
+import { appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
 import type {
   Appointment,
   BookAppointmentInput,
@@ -22,7 +23,7 @@ import type { AppointmentsRepository, Viewer } from './appointments.repository.j
 
 const exclusionConflicts = {
   bookings_doctor_no_overlap_excl: appointmentConflicts.slotTaken,
-  bookings_patient_no_overlap_excl: appointmentConflicts.patientConflict,
+  bookings_patient_no_overlap_excl: patientConflict,
 };
 
 const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
@@ -32,10 +33,7 @@ function ensureParty({ roles }: Viewer): void {
 }
 
 function slotEnd(context: SlotContext, startsAt: Date, now: Date): Date {
-  const date = civilDate(wallClockIn(CLINIC_TIME_ZONE, startsAt));
-  const slot = slotDays({ ...context, from: date, to: date, now, timeZone: CLINIC_TIME_ZONE, busy: [] })
-    .flatMap((day) => day.slots)
-    .find((candidate) => candidate.startsAt === startsAt.toISOString());
+  const slot = slotAt({ ...context, now, timeZone: CLINIC_TIME_ZONE }, startsAt);
   if (!slot) throw unprocessableField(appointmentRules.outsideAvailability);
   return new Date(slot.endsAt);
 }
@@ -91,10 +89,7 @@ export class AppointmentsService {
   ): Promise<Appointment> {
     const role = await this.repository.sideOf(id, viewer);
     if (!role) throw notFound(appointmentNotFound);
-    const work = prepare(role);
-    const afterCommit = await retryOnDeadlock(() => this.repository.transaction(work));
-    if (!afterCommit) throw conflictError(conflict);
-    runAfterCommit(afterCommit);
+    await this.bookings.commitSeen(prepare(role), conflict);
     return this.find(id, viewer);
   }
 
@@ -106,10 +101,8 @@ export class AppointmentsService {
 
   private create(patientId: string, { doctorId, specialtyId, visitType, notes, ...input }: BookAppointmentInput) {
     return this.repository.book(patientId, async (tx, patient) => {
+      await this.bookings.ensureActiveLimit(tx, patientId, patient);
       const now = this.clock.now();
-      if (!patient.isProtected && (await this.repository.activeFutureCount(tx, patientId, now)) >= ACTIVE_LIMIT) {
-        throw unprocessableField(appointmentRules.activeLimit);
-      }
       const context = await this.repository.lockDoctor(tx, {
         doctorId,
         specialtyId,

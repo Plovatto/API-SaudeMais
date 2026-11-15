@@ -1,4 +1,4 @@
-import { and, eq, gt, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import {
@@ -10,6 +10,7 @@ import {
   type CancellerRole,
 } from '../../database/schema/bookings.js';
 import { specialties, units } from '../../database/schema/catalog.js';
+import { users } from '../../database/schema/users.js';
 
 export type BookingSide = 'patient' | 'doctor';
 
@@ -24,6 +25,17 @@ export interface ChangedBooking {
   patientId: string;
   doctorId: string | null;
   startsAt: Date;
+}
+
+export interface LockedPatient {
+  isProtected: boolean;
+}
+
+interface CreatedBooking {
+  bookingId: string;
+  patientId: string;
+  status: BookingStatus;
+  now: Date;
 }
 
 export interface SeenBooking {
@@ -95,6 +107,60 @@ export async function futureBookingCounts(db: Pick<Database, 'select'>, userId: 
     .from(bookings)
     .where(and(isActiveFuture(now), ofAccount(userId, ['patient', 'doctor'])));
   return row ?? { futureAppointmentsAsPatient: 0, futureAppointmentsAsDoctor: 0 };
+}
+
+export function asPatient<T>(
+  db: Database,
+  patientId: string,
+  work: (tx: Transaction, patient: LockedPatient) => Promise<T>,
+): Promise<T | undefined> {
+  return db.transaction(async (tx) => {
+    const [patient] = await tx
+      .select({ isProtected: users.isProtected })
+      .from(users)
+      .where(and(eq(users.id, patientId), isNull(users.deactivatedAt)))
+      .for('no key update');
+    return patient ? work(tx, patient) : undefined;
+  });
+}
+
+export function activeFutureCount(db: Pick<Database, '$count'>, patientId: string, now: Date): Promise<number> {
+  return db.$count(bookings, and(eq(bookings.patientId, patientId), isActiveFuture(now)));
+}
+
+export async function recordCreated(tx: Transaction, { bookingId, patientId, status, now }: CreatedBooking) {
+  await tx.insert(bookingEvents).values({
+    bookingId,
+    eventType: 'created',
+    actorType: 'patient',
+    actorUserId: patientId,
+    toStatus: status,
+    createdAt: now,
+  });
+}
+
+const iso = (date: Date | null) => date?.toISOString() ?? null;
+
+export async function eventsOf(db: Pick<Database, 'select'>, bookingId: string) {
+  const events = await db
+    .select({
+      type: bookingEvents.eventType,
+      actorType: bookingEvents.actorType,
+      fromStatus: bookingEvents.fromStatus,
+      toStatus: bookingEvents.toStatus,
+      fromStartsAt: bookingEvents.fromStartsAt,
+      toStartsAt: bookingEvents.toStartsAt,
+      createdAt: bookingEvents.createdAt,
+    })
+    .from(bookingEvents)
+    .where(eq(bookingEvents.bookingId, bookingId))
+    .orderBy(asc(bookingEvents.createdAt), asc(bookingEvents.id));
+  return events.map((event) => ({
+    ...event,
+    fromStartsAt: iso(event.fromStartsAt),
+    toStartsAt: iso(event.toStartsAt),
+    createdAt: event.createdAt.toISOString(),
+  }));
 }
 
 async function change(tx: Transaction, { set, where, event }: Change): Promise<ChangedBooking[]> {

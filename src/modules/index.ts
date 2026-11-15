@@ -10,6 +10,7 @@ import { createDoctorAgendaModule } from './doctor-agenda/index.js';
 import { createDoctorScheduleModule } from './doctor-schedule/index.js';
 import { createDoctorsModule } from './doctors/index.js';
 import { createDemoModule } from './demo/index.js';
+import { createExamBookingsModule } from './exam-bookings/index.js';
 import { createNotificationsModule } from './notifications/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
 import { createPatientBookingsModule } from './patient-bookings/index.js';
@@ -29,7 +30,7 @@ export function createModules(deps: ModulesDeps) {
   const notifications = createNotificationsModule(deps);
   const users = createUsersModule({ ...deps, notifications: notifications.service, sessions });
   const passwordReset = createPasswordResetModule({ ...deps, sessions });
-  const bookings = createBookingsModule({ clock: deps.clock, notifications: notifications.service });
+  const bookings = createBookingsModule({ db: deps.db, clock: deps.clock, notifications: notifications.service });
   const catalog = createCatalogModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminUsers = createAdminUsersModule({
     db: deps.db,
@@ -52,6 +53,12 @@ export function createModules(deps: ModulesDeps) {
     clock: deps.clock,
     requireAuth: users.requireAuth,
     notifications: notifications.service,
+    bookings: bookings.service,
+  });
+  const examBookings = createExamBookingsModule({
+    db: deps.db,
+    clock: deps.clock,
+    requireAuth: users.requireAuth,
     bookings: bookings.service,
   });
   const patientBookings = createPatientBookingsModule({
@@ -87,6 +94,7 @@ export function createModules(deps: ModulesDeps) {
       doctorSchedule.router,
       doctors.router,
       appointments.router,
+      examBookings.router,
       patientBookings.router,
       doctorAgenda.router,
       notifications.routerFor(users.requireAuth),

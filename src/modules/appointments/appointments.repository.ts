@@ -1,22 +1,20 @@
-import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import { alias, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
-import {
-  bookingEvents,
-  bookings,
-  effectiveStatus,
-  isActiveFuture,
-  type VisitType,
-} from '../../database/schema/bookings.js';
+import { bookings, effectiveStatus, type VisitType } from '../../database/schema/bookings.js';
 import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { users, type Role } from '../../database/schema/users.js';
 import {
+  asPatient,
   cancellationColumns,
+  eventsOf,
   ofAccount,
   placeColumns,
+  recordCreated,
   viewOf,
   type BookingSide,
+  type LockedPatient,
 } from '../bookings/bookings.repository.js';
 import { slotContext, type SlotContext } from '../doctors/doctors.repository.js';
 import type { Appointment } from './appointments.model.js';
@@ -44,8 +42,6 @@ export interface Viewer {
 
 const doctorUsers = alias(users, 'doctor_users');
 
-const iso = (date: Date | null) => date?.toISOString() ?? null;
-
 const visibleTo = ({ userId, roles }: Viewer) =>
   ofAccount(
     userId,
@@ -57,19 +53,8 @@ const appointmentWith = (id: string) => and(eq(bookings.id, id), eq(bookings.kin
 export class AppointmentsRepository {
   constructor(private readonly db: Database) {}
 
-  book<T>(patientId: string, work: (tx: Transaction, patient: { isProtected: boolean }) => Promise<T>) {
-    return this.db.transaction(async (tx): Promise<T | undefined> => {
-      const [patient] = await tx
-        .select({ isProtected: users.isProtected })
-        .from(users)
-        .where(and(eq(users.id, patientId), isNull(users.deactivatedAt)))
-        .for('no key update');
-      return patient ? work(tx, patient) : undefined;
-    });
-  }
-
-  activeFutureCount(tx: Transaction, patientId: string, now: Date): Promise<number> {
-    return tx.$count(bookings, and(eq(bookings.patientId, patientId), isActiveFuture(now)));
+  book<T>(patientId: string, work: (tx: Transaction, patient: LockedPatient) => Promise<T>) {
+    return asPatient(this.db, patientId, work);
   }
 
   async lockDoctor(
@@ -110,19 +95,8 @@ export class AppointmentsRepository {
       })
       .returning({ id: bookings.id });
     if (!row) throw new Error('Booking insert returned no row');
-    await tx.insert(bookingEvents).values({
-      bookingId: row.id,
-      eventType: 'created',
-      actorType: 'patient',
-      actorUserId: patientId,
-      toStatus: 'pending',
-      createdAt: now,
-    });
+    await recordCreated(tx, { bookingId: row.id, patientId, status: 'pending', now });
     return row.id;
-  }
-
-  transaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
-    return this.db.transaction(work);
   }
 
   async sideOf(id: string, viewer: Viewer): Promise<BookingSide | undefined> {
@@ -157,29 +131,7 @@ export class AppointmentsRepository {
         .innerJoin(units, eq(units.id, bookings.unitId))
         .where(and(appointmentWith(id), visibleTo(viewer)));
       if (!row) return undefined;
-      const events = await tx
-        .select({
-          type: bookingEvents.eventType,
-          actorType: bookingEvents.actorType,
-          fromStatus: bookingEvents.fromStatus,
-          toStatus: bookingEvents.toStatus,
-          fromStartsAt: bookingEvents.fromStartsAt,
-          toStartsAt: bookingEvents.toStartsAt,
-          createdAt: bookingEvents.createdAt,
-        })
-        .from(bookingEvents)
-        .where(eq(bookingEvents.bookingId, id))
-        .orderBy(asc(bookingEvents.createdAt), asc(bookingEvents.id));
-      return {
-        ...viewOf(row),
-        createdAt: row.createdAt.toISOString(),
-        events: events.map((event) => ({
-          ...event,
-          fromStartsAt: iso(event.fromStartsAt),
-          toStartsAt: iso(event.toStartsAt),
-          createdAt: event.createdAt.toISOString(),
-        })),
-      };
+      return { ...viewOf(row), createdAt: row.createdAt.toISOString(), events: await eventsOf(tx, id) };
     }, readSnapshot);
   }
 }

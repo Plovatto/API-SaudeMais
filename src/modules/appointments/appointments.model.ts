@@ -18,7 +18,7 @@ export const visitType = z.enum(visitTypes, { error: 'Escolha o tipo de consulta
   example: 'first_visit',
 });
 
-const instant = (error: string, description: string) =>
+export const instant = (error: string, description: string) =>
   z.iso.datetime({ offset: true, error }).openapi({ description, example: '2026-11-23T11:00:00.000Z' });
 
 export const bookAppointmentSchema = registry.register(
@@ -34,9 +34,9 @@ export const bookAppointmentSchema = registry.register(
   }),
 );
 
-const seenStartsAt = instant(
-  'Envie o startsAt da consulta como ela apareceu na tela.',
-  'Início da consulta como o cliente o exibiu. Se a consulta mudou desde então, a resposta é `INVALID_STATE`.',
+export const seenStartsAt = instant(
+  'Envie o startsAt do agendamento como ele apareceu na tela.',
+  'Início do agendamento como o cliente o exibiu. Se ele mudou desde então, a resposta é `INVALID_STATE`.',
 );
 
 export const confirmAppointmentSchema = registry.register(
@@ -70,7 +70,7 @@ export const cancellationSchema = z
   .nullable()
   .openapi({ description: 'Dados do cancelamento; nulo enquanto não foi cancelado. Só as partes veem o motivo.' });
 
-const eventSchema = z.object({
+export const bookingEventSchema = z.object({
   type: z.enum(bookingEventTypes).openapi({ example: 'created' }),
   actorType: z.enum(bookingActorTypes).openapi({ example: 'patient' }),
   fromStatus: z.enum(bookingStatuses).nullable(),
@@ -98,7 +98,9 @@ export const appointmentSchema = registry.register(
     unit: doctorSchema.shape.unit,
     cancellation: cancellationSchema,
     createdAt: z.iso.datetime(),
-    events: z.array(eventSchema).openapi({ description: 'Histórico da consulta, do mais antigo para o mais novo.' }),
+    events: z
+      .array(bookingEventSchema)
+      .openapi({ description: 'Histórico da consulta, do mais antigo para o mais novo.' }),
   }),
 );
 

@@ -1,8 +1,12 @@
 import type { SQL } from 'drizzle-orm';
-import type { AfterCommit, Transaction } from '../../database/pg-client.js';
+import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
+import { conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
+import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
+import { ACTIVE_LIMIT, activeLimit } from './bookings.messages.js';
 import {
+  activeFutureCount,
   cancelActiveFuture,
   confirmPending,
   ofAccount,
@@ -10,6 +14,7 @@ import {
   type BookingSide,
   type ChangedBooking,
   type Canceller,
+  type LockedPatient,
   type SeenBooking,
 } from './bookings.repository.js';
 
@@ -47,9 +52,25 @@ function counterparts(booking: ChangedBooking, userId: string, canceller: Cancel
 
 export class BookingsService {
   constructor(
+    private readonly db: Database,
     private readonly notifications: NotificationsService,
     private readonly clock: Clock,
   ) {}
+
+  async ensureActiveLimit(tx: Transaction, patientId: string, { isProtected }: LockedPatient): Promise<void> {
+    if (!isProtected && (await activeFutureCount(tx, patientId, this.clock.now())) >= ACTIVE_LIMIT) {
+      throw unprocessableField(activeLimit);
+    }
+  }
+
+  async commitSeen(
+    work: (tx: Transaction) => Promise<AfterCommit | undefined>,
+    conflict: FieldConflict,
+  ): Promise<void> {
+    const afterCommit = await retryOnDeadlock(() => this.db.transaction(work));
+    if (!afterCommit) throw conflictError(conflict);
+    runAfterCommit(afterCommit);
+  }
 
   async cancelForAccount(
     tx: Transaction,

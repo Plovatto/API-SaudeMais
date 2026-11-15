@@ -36,3 +36,9 @@ export const inUse: Conflict = {
   field: 'isActive',
   message: 'Há agendamentos futuros ligados a este cadastro; ele não pode ser desativado.',
 };
+
+export const capacityInUse: Conflict = {
+  code: 'IN_USE',
+  field: 'capacityPerSlot',
+  message: 'Há exames marcados ou em andamento acima desta capacidade; ela não pode ser reduzida.',
+};

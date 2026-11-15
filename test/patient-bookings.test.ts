@@ -169,7 +169,7 @@ describe('GET /api/patient/bookings', () => {
       examType: { id: expect.any(String) as unknown, name: expect.any(String) as unknown },
       publicCode: 'EX-7F3K2Q',
       unit: { address: expect.any(String) as unknown, phone: expect.any(String) as unknown },
-      actions: { canCancel: false, lateCancellation: false, cancelBlockedReason: 'unavailable' },
+      actions: { canCancel: true, lateCancellation: false, cancelBlockedReason: null },
     });
   });
 

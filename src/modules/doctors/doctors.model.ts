@@ -40,21 +40,26 @@ export const doctorPageSchema = registry.register('DoctorPage', paginatedSchema(
 
 export const civilDay = z.iso.date('Use uma data no formato AAAA-MM-DD.');
 
-export const availabilityQuery = z
-  .strictObject({
-    from: civilDay.openapi({ description: 'Primeiro dia, no fuso de São Paulo.', example: '2026-11-23' }),
-    to: civilDay.openapi({ description: 'Último dia, incluído.', example: '2026-11-27' }),
-  })
-  .refine(({ from, to }) => to >= from, {
-    path: ['to'],
-    message: 'A data final precisa ser igual ou posterior à inicial.',
-  })
-  .refine(({ from, to }) => Date.parse(to) - Date.parse(from) < MAX_AVAILABILITY_DAYS * DAY, {
-    path: ['to'],
-    message: `Consulte no máximo ${MAX_AVAILABILITY_DAYS} dias por vez.`,
-  });
+export const periodShape = {
+  from: civilDay.openapi({ description: 'Primeiro dia, no fuso de São Paulo.', example: '2026-11-23' }),
+  to: civilDay.openapi({ description: 'Último dia, incluído.', example: '2026-11-27' }),
+};
 
-const slotSchema = z.object({
+export function withPeriodRules<T extends z.ZodType<{ from: string; to: string }>>(schema: T): T {
+  return schema
+    .refine(({ from, to }) => to >= from, {
+      path: ['to'],
+      message: 'A data final precisa ser igual ou posterior à inicial.',
+    })
+    .refine(({ from, to }) => Date.parse(to) - Date.parse(from) < MAX_AVAILABILITY_DAYS * DAY, {
+      path: ['to'],
+      message: `Consulte no máximo ${MAX_AVAILABILITY_DAYS} dias por vez.`,
+    });
+}
+
+export const availabilityQuery = withPeriodRules(z.strictObject(periodShape));
+
+export const slotSchema = z.object({
   startsAt: z.iso.datetime().openapi({ example: '2026-11-23T11:00:00.000Z' }),
   endsAt: z.iso.datetime().openapi({ example: '2026-11-23T11:30:00.000Z' }),
 });

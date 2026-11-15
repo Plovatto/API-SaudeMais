@@ -7,9 +7,10 @@ import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { ACTIVE_LIMIT, patientConflict } from '../bookings/bookings.messages.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { AppointmentsController } from './appointments.controller.js';
-import { ACTIVE_LIMIT, appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
+import { appointmentConflicts, appointmentNotFound, appointmentRules } from './appointments.messages.js';
 import {
   appointmentSchema,
   bookAppointmentSchema,
@@ -32,7 +33,7 @@ documentOperation({
   errors: {
     403: forbiddenResponse,
     404: notFoundResponse(doctorNotFound),
-    409: conflictResponse(appointmentConflicts.slotTaken, appointmentConflicts.patientConflict),
+    409: conflictResponse(appointmentConflicts.slotTaken, patientConflict),
     422: errorResponse(
       'Vaga inexistente (`OUTSIDE_AVAILABILITY`), limite de agendamentos ativos (`ACTIVE_LIMIT`), especialidade que o médico não atende (`SPECIALTY_MISMATCH`) ou consulta consigo mesmo (`SELF_BOOKING`).',
       {

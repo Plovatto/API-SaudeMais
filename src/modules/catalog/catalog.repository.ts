@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, inArray, type SQL } from 'drizzle-orm';
+import { and, asc, eq, exists, gt, inArray, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
@@ -22,13 +22,13 @@ import type {
   UpdateUnitInput,
 } from './catalog.model.js';
 import { hasActiveFuture } from '../bookings/bookings.repository.js';
-import type { CatalogEntity } from './catalog.messages.js';
+import { capacityInUse, inUse, type CatalogEntity, type Conflict } from './catalog.messages.js';
 
 export type { Actor };
 export type ExamTypeStatus = 'missing' | 'inactive' | 'active';
 
 export class InUseError extends Error {
-  constructor() {
+  constructor(readonly conflict: Conflict = inUse) {
     super('Catalog entry is in use');
     this.name = 'InUseError';
   }
@@ -216,13 +216,19 @@ export class CatalogRepository {
   saveOffer(unitId: string, examTypeId: string, input: SaveOfferInput, actor: Actor): Promise<void> {
     return this.db.transaction(async (tx) => {
       await lockRow(tx, 'unit', unitId);
-      if (await this.capacityInUseAbove(tx, unitId, examTypeId, input.capacityPerSlot)) throw new InUseError();
+      const offer = and(eq(bookings.unitId, unitId), eq(bookings.examTypeId, examTypeId));
+      const lanesAbove = and(
+        offer,
+        eq(bookings.status, 'confirmed'),
+        gt(bookings.endsAt, this.clock.now()),
+        gt(bookings.lane, input.capacityPerSlot),
+      );
+      if ((await tx.$count(bookings, lanesAbove)) > 0) throw new InUseError(capacityInUse);
       await tx
         .insert(unitExamOffers)
         .values({ unitId, examTypeId, ...input })
         .onConflictDoUpdate({ target: [unitExamOffers.unitId, unitExamOffers.examTypeId], set: input });
-      if (!input.isActive)
-        await this.ensureUnused(tx, and(eq(bookings.unitId, unitId), eq(bookings.examTypeId, examTypeId)));
+      if (!input.isActive) await this.ensureUnused(tx, offer);
       await recordAudit(tx, {
         ...actor,
         action: 'unit_exam_offer.saved',
@@ -257,10 +263,6 @@ export class CatalogRepository {
 
   private async ensureUnused(tx: Transaction, scope: SQL | undefined): Promise<void> {
     if (scope && (await hasActiveFuture(tx, scope, this.clock.now()))) throw new InUseError();
-  }
-
-  private capacityInUseAbove(_tx: Transaction, _unitId: string, _examTypeId: string, _capacity: number) {
-    return Promise.resolve(false);
   }
 
   private createAudited<Row extends { id: string }>(
