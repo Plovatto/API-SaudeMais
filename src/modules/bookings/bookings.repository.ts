@@ -44,10 +44,20 @@ export interface SeenBooking {
   startsAt: Date;
 }
 
+export interface Move {
+  startsAt: Date;
+  endsAt: Date;
+  status?: BookingStatus;
+  lane?: number;
+}
+
 interface Change {
   set: PgUpdateSetSource<typeof bookings>;
   where: SQL | undefined;
-  event: Pick<typeof bookingEvents.$inferInsert, 'eventType' | 'actorType' | 'actorUserId' | 'createdAt'>;
+  event: Pick<
+    typeof bookingEvents.$inferInsert,
+    'eventType' | 'actorType' | 'actorUserId' | 'createdAt' | 'fromStartsAt' | 'toStartsAt'
+  >;
 }
 
 export const placeColumns = {
@@ -95,7 +105,7 @@ export function seenBy(userId: string, side: BookingSide, { id, startsAt }: Seen
   return sql`${ofAccount(userId, [side])} and ${eq(bookings.id, id)} and ${eq(bookings.startsAt, startsAt)}`;
 }
 
-export async function policySettings(db: Pick<Database, 'select'>): Promise<PolicySettings> {
+async function policySettings(db: Pick<Database, 'select'>): Promise<PolicySettings> {
   const [row] = await db
     .select({
       appointmentLateWindowHours: settings.appointmentLateWindowHours,
@@ -228,4 +238,44 @@ export function confirmPending(tx: Transaction, scope: SQL, doctorId: string, no
     where: and(eq(bookings.status, 'pending'), gt(bookings.startsAt, now), scope),
     event: { eventType: 'confirmed', actorType: 'doctor', actorUserId: doctorId, createdAt: now },
   });
+}
+
+export async function lockSeen(tx: Transaction, patientId: string, seen: SeenBooking) {
+  const [row] = await tx
+    .select({
+      id: bookings.id,
+      kind: bookings.kind,
+      status: bookings.status,
+      startsAt: bookings.startsAt,
+      rescheduleCount: bookings.rescheduleCount,
+      lane: bookings.lane,
+    })
+    .from(bookings)
+    .where(seenBy(patientId, 'patient', seen))
+    .for('update');
+  return row;
+}
+
+export type LockedBooking = NonNullable<Awaited<ReturnType<typeof lockSeen>>>;
+
+export async function moveBooking(
+  tx: Transaction,
+  booking: LockedBooking,
+  move: Move,
+  patientId: string,
+  now: Date,
+): Promise<ChangedBooking | undefined> {
+  const [moved] = await change(tx, {
+    set: { ...move, rescheduleCount: sql`${bookings.rescheduleCount} + 1` },
+    where: eq(bookings.id, booking.id),
+    event: {
+      eventType: 'rescheduled',
+      actorType: 'patient',
+      actorUserId: patientId,
+      createdAt: now,
+      fromStartsAt: booking.startsAt,
+      toStartsAt: move.startsAt,
+    },
+  });
+  return moved;
 }

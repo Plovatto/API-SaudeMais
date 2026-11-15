@@ -56,6 +56,17 @@ export const cancelAppointmentSchema = registry.register(
   }),
 );
 
+export const rescheduleSchema = registry.register(
+  'RescheduleRequest',
+  z.strictObject({
+    startsAt: seenStartsAt,
+    newStartsAt: instant(
+      'Envie o startsAt de uma vaga da lista.',
+      'Início da nova vaga, como veio da lista de vagas aberta com `rescheduling`.',
+    ),
+  }),
+);
+
 export const person = z.object({ id: z.uuid(), fullName: z.string().openapi({ example: 'Ana Maria Silva' }) });
 
 export const cancellationSchema = z
@@ -144,4 +155,5 @@ export const appointmentSchema = registry.register(
 export type BookAppointmentInput = z.infer<typeof bookAppointmentSchema>;
 export type ConfirmAppointmentInput = z.infer<typeof confirmAppointmentSchema>;
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
+export type RescheduleInput = z.infer<typeof rescheduleSchema>;
 export type Appointment = z.infer<typeof appointmentSchema>;

@@ -34,6 +34,12 @@ interface DoctorLock {
   includeProtected: boolean;
 }
 
+interface Party {
+  side: BookingSide;
+  doctorId: string;
+  specialtyId: string;
+}
+
 export interface Viewer {
   userId: string;
   roles: Role[];
@@ -94,13 +100,18 @@ export class AppointmentsRepository {
     return row.id;
   }
 
-  async sideOf(id: string, viewer: Viewer): Promise<BookingSide | undefined> {
+  async partyOf(id: string, viewer: Viewer): Promise<Party | undefined> {
     const [row] = await this.db
-      .select({ patientId: bookings.patientId })
+      .select({
+        patientId: bookings.patientId,
+        doctorId: sql<string>`${bookings.doctorId}`,
+        specialtyId: sql<string>`${bookings.specialtyId}`,
+      })
       .from(bookings)
       .where(and(appointmentWith(id), visibleTo(viewer)));
     if (!row) return undefined;
-    return row.patientId === viewer.userId ? 'patient' : 'doctor';
+    const { patientId, ...place } = row;
+    return { ...place, side: patientId === viewer.userId ? 'patient' : 'doctor' };
   }
 
   find(id: string, viewer: Viewer, now: Date): Promise<Appointment | undefined> {
