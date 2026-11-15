@@ -249,4 +249,18 @@ describe('POST /api/appointments/:id/reschedule', () => {
     expect((await reschedule(token, created.id, { ...body, extra: true })).status).toBe(400);
     expect((await show(token, created.id)).body).toMatchObject({ startsAt: from });
   });
+
+  it('lists the slot of the appointment being rescheduled as free only to its patient', async () => {
+    const from = slot('2026-12-28', '11:00');
+    const { token, created } = await booked('reagenda.vagas@email.com', from);
+    const rescheduling = { rescheduling: created.id };
+
+    expect(await freeSlots(token, '2026-12-28')).not.toContain(from);
+    expect(await freeSlots(token, '2026-12-28', rescheduling)).toContain(from);
+    expect(await freeSlots(context.patient, '2026-12-28', rescheduling)).not.toContain(from);
+    expect(
+      (await availability(context, token, carlos.id, { from: '2026-12-28', to: '2026-12-28', rescheduling: 'x' }))
+        .status,
+    ).toBe(400);
+  });
 });

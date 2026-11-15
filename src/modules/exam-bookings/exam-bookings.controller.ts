@@ -8,7 +8,7 @@ import type { ExamBookingsService } from './exam-bookings.service.js';
 export function createExamBookingsController(service: ExamBookingsService) {
   return {
     availability: (async (req, res) => {
-      res.json(await service.availability(examAvailabilityQuery.parse(req.query)));
+      res.json(await service.availability(examAvailabilityQuery.parse(req.query), authOf(req).user.id));
     }) satisfies RequestHandler,
     book: (async (req, res) => {
       res.status(201).json(await service.book(authOf(req).user.id, bookExamSchema.parse(req.body)));

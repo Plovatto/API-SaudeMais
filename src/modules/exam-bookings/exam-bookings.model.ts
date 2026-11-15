@@ -12,7 +12,7 @@ import {
   seenStartsAt,
 } from '../appointments/appointments.model.js';
 import { examTypeSchema } from '../catalog/catalog.model.js';
-import { doctorSchema, periodShape, slotSchema, withPeriodRules } from '../doctors/doctors.model.js';
+import { doctorSchema, periodShape, reschedulingShape, slotSchema, withPeriodRules } from '../doctors/doctors.model.js';
 
 const examStatuses = ['confirmed', 'cancelled', 'completed'] as const satisfies readonly BookingStatus[];
 
@@ -23,7 +23,9 @@ const offerShape = {
   examTypeId: uuidParam.openapi({ description: 'Tipo de exame escolhido.' }),
 };
 
-export const examAvailabilityQuery = withPeriodRules(z.strictObject({ ...offerShape, ...periodShape }));
+export const examAvailabilityQuery = withPeriodRules(
+  z.strictObject({ ...offerShape, ...periodShape, ...reschedulingShape }),
+);
 
 export const examAvailabilitySchema = registry.register(
   'ExamAvailability',

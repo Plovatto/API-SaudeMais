@@ -41,7 +41,10 @@ export class ExamBookingsService {
     private readonly clock: Clock,
   ) {}
 
-  async availability({ unitId, examTypeId, ...period }: ExamAvailabilityQuery): Promise<ExamAvailability> {
+  async availability(
+    { unitId, examTypeId, rescheduling, ...period }: ExamAvailabilityQuery,
+    patientId: string,
+  ): Promise<ExamAvailability> {
     const now = this.clock.now();
     const context = await this.repository.availabilityContext(
       { unitId, examTypeId },
@@ -49,6 +52,7 @@ export class ExamBookingsService {
         from: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.from)),
         to: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.to) + DAY),
       },
+      exceptOwn(patientId, rescheduling),
     );
     if (!context) throw notFound(examOfferNotFound);
     const days = slotDays({ ...context, ...period, now, timeZone: CLINIC_TIME_ZONE, busy: [] }).map(

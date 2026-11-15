@@ -72,6 +72,7 @@ export class DoctorsRepository {
     doctorId: string,
     includeProtected: boolean,
     { from, to, now }: Period,
+    except: SQL | undefined,
   ): Promise<(SlotContext & Pick<SlotRequest, 'busy'>) | undefined> {
     return this.db.transaction(async (tx) => {
       const context = await slotContext(tx, doctorId, includeProtected);
@@ -86,6 +87,7 @@ export class DoctorsRepository {
             isActiveFuture(now),
             lt(bookings.startsAt, to),
             gt(bookings.endsAt, from),
+            except,
           ),
         );
       return { ...context, busy };

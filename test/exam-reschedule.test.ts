@@ -139,4 +139,15 @@ describe('POST /api/exam-bookings/:id/reschedule', () => {
     expect(stranger.status).toBe(404);
     expect(stranger.body).toEqual({ message: 'Exame não encontrado.', code: 'NOT_FOUND' });
   });
+
+  it('counts the place of the exam being rescheduled as free only for its patient', async () => {
+    const startsAt = slot('2026-12-17', '10:00');
+    const { token, exam } = await booked('exame.vagas@email.com', startsAt);
+    const other = await createPatient(context, 'exame.vagas.outro@email.com');
+    const rescheduling = { rescheduling: exam.id };
+
+    expect(await remainingAt(token, startsAt)).toBe(3);
+    expect(await remainingAt(token, startsAt, rescheduling)).toBe(4);
+    expect(await remainingAt(other, startsAt, rescheduling)).toBe(3);
+  });
 });

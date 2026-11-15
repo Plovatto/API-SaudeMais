@@ -57,7 +57,14 @@ export function withPeriodRules<T extends z.ZodType<{ from: string; to: string }
     });
 }
 
-export const availabilityQuery = withPeriodRules(z.strictObject(periodShape));
+export const reschedulingShape = {
+  rescheduling: uuidParam.optional().openapi({
+    description:
+      'Agendamento do paciente logado que está sendo reagendado: ele não ocupa a vaga dele na lista, para a tela de reagendar oferecer também os horários que ele libera. Ignorado se o agendamento não for do paciente logado.',
+  }),
+};
+
+export const availabilityQuery = withPeriodRules(z.strictObject({ ...periodShape, ...reschedulingShape }));
 
 export const slotSchema = z.object({
   startsAt: z.iso.datetime().openapi({ example: '2026-11-23T11:00:00.000Z' }),

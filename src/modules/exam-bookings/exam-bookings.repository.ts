@@ -65,7 +65,11 @@ const examWith = (id: string, patientId: string) =>
 export class ExamBookingsRepository {
   constructor(private readonly db: Database) {}
 
-  availabilityContext(offer: Offer, period: Period): Promise<(ExamSlotContext & { lanes: LaneUse[] }) | undefined> {
+  availabilityContext(
+    offer: Offer,
+    period: Period,
+    except: SQL | undefined,
+  ): Promise<(ExamSlotContext & { lanes: LaneUse[] }) | undefined> {
     return this.db.transaction(async (tx) => {
       const [sizing] = await tx
         .select({ capacity: unitExamOffers.capacityPerSlot, durationMin: examTypes.durationMin })
@@ -82,7 +86,10 @@ export class ExamBookingsRepository {
           ),
         );
       if (!sizing) return undefined;
-      return { ...(await slotFrame(tx, offer.unitId, sizing)), lanes: await this.lanesInUse(tx, offer, period) };
+      return {
+        ...(await slotFrame(tx, offer.unitId, sizing)),
+        lanes: await this.lanesInUse(tx, offer, period, except),
+      };
     }, readSnapshot);
   }
 
