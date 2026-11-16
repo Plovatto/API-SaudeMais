@@ -191,8 +191,8 @@ export class BookingsService {
     seen: SeenBooking,
     doctorId: string,
     outcome: Outcome,
+    now: Date,
   ): Promise<AfterCommit | undefined> {
-    const now = this.clock.now();
     const scope = seenBy(doctorId, 'doctor', seen);
     if ((await recordStarted(tx, scope, outcome, doctorId, now)).length > 0) return nothingAfterCommit;
     if (await hasActiveFuture(tx, and(eq(bookings.status, 'confirmed'), scope), now)) throw conflictError(notStarted);

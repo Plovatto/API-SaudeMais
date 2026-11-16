@@ -170,6 +170,7 @@ export class DemoService {
     const createdAt = Math.min(now.getTime() - HOUR, startsAt.getTime() - 7 * DAY);
     return {
       ...placement,
+      metrics: seed.kind === 'appointment' ? seed.metrics : undefined,
       events: [
         {
           eventType: 'created',

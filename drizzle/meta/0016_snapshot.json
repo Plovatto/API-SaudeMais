@@ -1,5 +1,5 @@
 {
-  "id": "69492990-30e8-44c3-bfb1-43f9d67d429f",
+  "id": "0003140b-4822-4259-baf3-d5e12d248df9",
   "prevId": "b22b6afd-859d-4243-8eaa-d25806184107",
   "version": "7",
   "dialect": "postgresql",
@@ -1650,6 +1650,101 @@
       },
       "isRLSEnabled": false
     },
+    "public.health_metrics": {
+      "name": "health_metrics",
+      "schema": "",
+      "columns": {
+        "booking_id": {
+          "name": "booking_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "booking_kind": {
+          "name": "booking_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'appointment'"
+        },
+        "systolic": {
+          "name": "systolic",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diastolic": {
+          "name": "diastolic",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weight_kg": {
+          "name": "weight_kg",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "health_metrics_booking_kind_fkey": {
+          "name": "health_metrics_booking_kind_fkey",
+          "tableFrom": "health_metrics",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "booking_id",
+            "booking_kind"
+          ],
+          "columnsTo": [
+            "id",
+            "kind"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "health_metrics_booking_kind_check": {
+          "name": "health_metrics_booking_kind_check",
+          "value": "booking_kind = 'appointment'"
+        },
+        "health_metrics_pressure_pair_check": {
+          "name": "health_metrics_pressure_pair_check",
+          "value": "(systolic is null) = (diastolic is null)"
+        },
+        "health_metrics_systolic_check": {
+          "name": "health_metrics_systolic_check",
+          "value": "systolic between 50 and 300"
+        },
+        "health_metrics_diastolic_check": {
+          "name": "health_metrics_diastolic_check",
+          "value": "diastolic between 30 and 200"
+        },
+        "health_metrics_pressure_order_check": {
+          "name": "health_metrics_pressure_order_check",
+          "value": "systolic > diastolic"
+        },
+        "health_metrics_weight_kg_check": {
+          "name": "health_metrics_weight_kg_check",
+          "value": "weight_kg between 1 and 500"
+        },
+        "health_metrics_present_check": {
+          "name": "health_metrics_present_check",
+          "value": "systolic is not null or weight_kg is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.integration_clients": {
       "name": "integration_clients",
       "schema": "",
@@ -1695,7 +1790,7 @@
           "name": "created_by",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",

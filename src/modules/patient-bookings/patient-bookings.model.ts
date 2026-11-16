@@ -4,7 +4,13 @@ import { bookingKinds, bookingStatuses } from '../../database/schema/bookings.js
 import { nullableRef } from '../../docs/common-schemas.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
-import { bookingActionsSchema, cancellationSchema, person, visitType } from '../appointments/appointments.model.js';
+import {
+  bookingActionsSchema,
+  cancellationSchema,
+  metricFields,
+  person,
+  visitType,
+} from '../appointments/appointments.model.js';
 import { doctorSchema } from '../doctors/doctors.model.js';
 import { notificationSchema } from '../notifications/notifications.model.js';
 
@@ -71,6 +77,22 @@ export const patientBookingPageSchema = registry.register(
   paginatedSchema(patientBookingSchema).extend({ counts: countsSchema }),
 );
 
+const recordedAt = z.iso.datetime().openapi({ description: 'Quando a medida foi registrada na consulta.' });
+
+const bloodPressureSchema = registry.register(
+  'BloodPressureReading',
+  z
+    .object({ systolic: metricFields.systolic, diastolic: metricFields.diastolic, recordedAt })
+    .openapi({ description: 'A pressão mais recente registrada pelo médico ao concluir uma consulta.' }),
+);
+
+const weightSchema = registry.register(
+  'WeightReading',
+  z
+    .object({ kg: metricFields.weightKg, recordedAt })
+    .openapi({ description: 'O peso mais recente registrado pelo médico ao concluir uma consulta.' }),
+);
+
 export const patientHomeSchema = registry.register(
   'PatientHome',
   z.object({
@@ -81,6 +103,16 @@ export const patientHomeSchema = registry.register(
     lastNotification: nullableRef(notificationSchema).openapi({
       description: 'O aviso mais recente do perfil de paciente, lido ou não.',
     }),
+    metrics: z
+      .object({
+        bloodPressure: nullableRef(bloodPressureSchema).openapi({
+          description: 'A pressão mais recente; nula enquanto nenhuma consulta a registrou.',
+        }),
+        weight: nullableRef(weightSchema).openapi({
+          description: 'O peso mais recente; nulo enquanto nenhuma consulta o registrou.',
+        }),
+      })
+      .openapi({ description: 'Cartões de pressão e peso, cada um com a medida mais recente do paciente.' }),
   }),
 );
 
@@ -88,3 +120,4 @@ export type BookingScope = (typeof bookingScopes)[number];
 export type PatientBookingsQuery = z.infer<typeof patientBookingsQuery>;
 export type PatientBookingPage = z.infer<typeof patientBookingPageSchema>;
 export type PatientHome = z.infer<typeof patientHomeSchema>;
+export type PatientMetrics = PatientHome['metrics'];
