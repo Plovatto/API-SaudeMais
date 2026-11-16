@@ -1,17 +1,6 @@
-import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { buildLoggerOptions, createLogger } from '@/config/logger.js';
-
-function captureLogger() {
-  const lines: string[] = [];
-  const destination = new Writable({
-    write(chunk: Buffer, _encoding, callback) {
-      lines.push(chunk.toString());
-      callback();
-    },
-  });
-  return { logger: createLogger({ NODE_ENV: 'test', LOG_LEVEL: 'info' }, destination), lines };
-}
+import { buildLoggerOptions } from '@/config/create-logger.js';
+import { captureLogger } from './support/capture-logger.js';
 
 describe('logger redaction', () => {
   it('keeps query text, parameters and stack out of database error logs', () => {

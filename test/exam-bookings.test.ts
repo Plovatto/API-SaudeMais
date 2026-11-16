@@ -5,7 +5,7 @@ import type * as publicCode from '@/modules/exam-bookings/exam-bookings.code.js'
 import { newPublicCode } from '@/modules/exam-bookings/exam-bookings.code.js';
 import { doctorNamed, setupClinic, type Clinic } from './support/doctors.js';
 import { offerOf, type Offer } from './support/exams.js';
-import { as, createPatient, HOUR, START } from './support/users.js';
+import { as, createAdmin, createPatient, HOUR, START } from './support/users.js';
 
 vi.mock('@/modules/exam-bookings/exam-bookings.code.js', async (importOriginal) => {
   const original = await importOriginal<typeof publicCode>();
@@ -41,11 +41,7 @@ let southUltrassom: Offer;
 
 beforeAll(async () => {
   context = await setupClinic();
-  admin = await createPatient(context, 'admin.exames@email.com');
-  await context.db.execute(sql`
-    update user_roles set role = 'admin'
-    where role = 'patient' and user_id = (select id from users where email = 'admin.exames@email.com')
-  `);
+  admin = await createAdmin(context, 'admin.exames@email.com');
   hemograma = await offerOf(context, 'Unidade Central', 'hemograma');
   ultrassom = await offerOf(context, 'Unidade Central', 'ultrassom');
   raioX = await offerOf(context, 'Unidade Central', 'raio_x');

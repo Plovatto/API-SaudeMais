@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLogger } from '@/config/logger.js';
+import { createLogger } from '@/config/create-logger.js';
 import { startScheduler } from '@/jobs/scheduler.js';
 import { systemClock } from '@/lib/clock.js';
 

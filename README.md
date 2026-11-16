@@ -117,6 +117,8 @@ MAIL_DRIVER=console
 SMTP_USER=
 SMTP_PASS=
 MAIL_FROM=
+LAB_API_URL=http://localhost:3001
+LAB_API_KEY=
 ```
 
 `NODE_ENV` vale `production` quando não é definida; use `development` localmente, como no `.env.example`.
@@ -159,6 +161,7 @@ Esses e-mails ficam reservados: o cadastro os recusa. Na primeira vez, a especia
 | `npm run db:generate` | Gera uma migration a partir do schema |
 | `npm run db:seed` | Cria os dados de demonstração |
 | `npm run jobs:run maintenance` | Roda as rotinas de manutenção uma vez (usa a versão compilada em `dist/`) |
+| `npm run lab:simulate` | Publica resultados simulados para os exames de ontem pela API do laboratório (usa a versão compilada em `dist/`) |
 
 ## Banco de Dados
 
@@ -228,6 +231,26 @@ A publicação trava o exame (`FOR NO KEY UPDATE`) e compara o conteúdo com a v
 | `issuedAt` mais de 5 min à frente do relógio da API | `422` `ISSUED_IN_FUTURE` |
 
 Cada versão nova conclui o exame, grava o evento `result_received`, avisa o paciente com `exam_result_available` e fica na auditoria com a versão e o status, nunca com o conteúdo, que também não vai para os logs nem para as notificações. As versões não podem ser alteradas: um trigger recusa `UPDATE` em `exam_result_versions`. Cada chave tem um limite próprio de 60 requisições por minuto.
+
+### Simulador do laboratório
+
+`npm run lab:simulate` faz o papel do laboratório usando só a API pública: lê a worklist de ontem (fuso de São Paulo) e publica um resultado para cada exame. Os valores saem de um modelo por tipo de exame guardado no próprio script: `hemograma`, `glicemia` e `colesterol` recebem itens com nome, valor, unidade, faixa de referência e indicador calculado a partir da faixa (`critical` só além dos limites críticos); `ultrassom` e `raio_x` recebem um laudo em texto. Um tipo sem modelo é pulado com um aviso no log.
+
+Os valores são sorteados a partir do código do exame, e o `externalId` é `SIM-<código do exame>`. Assim, repetir a publicação de um exame gera o mesmo conteúdo e recebe `200` `unchanged`, e rodar de novo no mesmo dia não publica nada, porque a worklist só traz exames sem resultado.
+
+O simulador lê `LAB_API_URL` (endereço da API, como `https://api.exemplo.com`) e `LAB_API_KEY` (a chave da integração) e para com uma mensagem clara se faltar alguma ou se forem inválidas. Opções:
+
+- `--date=AAAA-MM-DD`: dia da worklist; o padrão é ontem.
+- `--amend-chance=0..1`: chance de, logo depois de publicar, enviar uma retificação (`amended`) do mesmo resultado; o padrão é `0`.
+
+Cada requisição tem tempo limite de 15 s. Erro de rede ou `5xx` é tentado de novo uma vez; `429` espera o `Retry-After` (até 1 min) e tenta de novo uma vez. O log traz só as contagens (`created`, `unchanged`, `amended`, `skipped`, `failed`) e, nas falhas, o código público do exame, sem dados do paciente. O processo termina com código 1 se a worklist falhar ou se algum resultado não for publicado.
+
+Para rodar em produção:
+
+1. Na área do administrador, em Integrações, crie a integração (por exemplo, "Simulador") e copie a chave: ela aparece uma única vez.
+2. Na Northflank, crie um job agendado com a mesma imagem da API, o comando `node dist/scripts/lab-simulator.js`, a frequência `0 9 * * *` em UTC (06:00 em São Paulo; se o agendamento aceitar fuso, use `0 6 * * *` com `America/Sao_Paulo`) e as variáveis `LAB_API_URL` e `LAB_API_KEY`. O job não precisa de `DATABASE_URL`.
+
+O simulador fala com a API por HTTP e acorda o banco do Neon uma vez por execução; por isso roda uma vez por dia, fora da API, e não há agendador interno para ele.
 
 ## Docker
 

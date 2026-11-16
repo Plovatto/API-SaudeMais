@@ -2,12 +2,11 @@ import { eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { integrationClients } from '@/database/schema/integration-clients.js';
-import { newPublicCode } from '@/modules/exam-bookings/exam-bookings.code.js';
 import { hashToken } from '@/modules/users/user.token.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
-import { offerOf, type Offer } from './support/exams.js';
-import { as, createPatient, START } from './support/users.js';
+import { insertExam, offerOf, type Offer } from './support/exams.js';
+import { as, createAdmin, createPatient, START } from './support/users.js';
 
 interface Client {
   id: string;
@@ -42,11 +41,7 @@ let names = 0;
 
 beforeAll(async () => {
   context = await setupClinic();
-  admin = await createPatient(context, 'admin.lab@email.com');
-  await context.db.execute(sql`
-    update user_roles set role = 'admin'
-    where role = 'patient' and user_id = (select id from users where email = 'admin.lab@email.com')
-  `);
+  admin = await createAdmin(context, 'admin.lab@email.com');
   await createPatient(context, 'paciente.lab@email.com');
   patientId = await one<string>(sql`select id as value from users where email = 'paciente.lab@email.com'`);
   hemograma = await offerOf(context, 'Unidade Central', 'hemograma');
@@ -89,18 +84,14 @@ const labResult = (exam: Exam, overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-async function examAt(offer: Offer, startsAt: string, status: 'confirmed' | 'completed' | 'cancelled' = 'confirmed') {
-  const code = newPublicCode();
-  const cancelled = status === 'cancelled' ? sql`${START}::timestamptz, 'system'` : sql`null, null`;
-  const id = await one<string>(sql`
-    insert into bookings (kind, patient_id, unit_id, exam_type_id, public_code, lane, starts_at, ends_at, status,
-      cancelled_at, cancelled_by_role)
-    values ('exam', ${patientId}, ${offer.unitId}, ${offer.examTypeId}, ${code}, 1, ${startsAt}::timestamptz,
-      ${startsAt}::timestamptz + interval '10 minutes', ${status}, ${cancelled})
-    returning id as value
-  `);
-  return { id, code };
-}
+const examAt = (offer: Offer, startsAt: string, status: 'confirmed' | 'completed' | 'cancelled' = 'confirmed') =>
+  insertExam(context, {
+    patientId,
+    ...offer,
+    startsAt: new Date(startsAt),
+    status,
+    ...(status === 'cancelled' ? { cancelledAt: START, cancelledByRole: 'system' as const } : {}),
+  });
 
 const notificationsOf = (exam: Exam) =>
   rows<{ type: string; user_id: string; params: Record<string, unknown> }>(

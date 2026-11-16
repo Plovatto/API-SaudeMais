@@ -11,10 +11,9 @@ import {
   type BookingStatus,
 } from '@/database/schema/index.js';
 import { DEMO_BOOKINGS } from '@/modules/demo/demo.data.js';
-import { newPublicCode } from '@/modules/exam-bookings/exam-bookings.code.js';
 import { DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { doctorNamed, setupClinic, type Clinic } from './support/doctors.js';
-import { offerOf } from './support/exams.js';
+import { insertExam, offerOf } from './support/exams.js';
 import { as, HOUR, registration, START } from './support/users.js';
 
 const MINUTE = 60_000;
@@ -57,20 +56,7 @@ async function appointment(patientId: string, status: BookingStatus, startsAt: D
 
 async function exam(patientId: string, startsAt: Date): Promise<string> {
   const offer = await offerOf(context, 'Unidade Central', 'hemograma');
-  const [row] = await context.db
-    .insert(bookings)
-    .values({
-      kind: 'exam',
-      patientId,
-      ...offer,
-      publicCode: newPublicCode(),
-      lane: 1,
-      startsAt,
-      endsAt: new Date(startsAt.getTime() + 10 * MINUTE),
-      status: 'confirmed',
-    })
-    .returning({ id: bookings.id });
-  return row?.id ?? '';
+  return (await insertExam(context, { patientId, ...offer, startsAt })).id;
 }
 
 async function statusOf(id: string) {

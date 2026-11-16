@@ -11,7 +11,7 @@ import {
   type Clinic,
   type Doctor,
 } from './support/doctors.js';
-import { as, HOUR, login, signUp, START } from './support/users.js';
+import { as, createAdmin, HOUR, login, signUp, START } from './support/users.js';
 
 interface Booking {
   id: string;
@@ -44,11 +44,7 @@ beforeAll(async () => {
   demoDoctor = await doctorNamed(context, DEMO_DOCTOR.fullName);
   const doctorLogin = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password });
   doctorToken = (doctorLogin.body as { token: string }).token;
-  admin = await signUp(context.app, 'admin.reservas@email.com');
-  await context.db.execute(sql`
-    update user_roles set role = 'admin'
-    where role = 'patient' and user_id = (select id from users where email = 'admin.reservas@email.com')
-  `);
+  admin = await createAdmin(context, 'admin.reservas@email.com');
 }, 60_000);
 
 const slot = (date: string, time: string) => `${date}T${time}:00.000Z`;
