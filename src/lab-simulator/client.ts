@@ -11,14 +11,14 @@ import {
 const REQUEST_TIMEOUT = 15_000;
 const RETRY_DELAY = 1_000;
 
-export interface LabClientOptions {
+interface LabClientOptions {
   apiUrl: string;
   apiKey: string;
   fetch?: typeof fetch;
   wait?: (ms: number) => Promise<unknown>;
 }
 
-export type Publication = ResultReceipt['outcome'] | { failed: number | 'network'; code?: string };
+type Publication = ResultReceipt['outcome'] | { failed: number | 'network'; code?: string };
 
 function retryDelayOf(response: Response): number {
   const seconds = Number(response.headers.get('retry-after'));
@@ -48,7 +48,9 @@ export class LabClient {
       return { failed: 'network' };
     }
     const body: unknown = await response.json().catch(() => undefined);
-    if (response.ok) return resultReceiptSchema.parse(body).outcome;
+    const receipt = resultReceiptSchema.safeParse(body);
+    if (receipt.success && response.ok) return receipt.data.outcome;
+    if (response.ok) return { failed: response.status, code: 'INVALID_RECEIPT' };
     const code = (body as { code?: unknown } | undefined)?.code;
     return typeof code === 'string' ? { failed: response.status, code } : { failed: response.status };
   }

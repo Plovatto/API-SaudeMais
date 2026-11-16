@@ -64,7 +64,7 @@ const models: Record<string, Model> = {
         name: 'Glicose em jejum',
         unit: 'mg/dL',
         decimals: 0,
-        min: 65,
+        min: 45,
         max: 130,
         low: 70,
         high: 99,
@@ -203,7 +203,7 @@ function contentsOf(model: Model, random: Random): { content: Content; amended: 
   return { content: { report }, amended: { report: `${report}\n\n${AMENDMENT_NOTE}` } };
 }
 
-export interface Simulation {
+interface Simulation {
   result: ResultInput;
   amendment?: ResultInput;
 }

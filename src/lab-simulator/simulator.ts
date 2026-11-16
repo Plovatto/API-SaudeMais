@@ -52,7 +52,7 @@ export function parseSimulatorConfig(
   };
 }
 
-export interface SimulatorDeps {
+interface SimulatorDeps {
   client: Pick<LabClient, 'worklist' | 'publish'>;
   clock: Clock;
   logger: Logger;
