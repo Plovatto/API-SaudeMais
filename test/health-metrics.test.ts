@@ -1,12 +1,11 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { DAY } from '@/lib/time.js';
+import { DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { agendaHelpers, slot, type Attending } from './support/agenda.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
-import { DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { as, HOUR, login, signUp, START } from './support/users.js';
-
-const DAY = 24 * HOUR;
 
 let context: Clinic;
 let party: Attending;
