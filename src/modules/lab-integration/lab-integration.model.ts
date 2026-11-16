@@ -9,7 +9,7 @@ import { examTypeSchema } from '../catalog/catalog.model.js';
 import { civilDay } from '../doctors/doctors.model.js';
 import { PUBLIC_CODE_PATTERN } from '../exam-bookings/exam-bookings.model.js';
 
-export const resultOutcomes = ['created', 'unchanged', 'amended'] as const;
+const resultOutcomes = ['created', 'unchanged', 'amended'] as const;
 
 const examCode = z
   .string()

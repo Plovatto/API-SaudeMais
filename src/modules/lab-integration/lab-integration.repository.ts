@@ -9,7 +9,7 @@ import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import type { DayRange } from '../../lib/time.js';
 import type { IntegrationClient, Worklist } from './lab-integration.model.js';
 
-export interface NewClient {
+interface NewClient {
   name: string;
   keyPrefix: string;
   apiKeyHash: string;
