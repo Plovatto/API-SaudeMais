@@ -324,6 +324,14 @@ function completeConfirmed(tx: Transaction, where: SQL | undefined, now: Date): 
   });
 }
 
+export function recordResult(tx: Transaction, examId: string, now: Date): Promise<ChangedBooking[]> {
+  return change(tx, {
+    set: { status: 'completed' },
+    where: and(eq(bookings.id, examId), eq(bookings.kind, 'exam')),
+    event: { eventType: 'result_received', actorType: 'integration', actorUserId: null, createdAt: now },
+  });
+}
+
 export function completeEndedExams(tx: Transaction, now: Date): Promise<ChangedBooking[]> {
   return completeConfirmed(
     tx,

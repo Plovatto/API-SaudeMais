@@ -22,6 +22,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Início e agenda do médico nas abas a confirmar, confirmadas e histórico, com o resumo de hoje no fuso de São Paulo, totais e as ações permitidas; confirmação pelo médico condicionada ao horário que a tela mostrava, com aviso ao paciente, e conclusão ou registro de falta das consultas que já começaram e aguardam registro
 - Reagendamento de consultas e exames pelo paciente, na mesma linha e em uma transação, até o limite de reagendamentos e, se confirmado, fora da janela da política: a consulta volta a pendente e avisa o médico, o exame continua confirmado e mantém o lugar quando livre, e a vaga antiga só é liberada se a nova for garantida
 - Desativar uma conta ou remover o perfil médico cancela os agendamentos ativos futuros e avisa a outra parte; especialidade, unidade, tipo de exame ou oferta com agendamento futuro não podem ser desativados, e a capacidade da oferta não fica abaixo de um lugar ocupado por exame que ainda não terminou
+- Integração com o laboratório por chave de API (guardada só como hash, exibida uma vez e revogável pelo administrador): lista de exames do dia que aguardam resultado, sem dados pessoais, e publicação de resultados idempotente, com versões imutáveis, retificação, conclusão do exame e aviso ao paciente
 - Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
 - Relatórios do administrador por período no fuso de São Paulo: totais de consultas e exames pela situação atual, aguardando registro à parte, cancelamentos tardios e por autor, taxa de faltas, série diária (ou semanal acima de 62 dias) e especialidades e exames mais procurados, só com números e sem as contas de demonstração
 - Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
@@ -202,6 +203,31 @@ Por padrão, em produção, a própria API roda a manutenção (`MAINTENANCE_SCH
 
 Como alternativa, a manutenção pode rodar como job agendado da Northflank, com a mesma imagem e as mesmas variáveis da API, o comando `node dist/jobs/run.js maintenance` e a frequência `0 * * * *`; nesse caso, defina `MAINTENANCE_SCHEDULER=false` na API. O job é opcional e acorda o banco de hora em hora, o que consome a cota de horas de computação do Neon. Ele termina com código 0 quando conclui ou pula e com 1 quando falha, e as notificações que ele cria aparecem no contador da API quando o cache vence (até 10 min).
 
+## Integração com o laboratório
+
+O laboratório parceiro (ou o simulador) usa só a API pública, autenticado pelo cabeçalho `X-Api-Key`:
+
+1. O administrador cria a integração em `POST /api/admin/integration-clients` e recebe a chave, no formato `slab_<prefixo de 8 caracteres>_<segredo de 32 bytes>`. Ela aparece só nessa resposta: o banco guarda o hash SHA-256 e o prefixo visível, que identifica a chave na lista. `POST /api/admin/integration-clients/{id}/revoke` revoga a chave na hora. Criar e revogar ficam na auditoria.
+2. `GET /api/integrations/lab/worklist?date=AAAA-MM-DD` lista os exames do dia (fuso de São Paulo) que podem receber resultado e ainda não têm: confirmados cujo horário começou ou concluídos. Cada um vem só com o código público, o código do tipo de exame e o início.
+3. `POST /api/integrations/lab/results` publica o resultado com `externalId`, `examCode`, `status` (`final` ou `amended`), `issuedAt` e `items` (exame laboratorial: nome, valor, unidade, faixa de referência e indicador `normal`, `low`, `high` ou `critical`) ou `report` (exame de imagem: laudo em texto).
+
+A publicação trava o exame (`FOR NO KEY UPDATE`) e compara o conteúdo com a versão atual por igualdade de `jsonb`:
+
+| Situação | Resposta |
+|---|---|
+| Primeira publicação | `201`, versão 1 |
+| Mesmo `externalId` e mesmo conteúdo | `200` `unchanged`, sem efeito |
+| Conteúdo diferente com `amended` | `200` `amended`, nova versão |
+| Conteúdo diferente com `final` | `409` `RESULT_FINAL` |
+| Outro `externalId` ou outra integração para o mesmo exame | `409` `RESULT_EXISTS` |
+| `externalId` já usado em outro exame | `409` `EXTERNAL_ID_TAKEN` |
+| Código inexistente | `404` `NOT_FOUND` |
+| Exame cancelado ou que ainda não começou | `422` `NOT_ELIGIBLE` |
+| `items` em exame de imagem ou `report` em exame laboratorial | `422` `WRONG_RESULT_FORMAT` |
+| `issuedAt` mais de 5 min à frente do relógio da API | `422` `ISSUED_IN_FUTURE` |
+
+Cada versão nova conclui o exame, grava o evento `result_received`, avisa o paciente com `exam_result_available` e fica na auditoria com a versão e o status, nunca com o conteúdo, que também não vai para os logs nem para as notificações. As versões não podem ser alteradas: um trigger recusa `UPDATE` em `exam_result_versions`. Cada chave tem um limite próprio de 60 requisições por minuto.
+
 ## Docker
 
 A imagem de produção é gerada pelo `Dockerfile`, em dois estágios, e roda com usuário sem privilégios:
@@ -262,6 +288,10 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | GET | `/api/admin/units/{id}/exam-offers` | Exames oferecidos pela unidade (admin) |
 | PUT | `/api/admin/units/{id}/exam-offers/{examTypeId}` | Oferece um exame na unidade (admin) |
 | GET, PUT | `/api/admin/policy` | Política de agendamento (admin) |
+| GET, POST | `/api/admin/integration-clients` | Lista as integrações e cria uma, com a chave exibida uma única vez (admin) |
+| POST | `/api/admin/integration-clients/{id}/revoke` | Revoga a chave de uma integração (admin) |
+| GET | `/api/integrations/lab/worklist` | Exames do dia `date` que aguardam resultado, só com os códigos (chave de API) |
+| POST | `/api/integrations/lab/results` | Publica ou retifica o resultado de um exame (chave de API) |
 | GET | `/api/admin/home` | Números do painel do administrador, com as consultas de hoje |
 | GET | `/api/admin/reports` | Totais de consultas e exames por situação no período `from`–`to` (padrão: últimos 30 dias; máximo 366), com série diária ou semanal (admin) |
 | GET | `/api/admin/users` | Lista e busca usuários (admin) |

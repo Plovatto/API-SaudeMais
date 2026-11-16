@@ -14,6 +14,7 @@ import { createDoctorScheduleModule } from './doctor-schedule/index.js';
 import { createDoctorsModule } from './doctors/index.js';
 import { createDemoModule } from './demo/index.js';
 import { createExamBookingsModule } from './exam-bookings/index.js';
+import { createLabIntegrationModule } from './lab-integration/index.js';
 import { createNotificationsModule } from './notifications/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
 import { createPatientBookingsModule } from './patient-bookings/index.js';
@@ -77,6 +78,12 @@ export function createModules(deps: ModulesDeps) {
     requireAuth: users.requireAuth,
     notifications: notifications.service,
   });
+  const labIntegration = createLabIntegrationModule({
+    db: deps.db,
+    clock: deps.clock,
+    requireAuth: users.requireAuth,
+    notifications: notifications.service,
+  });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminReports = createAdminReportsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const maintenance = createMaintenance({
@@ -111,6 +118,7 @@ export function createModules(deps: ModulesDeps) {
       examBookings.router,
       patientBookings.router,
       doctorAgenda.router,
+      labIntegration.router,
       notifications.routerFor(users.requireAuth),
     ],
   };
