@@ -219,7 +219,7 @@ Cada passo roda na própria transação, pode rodar de novo sem efeito duplicado
 
 ## API
 
-A documentação completa é gerada a partir do código e servida em [`/docs`](https://p01--saudemais--pgj2h2jjxzb4.code.run/docs/), com autenticação, formato de erro, datas, paginação, exemplos e as respostas de cada rota. O OpenAPI 3.1 fica em `/docs/openapi.json`. Rotas protegidas recebem `Authorization: Bearer <token>`; as do laboratório, `X-Api-Key`. Recurso de outra pessoa responde `404`.
+A documentação completa, com a lista de todas as rotas, é gerada a partir do código e servida em [`/docs`](https://p01--saudemais--pgj2h2jjxzb4.code.run/docs/), com autenticação, formato de erro, datas, paginação, exemplos e as respostas de cada rota. O OpenAPI 3.1 fica em `/docs/openapi.json`. Rotas protegidas recebem `Authorization: Bearer <token>`; as do laboratório, `X-Api-Key`. Recurso de outra pessoa responde `404`.
 
 | Grupo | Prefixo principal | Acesso |
 |---|---|---|
@@ -233,74 +233,6 @@ A documentação completa é gerada a partir do código e servida em [`/docs`](h
 | Notificações | `/api/notifications` | Login, por perfil da área aberta (`role`) |
 | Administração | `/api/admin` | Administrador |
 | Integrações | `/api/integrations/lab` | Chave de API |
-
-<details>
-<summary>Todas as rotas</summary>
-
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/health` | Verifica se o servidor está no ar |
-| POST | `/api/users/register` | Cria uma conta de paciente |
-| POST | `/api/users/login` | Entra e recebe o token de sessão |
-| POST | `/api/users/logout` | Encerra a sessão atual |
-| POST | `/api/password-reset/request` | Envia o link para redefinir a senha |
-| POST | `/api/password-reset/confirm` | Cria uma nova senha com o link |
-| GET | `/api/specialties` | Especialidades ativas |
-| GET | `/api/units` | Unidades ativas com horários (filtro `examTypeId`) |
-| GET | `/api/exam-types` | Tipos de exame ativos |
-| GET | `/api/doctors` | Médicos com especialidade e unidade (filtros `specialtyId`, `search`; paciente) |
-| GET | `/api/doctors/{id}/availability` | Vagas livres de um médico entre `from` e `to`, até 31 dias; `rescheduling` libera a vaga da própria consulta (paciente) |
-| POST | `/api/appointments` | Pede uma consulta em uma vaga livre; nasce pendente e avisa o médico (paciente) |
-| GET | `/api/appointments/{id}` | Detalhe e histórico da consulta (paciente dela ou médico que a atende) |
-| POST | `/api/appointments/{id}/confirm` | Confirma um pedido pendente e avisa o paciente (médico que a atende) |
-| POST | `/api/appointments/{id}/complete`, `/no-show` | Conclui, com pressão e peso opcionais em `metrics`, ou registra falta (médico que a atende) |
-| POST | `/api/appointments/{id}/cancel` | Cancela e avisa a outra parte; motivo obrigatório para o médico |
-| POST | `/api/appointments/{id}/reschedule` | Troca o horário dentro da política; volta a pendente e avisa o médico (paciente) |
-| GET | `/api/exam-availability` | Vagas de um exame na unidade entre `from` e `to`, até 31 dias, com os lugares restantes (paciente) |
-| POST | `/api/exam-bookings` | Agenda um exame; nasce confirmado, com código público (paciente) |
-| GET | `/api/exam-bookings/{id}` | Detalhe, preparo e histórico do exame (paciente dele) |
-| POST | `/api/exam-bookings/{id}/cancel` | Cancela o exame e libera o lugar (paciente dele) |
-| POST | `/api/exam-bookings/{id}/reschedule` | Troca o horário dentro da política, sujeito à capacidade (paciente dele) |
-| GET | `/api/patient/home` | Próximos agendamentos, totais, último aviso e a pressão e o peso mais recentes |
-| GET | `/api/patient/bookings` | Agendamentos por aba `scope`, com filtros `kind` e `status` e ações permitidas |
-| GET | `/api/patient/exam-results/{bookingId}` | Resultado de um exame, com a versão atual e as anteriores |
-| GET | `/api/doctor/home` | Resumo de hoje, próximos pedidos, totais e último aviso |
-| GET | `/api/doctor/appointments` | Consultas por aba `tab`, a partir do dia `from`, com ações permitidas |
-| GET, PUT | `/api/doctor/schedule` | Agenda semanal, em minutos desde 00:00 |
-| GET | `/api/doctor/patients/{patientId}/exam-results` | Resultados do paciente, com avaliação de exames nos últimos 30 dias |
-| GET | `/api/notifications` | Avisos no perfil `role`, do mais novo para o mais antigo |
-| GET | `/api/notifications/unread-count` | Total de não lidos no perfil `role`, servido da memória |
-| POST | `/api/notifications/{id}/read` | Marca um aviso como lido |
-| POST | `/api/notifications/read-all` | Marca como lidos todos os avisos do perfil `role` |
-| GET, PATCH | `/api/me` | Dados da própria conta; altera nome ou telefone |
-| POST | `/api/me/password` | Troca a senha e encerra as outras sessões |
-| GET, DELETE | `/api/me/sessions` | Lista as sessões ativas; sai de todas |
-| GET | `/api/admin/home` | Números do painel, com as consultas de hoje |
-| GET | `/api/admin/reports` | Totais por situação no período `from`–`to` (padrão: últimos 30 dias; máximo 366), com série diária ou semanal |
-| GET | `/api/admin/users` | Lista e busca usuários |
-| GET, PATCH | `/api/admin/users/{id}` | Vê e altera nome e telefone |
-| GET | `/api/admin/users/{id}/deactivation-impact` | Agendamentos afetados por desativar |
-| POST | `/api/admin/users/{id}/deactivate`, `/reactivate` | Desativa e reativa a conta |
-| POST | `/api/admin/users/{id}/password-reset` | Envia link de redefinição de senha |
-| POST, DELETE | `/api/admin/users/{id}/roles/admin` | Concede e remove o perfil de administrador |
-| POST, PATCH, DELETE | `/api/admin/users/{id}/doctor-profile` | Cria, altera e remove o perfil médico |
-| GET, POST | `/api/admin/specialties` | Lista e cria especialidades |
-| PATCH | `/api/admin/specialties/{id}` | Altera, ativa ou desativa uma especialidade |
-| GET, POST | `/api/admin/units` | Lista e cria unidades com horários |
-| PATCH | `/api/admin/units/{id}` | Altera, ativa ou desativa uma unidade |
-| GET, POST | `/api/admin/exam-types` | Lista e cria tipos de exame |
-| PATCH | `/api/admin/exam-types/{id}` | Altera, ativa ou desativa um tipo de exame |
-| GET | `/api/admin/units/{id}/exam-offers` | Exames oferecidos pela unidade |
-| PUT | `/api/admin/units/{id}/exam-offers/{examTypeId}` | Oferece um exame na unidade, com a capacidade por vaga |
-| GET, PUT | `/api/admin/policy` | Política de agendamento |
-| GET, POST | `/api/admin/integration-clients` | Lista as integrações e cria uma, com a chave exibida uma única vez |
-| POST | `/api/admin/integration-clients/{id}/revoke` | Revoga a chave de uma integração |
-| GET | `/api/integrations/lab/worklist` | Exames do dia `date` que aguardam resultado, só com os códigos |
-| POST | `/api/integrations/lab/results` | Publica ou retifica o resultado de um exame |
-| GET | `/docs` | Documentação interativa |
-| GET | `/docs/openapi.json` | Documento OpenAPI 3.1 |
-
-</details>
 
 Formato de erro: `{ "message": "Dados inválidos.", "code": "VALIDATION_ERROR", "fields": { "email": "E-mail inválido." } }`
 
