@@ -287,6 +287,18 @@ describe('doctor exam results', () => {
   });
 });
 
+const restoreDemo = async () => {
+  await context.db.execute(sql`delete from audit_logs where action = 'demo.restored'`);
+  return context.modules.demo.service.restore();
+};
+
+const demoResults = () =>
+  rowsOf<{ version: number }>(
+    context.db,
+    sql`select v.version from exam_result_versions v join exam_results r on r.id = v.result_id
+      join bookings b on b.id = r.booking_id join users u on u.id = b.patient_id where u.is_protected`,
+  );
+
 describe('demo exam results', () => {
   it('gives the demo patient a corrected result that the demo doctor can review', async () => {
     await context.modules.demo.service.restore();
@@ -315,5 +327,43 @@ describe('demo exam results', () => {
     });
     expect(reviewed.status).toBe(200);
     expect(reviewed.body).toMatchObject({ total: 1, items: [{ booking: { id: resulted[0]?.id } }] });
+  });
+
+  it('creates the demo integration as the system', async () => {
+    const [client] = await rowsOf<{ created_by: string | null; actor_type: string; actor_id: string | null }>(
+      context.db,
+      sql`select c.created_by, a.actor_type, a.actor_id from integration_clients c
+        join audit_logs a on a.entity_id = c.id::text and a.action = 'integration_client.created'
+        where c.name = 'Laboratório de demonstração'`,
+    );
+
+    expect(client).toEqual({ created_by: null, actor_type: 'system', actor_id: null });
+  });
+
+  it('skips the results when the demo integration was revoked or not created by the system', async () => {
+    const demoLab = sql`name = 'Laboratório de demonstração'`;
+    const adminId = await userId('admin.resultados@email.com');
+    await context.db.execute(sql`update integration_clients set revoked_at = now() where ${demoLab}`);
+    await expect(restoreDemo()).resolves.toBeDefined();
+    expect(await demoResults()).toEqual([]);
+
+    await context.db.execute(
+      sql`update integration_clients set revoked_at = null, created_by = ${adminId} where ${demoLab}`,
+    );
+    await expect(restoreDemo()).resolves.toBeDefined();
+    expect(await demoResults()).toEqual([]);
+
+    await context.db.execute(sql`update integration_clients set created_by = null where ${demoLab}`);
+  });
+
+  it('still restores the demo bookings when publishing a result fails', async () => {
+    await context.db.execute(sql`update exam_types set kind = 'imaging' where code = 'glicemia'`);
+    const restored = await restoreDemo();
+    await context.db.execute(sql`update exam_types set kind = 'lab' where code = 'glicemia'`);
+
+    expect(restored).toMatchObject({ created: expect.any(Number) as unknown });
+    expect(await demoResults()).toEqual([]);
+    await restoreDemo();
+    expect((await demoResults()).map(({ version }) => version).sort()).toEqual([1, 2]);
   });
 });

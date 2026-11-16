@@ -1,4 +1,7 @@
 import { randomBytes } from 'node:crypto';
+import { logger } from '../../config/logger.js';
+import { AppError } from '../../lib/app-error.js';
+import { systemActor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { CLINIC_TIME_ZONE, DAY, HOUR, instantOfWallClock, MINUTE, startOfDayIn, wallClockIn } from '../../lib/time.js';
@@ -101,11 +104,16 @@ export class DemoService {
     const restoration = await this.repository.restoreBookings(startOfDayIn(CLINIC_TIME_ZONE, now), now, demoBookings);
     if (!restoration) return undefined;
     this.notifications.forget(restoration.recipients);
-    await this.publishResults(demoBookings, restoration.examCodes, doctor.id, now);
+    await this.publishResults(demoBookings, restoration.examCodes, now).catch((error: unknown) => {
+      logger.warn(
+        { code: error instanceof AppError ? error.code : 'UNEXPECTED_ERROR' },
+        'Demo exam results not published',
+      );
+    });
     return restoration.restored;
   }
 
-  private async publishResults(demoBookings: DemoBooking[], examCodes: string[], doctorId: string, now: Date) {
+  private async publishResults(demoBookings: DemoBooking[], examCodes: string[], now: Date) {
     const publications = demoBookings.flatMap(({ booking: { publicCode, endsAt }, results }) =>
       publicCode && examCodes.includes(publicCode)
         ? results.map((result, index) => ({
@@ -117,10 +125,17 @@ export class DemoService {
         : [],
     );
     if (publications.length === 0) return;
-    const clientId =
-      (await this.repository.integrationClientId(DEMO_LAB)) ??
-      (await this.lab.createClient({ name: DEMO_LAB }, { actorId: doctorId, ip: null })).id;
+    const clientId = await this.demoLabClient();
+    if (!clientId) return;
     for (const publication of publications) await this.lab.publish(publication, { clientId, ip: null });
+  }
+
+  private async demoLabClient(): Promise<string | undefined> {
+    const client = await this.repository.integrationClient(DEMO_LAB);
+    if (!client) return (await this.lab.createClient({ name: DEMO_LAB }, systemActor)).id;
+    if (!client.revokedAt && !client.createdBy) return client.id;
+    logger.warn({ code: client.revokedAt ? 'DEMO_LAB_REVOKED' : 'DEMO_LAB_NOT_SYSTEM' }, 'Demo exam results skipped');
+    return undefined;
   }
 
   private async demoBooking(

@@ -93,12 +93,16 @@ export class DemoRepository {
     return row?.id;
   }
 
-  async integrationClientId(name: string): Promise<string | undefined> {
+  async integrationClient(name: string) {
     const [row] = await this.db
-      .select({ id: integrationClients.id })
+      .select({
+        id: integrationClients.id,
+        revokedAt: integrationClients.revokedAt,
+        createdBy: integrationClients.createdBy,
+      })
       .from(integrationClients)
       .where(eq(integrationClients.name, name));
-    return row?.id;
+    return row;
   }
 
   async hasDoctorProfile(userId: string): Promise<boolean> {
