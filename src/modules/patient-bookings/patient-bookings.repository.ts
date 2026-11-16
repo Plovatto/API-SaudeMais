@@ -9,13 +9,13 @@ import {
   type VisitType,
 } from '../../database/schema/bookings.js';
 import { examTypes, specialties, units } from '../../database/schema/catalog.js';
-import { hasResult } from '../../database/schema/exam-results.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf } from '../../lib/pagination.js';
 import {
   actionsAt,
   cancellationColumns,
   countWhere,
+  hasResult,
   placeColumns,
   splitActions,
   viewOf,

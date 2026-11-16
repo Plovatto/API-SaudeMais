@@ -60,5 +60,3 @@ export const examResultVersions = pgTable(
     ),
   ],
 );
-
-export const hasResult = sql<boolean>`exists (select 1 from ${examResults} where ${examResults.bookingId} = ${bookings.id})`;

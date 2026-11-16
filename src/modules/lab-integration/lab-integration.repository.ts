@@ -2,11 +2,12 @@ import { and, asc, desc, eq, gte, isNull, lt, not, sql } from 'drizzle-orm';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes } from '../../database/schema/catalog.js';
-import { examResults, examResultVersions, hasResult } from '../../database/schema/exam-results.js';
+import { examResults, examResultVersions } from '../../database/schema/exam-results.js';
 import { integrationClients } from '../../database/schema/integration-clients.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import type { DayRange } from '../../lib/time.js';
+import { hasResult } from '../bookings/bookings.repository.js';
 import type { IntegrationClient, Worklist } from './lab-integration.model.js';
 
 interface NewClient {

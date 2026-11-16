@@ -2,11 +2,11 @@ import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-or
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, units } from '../../database/schema/catalog.js';
-import { examResults, examResultVersions, hasResult } from '../../database/schema/exam-results.js';
+import { examResults, examResultVersions } from '../../database/schema/exam-results.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import { DAY } from '../../lib/time.js';
-import { placeColumns } from '../bookings/bookings.repository.js';
+import { hasResult, placeColumns } from '../bookings/bookings.repository.js';
 import type { ResultInput } from '../lab-integration/lab-integration.model.js';
 import type { ExamResult, ExamResultVersion } from './exam-results.model.js';
 
