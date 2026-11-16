@@ -15,10 +15,11 @@ import type {
   Appointment,
   BookAppointmentInput,
   CancelAppointmentInput,
+  CompleteAppointmentInput,
   RescheduleInput,
   SeenAppointmentInput,
 } from './appointments.model.js';
-import type { AppointmentsRepository, Viewer } from './appointments.repository.js';
+import { insertMetrics, type AppointmentsRepository, type Viewer } from './appointments.repository.js';
 
 const exclusionConflicts = {
   bookings_doctor_no_overlap_excl: appointmentConflicts.slotTaken,
@@ -76,10 +77,17 @@ export class AppointmentsService {
     );
   }
 
-  record(id: string, doctorId: string, outcome: Outcome, input: SeenAppointmentInput): Promise<Appointment> {
-    return this.changeAsDoctor(id, doctorId, input, appointmentConflicts.notRecordable, (tx, seen) =>
-      this.bookings.recordSeen(tx, seen, doctorId, outcome),
-    );
+  record(
+    id: string,
+    doctorId: string,
+    outcome: Outcome,
+    { metrics, ...input }: CompleteAppointmentInput,
+  ): Promise<Appointment> {
+    return this.changeAsDoctor(id, doctorId, input, appointmentConflicts.notRecordable, async (tx, seen) => {
+      const afterCommit = await this.bookings.recordSeen(tx, seen, doctorId, outcome);
+      if (afterCommit && metrics) await insertMetrics(tx, id, metrics, this.clock.now());
+      return afterCommit;
+    });
   }
 
   private changeAsDoctor(

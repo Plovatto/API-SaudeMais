@@ -47,6 +47,63 @@ export const confirmAppointmentSchema = registry.register('ConfirmAppointmentReq
 
 export const recordAppointmentSchema = registry.register('RecordAppointmentRequest', seenRequest());
 
+const SYSTOLIC_RANGE = 'A sistólica vai de 50 a 300 mmHg.';
+const DIASTOLIC_RANGE = 'A diastólica vai de 30 a 200 mmHg.';
+const WEIGHT_RANGE = 'O peso vai de 1 a 500 kg.';
+
+export const metricFields = {
+  systolic: z
+    .int({ error: 'Informe a sistólica em mmHg, sem casas decimais.' })
+    .min(50, SYSTOLIC_RANGE)
+    .max(300, SYSTOLIC_RANGE)
+    .openapi({ description: 'Pressão sistólica, em mmHg.', example: 120 }),
+  diastolic: z
+    .int({ error: 'Informe a diastólica em mmHg, sem casas decimais.' })
+    .min(30, DIASTOLIC_RANGE)
+    .max(200, DIASTOLIC_RANGE)
+    .openapi({ description: 'Pressão diastólica, em mmHg.', example: 80 }),
+  weightKg: z
+    .number({ error: 'Informe o peso em kg.' })
+    .min(1, WEIGHT_RANGE)
+    .max(500, WEIGHT_RANGE)
+    .multipleOf(0.01, 'Informe o peso com no máximo duas casas decimais.')
+    .openapi({ description: 'Peso, em kg, com até duas casas decimais.', example: 72.4 }),
+};
+
+const healthMetricsInput = registry.register(
+  'HealthMetricsInput',
+  z
+    .strictObject({
+      systolic: metricFields.systolic.optional(),
+      diastolic: metricFields.diastolic.optional(),
+      weightKg: metricFields.weightKg.optional(),
+    })
+    .superRefine(({ systolic, diastolic, weightKg }, ctx) => {
+      if (systolic === undefined && diastolic === undefined && weightKg === undefined) {
+        ctx.addIssue({ code: 'custom', message: 'Informe a pressão, o peso ou os dois.' });
+      } else if (systolic === undefined && diastolic !== undefined) {
+        ctx.addIssue({ code: 'custom', path: ['systolic'], message: 'Informe a sistólica junto com a diastólica.' });
+      } else if (systolic !== undefined && diastolic === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['diastolic'], message: 'Informe a diastólica junto com a sistólica.' });
+      } else if (systolic !== undefined && diastolic !== undefined && systolic <= diastolic) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['systolic'],
+          message: 'A sistólica precisa ser maior que a diastólica.',
+        });
+      }
+    })
+    .openapi({
+      description:
+        'Medidas tomadas na consulta: a pressão (sistólica e diastólica juntas, a sistólica maior), o peso ou os dois.',
+    }),
+);
+
+export const completeAppointmentSchema = registry.register(
+  'CompleteAppointmentRequest',
+  z.strictObject({ startsAt: seenStartsAt, metrics: healthMetricsInput.optional() }),
+);
+
 export const cancelAppointmentSchema = registry.register(
   'CancelAppointmentRequest',
   z.strictObject({
@@ -154,6 +211,18 @@ export const bookingEventSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 
+const healthMetricsSchema = registry.register(
+  'HealthMetrics',
+  z
+    .object({
+      systolic: metricFields.systolic.nullable(),
+      diastolic: metricFields.diastolic.nullable(),
+      weightKg: metricFields.weightKg.nullable(),
+      recordedAt: z.iso.datetime().openapi({ description: 'Quando o médico registrou as medidas.' }),
+    })
+    .openapi({ description: 'Pressão e peso registrados ao concluir a consulta; o que não foi medido vem nulo.' }),
+);
+
 export const appointmentSchema = registry.register(
   'Appointment',
   z.object({
@@ -178,6 +247,9 @@ export const appointmentSchema = registry.register(
     doctorActions: nullableRef(doctorActionsSchema).openapi({
       description: 'O que o médico que atende a consulta pode fazer; nulo quando quem vê é o paciente.',
     }),
+    metrics: nullableRef(healthMetricsSchema).openapi({
+      description: 'Medidas registradas ao concluir a consulta; nulo quando não houve registro.',
+    }),
     events: z
       .array(bookingEventSchema)
       .openapi({ description: 'Histórico da consulta, do mais antigo para o mais novo.' }),
@@ -186,6 +258,8 @@ export const appointmentSchema = registry.register(
 
 export type BookAppointmentInput = z.infer<typeof bookAppointmentSchema>;
 export type SeenAppointmentInput = z.infer<typeof confirmAppointmentSchema>;
+export type CompleteAppointmentInput = z.infer<typeof completeAppointmentSchema>;
+export type HealthMetricsInput = z.infer<typeof healthMetricsInput>;
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
 export type RescheduleInput = z.infer<typeof rescheduleSchema>;
 export type Appointment = z.infer<typeof appointmentSchema>;

@@ -21,6 +21,7 @@ import {
   appointmentSchema,
   bookAppointmentSchema,
   cancelAppointmentSchema,
+  completeAppointmentSchema,
   confirmAppointmentSchema,
   recordAppointmentSchema,
   rescheduleSchema,
@@ -121,6 +122,9 @@ const outcomes = [
     summary: 'Concluir uma consulta',
     status: 'completed',
     done: 'Consulta concluída.',
+    body: completeAppointmentSchema,
+    extra:
+      ' Em `metrics`, o médico pode registrar a pressão (sistólica e diastólica juntas), o peso ou os dois, gravados na mesma transação da conclusão; se a conclusão é recusada, nada é gravado. As medidas aparecem no detalhe da consulta e nos cartões do início do paciente, e nunca vão para logs, auditoria ou notificações.',
   },
   {
     action: 'no-show',
@@ -128,19 +132,21 @@ const outcomes = [
     summary: 'Registrar falta em uma consulta',
     status: 'no_show',
     done: 'Falta registrada.',
+    body: recordAppointmentSchema,
+    extra: '',
   },
 ] as const;
 
-for (const { action, operationId, summary, status, done } of outcomes) {
+for (const { action, operationId, summary, status, done, body, extra } of outcomes) {
   documentOperation({
     method: 'post',
     path: `${path}/{id}/${action}`,
     operationId,
     tag: tags.doctor.name,
     summary,
-    description: `Muda uma consulta confirmada (\`confirmed\`) que já começou para \`${status}\` e registra o evento \`${status}\` com o médico como autor; ninguém é avisado. Só o médico que atende a consulta registra, e só a partir do horário de início. Envie em \`startsAt\` o início que a tela mostrava: se a consulta está confirmada com esse horário, mas ainda não começou, a resposta é \`NOT_STARTED\`; se o horário mudou, se ela não está confirmada ou se já foi concluída ou marcada como falta, a resposta é \`INVALID_STATE\`. Nos dois casos nada muda. Conclusão e falta disputam a mesma consulta, e só a primeira vale. Responde o detalhe atualizado; para os demais médicos, responde como inexistente. Limite: 60 requisições por minuto por IP.`,
+    description: `Muda uma consulta confirmada (\`confirmed\`) que já começou para \`${status}\` e registra o evento \`${status}\` com o médico como autor; ninguém é avisado. Só o médico que atende a consulta registra, e só a partir do horário de início. Envie em \`startsAt\` o início que a tela mostrava: se a consulta está confirmada com esse horário, mas ainda não começou, a resposta é \`NOT_STARTED\`; se o horário mudou, se ela não está confirmada ou se já foi concluída ou marcada como falta, a resposta é \`INVALID_STATE\`. Nos dois casos nada muda. Conclusão e falta disputam a mesma consulta, e só a primeira vale.${extra} Responde o detalhe atualizado; para os demais médicos, responde como inexistente. Limite: 60 requisições por minuto por IP.`,
     params: idParams,
-    body: recordAppointmentSchema,
+    body,
     success: { status: 200, description: done, schema: appointmentSchema },
     errors: {
       403: forbiddenResponse,
