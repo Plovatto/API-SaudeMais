@@ -1,7 +1,7 @@
 import type { Transaction } from '../../database/pg-client.js';
 import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
-import { CLINIC_TIME_ZONE, DAY, instantOfWallClock } from '../../lib/time.js';
+import { civilPeriodIn, CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotAt, slotDays } from '../../lib/time-slots.js';
 import { patientConflict } from '../bookings/bookings.messages.js';
 import { exceptOwn, type LockedPatient } from '../bookings/bookings.repository.js';
@@ -47,12 +47,10 @@ export class ExamBookingsService {
     patientId: string,
   ): Promise<ExamAvailability> {
     const now = this.clock.now();
+    const { start: from, end: to } = civilPeriodIn(CLINIC_TIME_ZONE, period);
     const context = await this.repository.availabilityContext(
       { unitId, examTypeId },
-      {
-        from: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.from)),
-        to: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.to) + DAY),
-      },
+      { from, to },
       exceptOwn(patientId, rescheduling),
     );
     if (!context) throw notFound(examOfferNotFound);

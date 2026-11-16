@@ -1,7 +1,7 @@
 import { AppError } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import type { Page } from '../../lib/pagination.js';
-import { CLINIC_TIME_ZONE, DAY, instantOfWallClock } from '../../lib/time.js';
+import { civilPeriodIn, CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotDays } from '../../lib/time-slots.js';
 import { exceptOwn } from '../bookings/bookings.repository.js';
 import type { AuthContext } from '../users/user.service.js';
@@ -25,14 +25,11 @@ export class DoctorsService {
     { user, isProtected }: Pick<AuthContext, 'user' | 'isProtected'>,
   ): Promise<Availability> {
     const now = this.clock.now();
+    const { start: from, end: to } = civilPeriodIn(CLINIC_TIME_ZONE, period);
     const context = await this.repository.bookingContext(
       doctorId,
       isProtected,
-      {
-        from: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.from)),
-        to: instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(period.to) + DAY),
-        now,
-      },
+      { from, to, now },
       exceptOwn(user.id, rescheduling),
     );
     if (!context) throw new AppError(404, 'NOT_FOUND', doctorNotFound);

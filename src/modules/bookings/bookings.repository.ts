@@ -1,17 +1,19 @@
-import { and, asc, eq, gt, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, gt, gte, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import {
   bookingEvents,
   bookings,
+  effectiveStatus,
   isActiveFuture,
+  isAwaitingRecord,
   isLateCancellation,
   type BookingStatus,
   type CancellerRole,
 } from '../../database/schema/bookings.js';
 import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
-import { HOUR } from '../../lib/time.js';
+import { HOUR, type DayRange } from '../../lib/time.js';
 import { bookingActions, type BookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
 
 export type BookingSide = 'patient' | 'doctor';
@@ -99,6 +101,36 @@ export function viewOf<T extends { startsAt: Date; endsAt: Date; cancellation: C
 }
 
 export const countWhere = (where: SQL | undefined) => sql<number>`count(*) filter (where ${where})`.mapWith(Number);
+
+export const futureWith = (status: BookingStatus, now: Date) =>
+  and(eq(bookings.status, status), gt(bookings.startsAt, now));
+
+const withStatus = (status: BookingStatus, now: Date) => countWhere(eq(effectiveStatus(now), status));
+
+export const statusTotals = (now: Date) => ({
+  total: count(),
+  pending: countWhere(futureWith('pending', now)),
+  confirmed: countWhere(futureWith('confirmed', now)),
+  awaitingRecord: countWhere(isAwaitingRecord(now)),
+  completed: withStatus('completed', now),
+  noShow: withStatus('no_show', now),
+  cancelled: withStatus('cancelled', now),
+  expired: withStatus('expired', now),
+});
+
+export const noStatusTotals = {
+  total: 0,
+  pending: 0,
+  confirmed: 0,
+  awaitingRecord: 0,
+  completed: 0,
+  noShow: 0,
+  cancelled: 0,
+  expired: 0,
+};
+
+export const startsWithin = ({ start, end }: DayRange) =>
+  and(gte(bookings.startsAt, start), lt(bookings.startsAt, end));
 
 const sideColumns = { patient: bookings.patientId, doctor: bookings.doctorId };
 
@@ -271,7 +303,7 @@ export function recordStarted(
 ): Promise<ChangedBooking[]> {
   return change(tx, {
     set: { status: outcome },
-    where: and(eq(bookings.status, 'confirmed'), lte(bookings.startsAt, now), scope),
+    where: and(isAwaitingRecord(now), scope),
     event: { eventType: outcome, actorType: 'doctor', actorUserId: doctorId, createdAt: now },
   });
 }

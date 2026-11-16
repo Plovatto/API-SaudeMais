@@ -1,6 +1,6 @@
 import '../../docs/zod-extend.js';
 import { z } from 'zod';
-import { nullableRef } from '../../docs/common-schemas.js';
+import { countSchema, nullableRef } from '../../docs/common-schemas.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
 import { appointmentSchema, doctorActionsSchema, person } from '../appointments/appointments.model.js';
@@ -8,8 +8,6 @@ import { civilDay } from '../doctors/doctors.model.js';
 import { notificationSchema } from '../notifications/notifications.model.js';
 
 export const agendaTabs = ['pending', 'confirmed', 'awaiting', 'history'] as const;
-
-const total = (description: string, example: number) => z.int().nonnegative().openapi({ description, example });
 
 export const doctorAppointmentsQuery = paginationQuery.extend({
   tab: z
@@ -56,10 +54,10 @@ export const doctorAppointmentSchema = registry.register(
 
 const countsSchema = z
   .object({
-    pending: total('Pedidos a confirmar.', 2),
-    confirmed: total('Confirmadas que ainda não começaram.', 5),
-    awaiting: total('Confirmadas que já começaram e aguardam registro; também contam no histórico.', 1),
-    history: total('Consultas no histórico.', 12),
+    pending: countSchema('Pedidos a confirmar.', 2),
+    confirmed: countSchema('Confirmadas que ainda não começaram.', 5),
+    awaiting: countSchema('Confirmadas que já começaram e aguardam registro; também contam no histórico.', 1),
+    history: countSchema('Consultas no histórico.', 12),
   })
   .openapi({ description: 'Totais das abas da agenda, sem os filtros.' });
 
@@ -74,14 +72,14 @@ export const doctorHomeSchema = registry.register(
     today: z
       .object({
         date: z.iso.date().openapi({ description: 'Dia de hoje no fuso de São Paulo.', example: '2026-11-20' }),
-        total: total('Todas as consultas de hoje.', 8),
-        pending: total('Pedidos de hoje ainda a confirmar.', 1),
-        confirmed: total('Confirmadas de hoje que ainda não começaram.', 4),
-        awaitingRecord: total('Confirmadas de hoje que já começaram e aguardam registro.', 1),
-        completed: total('Concluídas hoje.', 1),
-        noShow: total('Faltas de hoje.', 0),
-        cancelled: total('Canceladas de hoje.', 1),
-        expired: total('Pedidos de hoje que não foram confirmados a tempo.', 0),
+        total: countSchema('Todas as consultas de hoje.', 8),
+        pending: countSchema('Pedidos de hoje ainda a confirmar.', 1),
+        confirmed: countSchema('Confirmadas de hoje que ainda não começaram.', 4),
+        awaitingRecord: countSchema('Confirmadas de hoje que já começaram e aguardam registro.', 1),
+        completed: countSchema('Concluídas hoje.', 1),
+        noShow: countSchema('Faltas de hoje.', 0),
+        cancelled: countSchema('Canceladas de hoje.', 1),
+        expired: countSchema('Pedidos de hoje que não foram confirmados a tempo.', 0),
       })
       .openapi({ description: 'Resumo das consultas de hoje no fuso de São Paulo, pela situação atual.' }),
     pending: z
