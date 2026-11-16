@@ -23,6 +23,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Reagendamento de consultas e exames pelo paciente, na mesma linha e em uma transação, até o limite de reagendamentos e, se confirmado, fora da janela da política: a consulta volta a pendente e avisa o médico, o exame continua confirmado e mantém o lugar quando livre, e a vaga antiga só é liberada se a nova for garantida
 - Desativar uma conta ou remover o perfil médico cancela os agendamentos ativos futuros e avisa a outra parte; especialidade, unidade, tipo de exame ou oferta com agendamento futuro não podem ser desativados, e a capacidade da oferta não fica abaixo de um lugar ocupado por exame que ainda não terminou
 - Integração com o laboratório por chave de API (guardada só como hash, exibida uma vez e revogável pelo administrador): lista de exames do dia que aguardam resultado, sem dados pessoais, e publicação de resultados idempotente, com versões imutáveis, retificação, conclusão do exame e aviso ao paciente
+- Leitura de resultados de exame pelo paciente, com a versão atual e as anteriores, e pelo médico, só com uma consulta de avaliação de exames com o paciente confirmada ou concluída que começou há no máximo 30 dias; cada leitura fica na auditoria, sem os valores, e o administrador não vê resultados
 - Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
 - Relatórios do administrador por período no fuso de São Paulo: totais de consultas e exames pela situação atual, aguardando registro à parte, cancelamentos tardios e por autor, taxa de faltas, série diária (ou semanal acima de 62 dias) e especialidades e exames mais procurados, só com números e sem as contas de demonstração
 - Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
@@ -195,7 +196,7 @@ Os testes de `npm test` usam um PostgreSQL em memória (PGlite) com as mesmas mi
 2. Exames confirmados cujo horário terminou passam a `completed`.
 3. Consultas confirmadas que começaram há 72 h ou mais sem registro do médico passam a `completed`, com o sistema como autor.
 4. Retenção: apaga sessões vencidas, links de redefinição de senha com mais de 48 h, notificações com mais de 90 dias e registros de auditoria com mais de 180 dias. Agendamentos não têm prazo de exclusão.
-5. Uma vez por dia (no fuso de São Paulo) e só com `DEMO_ACCOUNTS_ENABLED=true`, restaura as contas de demonstração: apaga os agendamentos em que o paciente ou o médico é uma conta protegida (eventos e notificações vão junto) e recria os agendamentos de exemplo da paciente de demonstração com o médico de demonstração: um pedido pendente, uma consulta confirmada, uma do dia (que fica aguardando registro depois do horário), uma concluída, um exame confirmado e um exame concluído, com datas em dias úteis relativas ao dia. Os exames ocupam a menor raia livre, e um horário que um visitante ocupou é pulado. A execução fica registrada na auditoria como `demo.restored`, e é esse registro que impede uma segunda restauração no mesmo dia.
+5. Uma vez por dia (no fuso de São Paulo) e só com `DEMO_ACCOUNTS_ENABLED=true`, restaura as contas de demonstração: apaga os agendamentos em que o paciente ou o médico é uma conta protegida (eventos e notificações vão junto) e recria os agendamentos de exemplo da paciente de demonstração com o médico de demonstração: um pedido pendente, uma consulta confirmada, uma do dia (que fica aguardando registro depois do horário), uma concluída, um exame confirmado, uma avaliação de exames concluída (que libera os resultados para o médico de demonstração) e um exame de glicemia concluído, com datas em dias úteis relativas ao dia. Os exames ocupam a menor raia livre, e um horário que um visitante ocupou é pulado. Depois, o resultado da glicemia é publicado pelo mesmo caminho da integração, em nome da integração `Laboratório de demonstração` (criada na primeira restauração, com uma chave que nunca é exibida): a versão 1 `final` e a versão 2 `amended`, que avisam a paciente com `exam_result_available`. A execução fica registrada na auditoria como `demo.restored`, e é esse registro que impede uma segunda restauração no mesmo dia.
 
 Todos os passos podem rodar de novo sem efeito duplicado, e uma execução segura uma trava consultiva do PostgreSQL (`pg_try_advisory_xact_lock`): se outra execução estiver em andamento, a nova só registra um aviso de que pulou. Os contadores de não lidas das pessoas afetadas são atualizados na hora quando a manutenção roda dentro da API.
 
@@ -227,6 +228,13 @@ A publicação trava o exame (`FOR NO KEY UPDATE`) e compara o conteúdo com a v
 | `issuedAt` mais de 5 min à frente do relógio da API | `422` `ISSUED_IN_FUTURE` |
 
 Cada versão nova conclui o exame, grava o evento `result_received`, avisa o paciente com `exam_result_available` e fica na auditoria com a versão e o status, nunca com o conteúdo, que também não vai para os logs nem para as notificações. As versões não podem ser alteradas: um trigger recusa `UPDATE` em `exam_result_versions`. Cada chave tem um limite próprio de 60 requisições por minuto.
+
+### Leitura dos resultados
+
+- `GET /api/patient/exam-results/{bookingId}` devolve ao paciente o resultado do próprio exame: o cabeçalho (código, tipo de exame, unidade e início), a versão atual (`current`, a de maior número) e as anteriores (`previous`, da mais nova para a mais antiga), todas com `items` (exame laboratorial) ou `report` (exame de imagem). Exame de outra pessoa ou sem resultado responde `404`. A lista de agendamentos do paciente e o detalhe do exame trazem `hasResult`, para mostrar "Ver resultado".
+- `GET /api/doctor/patients/{patientId}/exam-results` devolve ao médico a página de resultados do paciente, do exame mais recente para o mais antigo, no mesmo formato. Só responde quando o médico tem com o paciente uma consulta `exam_review` confirmada ou concluída que já começou há no máximo 30 dias; caso contrário, inclusive para um paciente inexistente, responde `403` `FORBIDDEN_NO_LINK`, sem revelar se o paciente existe.
+
+Cada resultado devolvido fica na auditoria como `exam_result.read`, com o exame e a versão atual, nunca com os valores. O administrador não tem rota que devolva resultados.
 
 ## Docker
 
@@ -279,6 +287,8 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | POST | `/api/exam-bookings/{id}/reschedule` | Troca o horário dentro da política de reagendamento; continua confirmado, sujeito à capacidade (paciente dele) |
 | GET | `/api/patient/home` | Próximos agendamentos, totais das abas e último aviso (paciente) |
 | GET | `/api/patient/bookings` | Agendamentos do paciente por aba `scope`, com filtros `kind` e `status` e ações permitidas (paciente) |
+| GET | `/api/patient/exam-results/{bookingId}` | Resultado de um exame, com a versão atual e as anteriores (paciente dele) |
+| GET | `/api/doctor/patients/{patientId}/exam-results` | Resultados de exame do paciente, com avaliação de exames nos últimos 30 dias (médico) |
 | GET, POST | `/api/admin/specialties` | Lista e cria especialidades (admin) |
 | PATCH | `/api/admin/specialties/{id}` | Altera, ativa ou desativa uma especialidade (admin) |
 | GET, POST | `/api/admin/units` | Lista e cria unidades com horários (admin) |
