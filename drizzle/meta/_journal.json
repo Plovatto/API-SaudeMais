@@ -96,8 +96,29 @@
     {
       "idx": 13,
       "version": "7",
-      "when": 1794795858453,
-      "tag": "0013_health_metrics",
+      "when": 1794791117869,
+      "tag": "0013_lab_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794791120640,
+      "tag": "0014_exam_result_versions_immutable",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794792748122,
+      "tag": "0015_exam_results_immutable",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794834682640,
+      "tag": "0016_health_metrics",
       "breakpoints": true
     }
   ]

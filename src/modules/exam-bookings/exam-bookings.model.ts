@@ -16,7 +16,7 @@ import { doctorSchema, periodShape, reschedulingShape, slotSchema, withPeriodRul
 
 const examStatuses = ['confirmed', 'cancelled', 'completed'] as const satisfies readonly BookingStatus[];
 
-const PUBLIC_CODE_PATTERN = /^EX-[0-9A-HJKMNP-TV-Z]{6}$/;
+export const PUBLIC_CODE_PATTERN = /^EX-[0-9A-HJKMNP-TV-Z]{6}$/;
 
 const offerShape = {
   unitId: uuidParam.openapi({ description: 'Unidade escolhida.' }),

@@ -35,6 +35,11 @@ export const tags = {
     description:
       'Usuários, papéis e perfis médicos; cadastro de especialidades, unidades, horários, exames, ofertas e da política de agendamento. Só administradores.',
   },
+  integrations: {
+    name: 'Integrações',
+    description:
+      'Rotas do laboratório parceiro, autenticadas pela chave de API no cabeçalho `X-Api-Key`: lista de exames que aguardam resultado e publicação de resultados. Não usam sessão nem devolvem dados pessoais.',
+  },
 } as const;
 
 export const tagList = Object.values(tags);

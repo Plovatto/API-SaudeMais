@@ -1,7 +1,7 @@
 export const apiDescription = `
 API do **Saúde+**, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador.
 
-As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários, a agenda semanal do médico, a lista de médicos com as vagas livres de cada um, o pedido de consulta com o detalhe, a confirmação, o cancelamento, a conclusão e o registro de falta dela, o início e os agendamentos do paciente, o início e a agenda do médico e as notificações, além de \`/health\` e desta documentação. Cada rota lista o que realmente pode devolver.
+As rotas de negócio ficam sob \`/api\`. Nesta versão existem o cadastro, o login, o logout, a redefinição de senha, o perfil da própria conta, o catálogo com a administração dele, a administração de usuários, a agenda semanal do médico, a lista de médicos com as vagas livres de cada um, o pedido de consulta com o detalhe, a confirmação, o cancelamento, a conclusão e o registro de falta dela, o início e os agendamentos do paciente, o início e a agenda do médico, as notificações e a integração com o laboratório, além de \`/health\` e desta documentação. Cada rota lista o que realmente pode devolver.
 
 ## Erros
 
@@ -22,7 +22,7 @@ Toda resposta de erro tem o mesmo formato:
 | Status | Quando acontece |
 |---|---|
 | \`400\` | Corpo, parâmetros ou JSON inválidos |
-| \`401\` | Sem sessão, sessão expirada ou credenciais incorretas |
+| \`401\` | Sem sessão, sessão expirada, credenciais incorretas ou chave de API inválida |
 | \`403\` | Conta desativada, sem o perfil exigido ou de demonstração |
 | \`404\` | Rota, método ou registro inexistente |
 | \`409\` | Conflito com o estado atual, como e-mail já cadastrado |
@@ -46,6 +46,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`BAD_REQUEST\` | 400 ou 415 | Requisição malformada, como parâmetro de URL inválido, charset ou codificação não suportados |
 | \`UNAUTHENTICATED\` | 401 | Rota exige login e o token falta, é inválido ou expirou |
 | \`FORBIDDEN\` | 403 | A conta não tem o perfil exigido pela rota |
+| \`INVALID_API_KEY\` | 401 | Rota do laboratório sem a chave \`X-Api-Key\` ou com chave inválida ou revogada |
 | \`INVALID_RESET_TOKEN\` | 400 | Link de redefinição de senha inválido, usado ou vencido |
 | \`INVALID_CURRENT_PASSWORD\` | 422 | A senha atual informada na troca de senha está errada |
 | \`PROTECTED_ACCOUNT\` | 403 | Contas de demonstração não podem ser alteradas |
@@ -68,6 +69,9 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`RESCHEDULE_LIMIT\` | 409 | O agendamento já foi reagendado o máximo de vezes da política |
 | \`INVALID_STATE\` | 409 | O agendamento mudou, já foi confirmado, já começou ou já foi encerrado desde que foi exibido; atualize e tente de novo |
 | \`NOT_STARTED\` | 409 | A consulta confirmada ainda não começou; conclusão e falta só valem a partir do horário de início |
+| \`RESULT_FINAL\` | 409 | O exame já tem resultado com outro conteúdo; a correção precisa vir com \`status\` \`amended\` |
+| \`RESULT_EXISTS\` | 409 | O exame já tem resultado com outro \`externalId\` |
+| \`EXTERNAL_ID_TAKEN\` | 409 | O \`externalId\` já foi usado no resultado de outro exame |
 | \`SPECIALTY_UNAVAILABLE\`, \`UNIT_UNAVAILABLE\` | 422 | A especialidade ou a unidade escolhida está inativa ou não existe |
 | \`OVERLAP\` | 422 | Faixas de horário do mesmo dia se sobrepõem; veja \`fields\` |
 | \`OUTSIDE_UNIT_HOURS\` | 422 | A faixa de horário fica fora do horário da unidade; veja \`fields\` |
@@ -77,6 +81,9 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`SPECIALTY_MISMATCH\` | 422 | O médico escolhido não atende a especialidade escolhida |
 | \`SELF_BOOKING\` | 422 | O médico tentou marcar consulta consigo mesmo |
 | \`REASON_REQUIRED\` | 422 | O médico precisa informar o motivo ao cancelar uma consulta |
+| \`NOT_ELIGIBLE\` | 422 | O exame foi cancelado ou ainda não começou, então não recebe resultado |
+| \`ISSUED_IN_FUTURE\` | 422 | A data de emissão do resultado passa de 5 minutos à frente do relógio da API |
+| \`WRONG_RESULT_FORMAT\` | 422 | Exame laboratorial recebe \`items\`; exame de imagem, \`report\` |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |
 | \`TOO_MANY_REQUESTS\` | 429 | Muitas requisições do mesmo IP (300 por minuto) ou limite próprio da rota |
@@ -94,6 +101,16 @@ Authorization: Bearer <token>
 Sem "Lembrar de mim", a sessão expira após 12 horas sem uso; com ele, dura 7 dias. Nenhuma sessão passa de 7 dias, e \`POST /api/users/logout\` encerra a sessão na hora. Quando a sessão não vale mais, a rota responde \`401\` com \`UNAUTHENTICATED\`.
 
 O botão **Authorize** desta página envia o token em todas as chamadas de teste. Fora de produção, o token fica salvo neste navegador até você clicar em **Logout**.
+
+## Integração com o laboratório
+
+O laboratório parceiro usa uma chave de API criada pelo administrador em \`POST /api/admin/integration-clients\`. A chave aparece uma única vez, a API guarda só o hash, e o administrador pode revogá-la a qualquer momento. As rotas do laboratório recebem a chave no cabeçalho, sem sessão:
+
+\`\`\`http
+X-Api-Key: slab_<prefixo>_<segredo>
+\`\`\`
+
+\`GET /api/integrations/lab/worklist\` lista, só pelo código público, os exames do dia que aguardam resultado, e \`POST /api/integrations/lab/results\` publica o resultado de um deles. Reenviar o mesmo conteúdo não muda nada, e uma correção (\`amended\`) cria uma nova versão. Cada chave tem um limite próprio de 60 requisições por minuto.
 
 ## Conta de demonstração
 

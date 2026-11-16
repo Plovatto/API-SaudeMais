@@ -1,5 +1,5 @@
 {
-  "id": "3b09d590-c0c5-4261-80a0-420c1d80391d",
+  "id": "0c675ecf-1a03-44aa-a99a-ad70f5b5b5da",
   "prevId": "0647f513-b08a-4553-9e35-57d49639e0fd",
   "version": "7",
   "dialect": "postgresql",
@@ -1460,14 +1460,105 @@
       },
       "isRLSEnabled": false
     },
-    "public.health_metrics": {
-      "name": "health_metrics",
+    "public.exam_result_versions": {
+      "name": "exam_result_versions",
       "schema": "",
       "columns": {
+        "result_id": {
+          "name": "result_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "exam_result_versions_result_id_fkey": {
+          "name": "exam_result_versions_result_id_fkey",
+          "tableFrom": "exam_result_versions",
+          "tableTo": "exam_results",
+          "columnsFrom": [
+            "result_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "exam_result_versions_pkey": {
+          "name": "exam_result_versions_pkey",
+          "columns": [
+            "result_id",
+            "version"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "exam_result_versions_version_check": {
+          "name": "exam_result_versions_version_check",
+          "value": "version >= 1"
+        },
+        "exam_result_versions_status_check": {
+          "name": "exam_result_versions_status_check",
+          "value": "status in ('final', 'amended')"
+        },
+        "exam_result_versions_payload_check": {
+          "name": "exam_result_versions_payload_check",
+          "value": "jsonb_typeof(payload) = 'object' and octet_length(payload::text) <= 65536"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.exam_results": {
+      "name": "exam_results",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
         "booking_id": {
           "name": "booking_id",
           "type": "uuid",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true
         },
         "booking_kind": {
@@ -1475,38 +1566,33 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'appointment'"
+          "default": "'exam'"
         },
-        "systolic": {
-          "name": "systolic",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "diastolic": {
-          "name": "diastolic",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "weight_kg": {
-          "name": "weight_kg",
-          "type": "numeric(5, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "recorded_at": {
-          "name": "recorded_at",
-          "type": "timestamp with time zone",
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "health_metrics_booking_kind_fkey": {
-          "name": "health_metrics_booking_kind_fkey",
-          "tableFrom": "health_metrics",
+        "exam_results_booking_kind_fkey": {
+          "name": "exam_results_booking_kind_fkey",
+          "tableFrom": "exam_results",
           "tableTo": "bookings",
           "columnsFrom": [
             "booking_id",
@@ -1518,39 +1604,160 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "exam_results_client_id_fkey": {
+          "name": "exam_results_client_id_fkey",
+          "tableFrom": "exam_results",
+          "tableTo": "integration_clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "exam_results_booking_id_key": {
+          "name": "exam_results_booking_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "booking_id"
+          ]
+        },
+        "exam_results_client_external_id_key": {
+          "name": "exam_results_client_external_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "external_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
-        "health_metrics_booking_kind_check": {
-          "name": "health_metrics_booking_kind_check",
-          "value": "booking_kind = 'appointment'"
+        "exam_results_booking_kind_check": {
+          "name": "exam_results_booking_kind_check",
+          "value": "booking_kind = 'exam'"
         },
-        "health_metrics_pressure_pair_check": {
-          "name": "health_metrics_pressure_pair_check",
-          "value": "(systolic is null) = (diastolic is null)"
+        "exam_results_external_id_check": {
+          "name": "exam_results_external_id_check",
+          "value": "char_length(external_id) between 1 and 64"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.integration_clients": {
+      "name": "integration_clients",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
         },
-        "health_metrics_systolic_check": {
-          "name": "health_metrics_systolic_check",
-          "value": "systolic between 50 and 300"
+        "name": {
+          "name": "name",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": true
         },
-        "health_metrics_diastolic_check": {
-          "name": "health_metrics_diastolic_check",
-          "value": "diastolic between 30 and 200"
+        "key_prefix": {
+          "name": "key_prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
-        "health_metrics_pressure_order_check": {
-          "name": "health_metrics_pressure_order_check",
-          "value": "systolic > diastolic"
+        "api_key_hash": {
+          "name": "api_key_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
-        "health_metrics_weight_kg_check": {
-          "name": "health_metrics_weight_kg_check",
-          "value": "weight_kg between 1 and 500"
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
-        "health_metrics_present_check": {
-          "name": "health_metrics_present_check",
-          "value": "systolic is not null or weight_kg is not null"
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "integration_clients_created_by_fkey": {
+          "name": "integration_clients_created_by_fkey",
+          "tableFrom": "integration_clients",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "integration_clients_name_key": {
+          "name": "integration_clients_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        },
+        "integration_clients_key_prefix_key": {
+          "name": "integration_clients_key_prefix_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "key_prefix"
+          ]
+        },
+        "integration_clients_api_key_hash_key": {
+          "name": "integration_clients_api_key_hash_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "api_key_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "integration_clients_name_check": {
+          "name": "integration_clients_name_check",
+          "value": "char_length(name) between 2 and 80"
+        },
+        "integration_clients_key_prefix_check": {
+          "name": "integration_clients_key_prefix_check",
+          "value": "key_prefix ~ '^[a-z0-9]{8}$'"
+        },
+        "integration_clients_api_key_hash_check": {
+          "name": "integration_clients_api_key_hash_check",
+          "value": "api_key_hash ~ '^[0-9a-f]{64}$'"
         }
       },
       "isRLSEnabled": false
