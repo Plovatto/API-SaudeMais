@@ -27,7 +27,7 @@ const emailConflicts = {
 
 export const TERMS_VERSION = '2026-11-13';
 
-const TOUCH_INTERVAL = 5 * MINUTE;
+export const TOUCH_INTERVAL = 5 * MINUTE;
 const PROTECTED_SESSION_LIMIT = 500;
 
 export interface SessionPolicy {

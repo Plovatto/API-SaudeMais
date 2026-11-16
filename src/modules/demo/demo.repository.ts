@@ -4,6 +4,7 @@ import { auditLogs } from '../../database/schema/audit-logs.js';
 import { bookingEvents, bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
+import { examResults } from '../../database/schema/exam-results.js';
 import { notifications } from '../../database/schema/notifications.js';
 import { userRoles, users } from '../../database/schema/users.js';
 import { MAINTENANCE_LOCK } from '../../jobs/maintenance.js';
@@ -145,9 +146,11 @@ export class DemoRepository {
       }
       const protectedIds = tx.select({ id: users.id }).from(users).where(eq(users.isProtected, true));
       const demoScope = or(inArray(bookings.patientId, protectedIds), inArray(bookings.doctorId, protectedIds));
+      const demoBookingIds = tx.select({ id: bookings.id }).from(bookings).where(demoScope);
+      await tx.delete(examResults).where(inArray(examResults.bookingId, demoBookingIds));
       const recipients = await tx
         .delete(notifications)
-        .where(inArray(notifications.bookingId, tx.select({ id: bookings.id }).from(bookings).where(demoScope)))
+        .where(inArray(notifications.bookingId, demoBookingIds))
         .returning({ userId: notifications.userId, audienceRole: notifications.audienceRole });
       const deleted = await tx.delete(bookings).where(demoScope).returning({ id: bookings.id });
       let created = 0;

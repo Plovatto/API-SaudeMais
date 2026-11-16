@@ -10,6 +10,12 @@ import {
 } from './common-schemas.js';
 import { registry, sessionSecurity } from './registry.js';
 
+interface Success {
+  status: 200 | 201 | 202 | 204;
+  description: string;
+  schema?: z.ZodType;
+}
+
 export interface OperationDoc {
   method: 'get' | 'post' | 'patch' | 'put' | 'delete';
   path: string;
@@ -20,15 +26,30 @@ export interface OperationDoc {
   body?: z.ZodType;
   query?: z.ZodObject;
   params?: z.ZodObject;
-  success: { status: 200 | 201 | 202 | 204; description: string; schema?: z.ZodType };
-  errors?: Partial<Record<403 | 404 | 409 | 422 | 503, ResponseConfig>>;
+  success: Success | Success[];
+  errors?: Partial<Record<401 | 403 | 404 | 409 | 422 | 503, ResponseConfig>>;
+  auth?: typeof sessionSecurity;
 }
 
-export function documentOperation({ success, errors, tag, body, query, params, ...operation }: OperationDoc): void {
+export function documentOperation({
+  success,
+  errors,
+  tag,
+  body,
+  query,
+  params,
+  auth = sessionSecurity,
+  ...operation
+}: OperationDoc): void {
   const responses: Record<number, ResponseConfig> = {
-    [success.status]: success.schema
-      ? jsonResponse(success.description, success.schema)
-      : { description: success.description },
+    ...Object.fromEntries(
+      [success]
+        .flat()
+        .map(({ status, description, schema }) => [
+          status,
+          schema ? jsonResponse(description, schema) : { description },
+        ]),
+    ),
     401: unauthenticatedResponse,
     429: tooManyRequestsResponse,
     500: internalErrorResponse,
@@ -38,7 +59,7 @@ export function documentOperation({ success, errors, tag, body, query, params, .
   registry.registerPath({
     ...operation,
     tags: [tag],
-    ...sessionSecurity,
+    ...auth,
     request: { ...(body && { body: jsonBody(body) }), ...(query && { query }), ...(params && { params }) },
     responses,
   });

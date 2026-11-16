@@ -10,3 +10,12 @@ export const sessionAuth = registry.registerComponent('securitySchemes', 'sessio
 });
 
 export const sessionSecurity = { security: [{ [sessionAuth.name]: [] }] };
+
+const labApiKey = registry.registerComponent('securitySchemes', 'labApiKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'X-Api-Key',
+  description: 'Chave de API do laboratório, criada pelo administrador e exibida uma única vez.',
+});
+
+export const labKeySecurity = { security: [{ [labApiKey.name]: [] }] };
