@@ -11,11 +11,14 @@ import {
 } from '../../database/schema/bookings.js';
 import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
+import { HOUR } from '../../lib/time.js';
 import { bookingActions, type BookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
 
 export type BookingSide = 'patient' | 'doctor';
 
 export type Outcome = Extract<BookingStatus, 'completed' | 'no_show'>;
+
+const AUTO_COMPLETE_AFTER_HOURS = 72;
 
 export interface Canceller {
   role: CancellerRole;
@@ -271,6 +274,35 @@ export function recordStarted(
     where: and(eq(bookings.status, 'confirmed'), lte(bookings.startsAt, now), scope),
     event: { eventType: outcome, actorType: 'doctor', actorUserId: doctorId, createdAt: now },
   });
+}
+
+export function expirePending(tx: Transaction, now: Date): Promise<ChangedBooking[]> {
+  return change(tx, {
+    set: { status: 'expired' },
+    where: and(eq(bookings.status, 'pending'), lte(bookings.startsAt, now)),
+    event: { eventType: 'expired', actorType: 'system', actorUserId: null, createdAt: now },
+  });
+}
+
+function completeConfirmed(tx: Transaction, where: SQL | undefined, now: Date): Promise<ChangedBooking[]> {
+  return change(tx, {
+    set: { status: 'completed' },
+    where: and(eq(bookings.status, 'confirmed'), where),
+    event: { eventType: 'completed', actorType: 'system', actorUserId: null, createdAt: now },
+  });
+}
+
+export function completeEndedExams(tx: Transaction, now: Date): Promise<ChangedBooking[]> {
+  return completeConfirmed(
+    tx,
+    and(eq(bookings.kind, 'exam'), lte(bookings.startsAt, now), lte(bookings.endsAt, now)),
+    now,
+  );
+}
+
+export function completeStaleAppointments(tx: Transaction, now: Date): Promise<ChangedBooking[]> {
+  const startedBefore = new Date(now.getTime() - AUTO_COMPLETE_AFTER_HOURS * HOUR);
+  return completeConfirmed(tx, and(eq(bookings.kind, 'appointment'), lte(bookings.startsAt, startedBefore)), now);
 }
 
 export async function lockSeen(tx: Transaction, patientId: string, seen: SeenBooking) {

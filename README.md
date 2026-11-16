@@ -109,6 +109,7 @@ ADMIN_EMAIL=
 ADMIN_PASSWORD=
 APP_PUBLIC_URL=http://localhost:5173
 DEMO_ACCOUNTS_ENABLED=true
+MAINTENANCE_SCHEDULER=false
 MAIL_DRIVER=console
 SMTP_USER=
 SMTP_PASS=
@@ -138,6 +139,8 @@ MAIL_FROM=
 
 Esses e-mails ficam reservados: o cadastro os recusa. Na primeira vez, a especialidade e a unidade do médico são criadas apenas se ainda não existirem, e os horários só entram em uma unidade criada nesse momento; itens que já existem nunca são alterados. Se um desses itens estiver inativo, se o registro já pertencer a outro médico ou se o e-mail já pertencer a uma conta comum, a API registra um aviso no log e segue sem a conta ou o perfil de demonstração.
 
+`MAINTENANCE_SCHEDULER` liga o agendador interno das [rotinas de manutenção](#rotinas-de-manutenção). Quando não é definida, vale `true` em produção e `false` nos demais ambientes.
+
 ## Scripts
 
 | Script | Descrição |
@@ -152,6 +155,7 @@ Esses e-mails ficam reservados: o cadastro os recusa. Na primeira vez, a especia
 | `npm run test:pg` | Roda a suíte que exige um PostgreSQL real (`TEST_DATABASE_URL`) |
 | `npm run db:generate` | Gera uma migration a partir do schema |
 | `npm run db:seed` | Cria os dados de demonstração |
+| `npm run jobs:run maintenance` | Roda as rotinas de manutenção uma vez (usa a versão compilada em `dist/`) |
 
 ## Banco de Dados
 
@@ -169,7 +173,7 @@ Para popular o banco com dados de demonstração (especialidades, unidades Centr
 npm run db:seed
 ```
 
-O seed pode rodar quantas vezes for preciso: só cria o que falta, mantém o que o administrador já cadastrou com o mesmo nome (tipos de exame são procurados pelo código) e não altera contas existentes. Os médicos de exemplo só recebem perfil quando a conta é criada pelo próprio seed. As contas de exemplo recebem senhas aleatórias que não são exibidas.
+O seed pode rodar quantas vezes for preciso: só cria o que falta, mantém o que o administrador já cadastrou com o mesmo nome (tipos de exame são procurados pelo código) e não altera contas existentes. Os médicos de exemplo só recebem perfil quando a conta é criada pelo próprio seed. As contas de exemplo recebem senhas aleatórias que não são exibidas. No fim, o seed recria os agendamentos das contas de demonstração, se a [restauração diária](#rotinas-de-manutenção) ainda não aconteceu no dia; ele usa a mesma trava da restauração, então nunca restaura duas vezes ao mesmo tempo que a manutenção.
 
 Com `NODE_ENV=production`, o seed se recusa a rodar, a menos que `SEED_ALLOW_PRODUCTION=1` esteja definida. O log mostra só o host do banco de destino.
 
@@ -180,6 +184,22 @@ npx drizzle-kit generate --custom --name=nome_da_migration
 ```
 
 Os testes de `npm test` usam um PostgreSQL em memória (PGlite) com as mesmas migrations. O que depende de travas e concorrência reais fica em `test-pg/` e roda com `npm run test:pg`, apontando `TEST_DATABASE_URL` para um banco descartável: a suíte apaga os schemas `public` e `drizzle` desse banco.
+
+## Rotinas de manutenção
+
+`npm run jobs:run maintenance` executa, nesta ordem, cada passo na própria transação, e registra no log só as contagens:
+
+1. Pedidos de consulta pendentes cujo horário chegou passam a `expired`, com evento do sistema, e o paciente recebe a notificação `appointment_expired`.
+2. Exames confirmados cujo horário terminou passam a `completed`.
+3. Consultas confirmadas que começaram há 72 h ou mais sem registro do médico passam a `completed`, com o sistema como autor.
+4. Retenção: apaga sessões vencidas, links de redefinição de senha com mais de 48 h, notificações com mais de 90 dias e registros de auditoria com mais de 180 dias. Agendamentos não têm prazo de exclusão.
+5. Uma vez por dia (no fuso de São Paulo) e só com `DEMO_ACCOUNTS_ENABLED=true`, restaura as contas de demonstração: apaga os agendamentos em que o paciente ou o médico é uma conta protegida (eventos e notificações vão junto) e recria os agendamentos de exemplo da paciente de demonstração com o médico de demonstração: um pedido pendente, uma consulta confirmada, uma do dia (que fica aguardando registro depois do horário), uma concluída, um exame confirmado e um exame concluído, com datas em dias úteis relativas ao dia. Os exames ocupam a menor raia livre, e um horário que um visitante ocupou é pulado. A execução fica registrada na auditoria como `demo.restored`, e é esse registro que impede uma segunda restauração no mesmo dia.
+
+Todos os passos podem rodar de novo sem efeito duplicado, e uma execução segura uma trava consultiva do PostgreSQL (`pg_try_advisory_xact_lock`): se outra execução estiver em andamento, a nova só registra um aviso de que pulou. Os contadores de não lidas das pessoas afetadas são atualizados na hora quando a manutenção roda dentro da API.
+
+Por padrão, em produção, a própria API roda a manutenção (`MAINTENANCE_SCHEDULER`). Para o banco do Neon poder desligar, o agendador aproveita quando o banco já está ativo e roda no mínimo uma vez por dia: roda ao iniciar (o banco acabou de acordar para as migrations) e, a cada 5 min, confere só a memória do processo e roda se a última execução foi há 1 h ou mais e a API usou o banco nos últimos 5 min, ou se a última execução foi há 24 h ou mais. Ao receber `SIGTERM`, o agendador para na hora e o desligamento espera a execução em andamento terminar.
+
+Como alternativa, a manutenção pode rodar como job agendado da Northflank, com a mesma imagem e as mesmas variáveis da API, o comando `node dist/jobs/run.js maintenance` e a frequência `0 * * * *`; nesse caso, defina `MAINTENANCE_SCHEDULER=false` na API. O job é opcional e acorda o banco de hora em hora, o que consome a cota de horas de computação do Neon. Ele termina com código 0 quando conclui ou pula e com 1 quando falha, e as notificações que ele cria aparecem no contador da API quando o cache vence (até 10 min).
 
 ## Docker
 

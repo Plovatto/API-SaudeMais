@@ -1,3 +1,4 @@
+import type { BookingStatus, VisitType } from '../../database/schema/bookings.js';
 import type { ExamKind } from '../../database/schema/catalog.js';
 import { WORKDAYS } from '../../lib/week.js';
 
@@ -138,4 +139,26 @@ export const SAMPLE_PATIENTS: readonly { fullName: string; email: string }[] = [
   { fullName: 'Beatriz Neves', email: 'beatriz.neves@saudemais.test' },
   { fullName: 'Lucas Oliveira', email: 'lucas.oliveira@saudemais.test' },
   { fullName: 'Paulo Silva', email: 'paulo.silva@saudemais.test' },
+];
+
+type Transition = Extract<BookingStatus, 'confirmed' | 'completed'>;
+
+export type DemoBookingSeed = { dayOffset: number; minute: number } & (
+  | { kind: 'appointment'; visitType: VisitType; history: readonly ['pending', ...Transition[]] }
+  | { kind: 'exam'; examType: string; history: readonly ['confirmed', ...Extract<Transition, 'completed'>[]] }
+);
+
+export const DEMO_BOOKINGS: readonly DemoBookingSeed[] = [
+  { kind: 'appointment', visitType: 'routine', dayOffset: 2, minute: 9 * 60, history: ['pending'] },
+  { kind: 'appointment', visitType: 'follow_up', dayOffset: 6, minute: 14 * 60, history: ['pending', 'confirmed'] },
+  { kind: 'appointment', visitType: 'first_visit', dayOffset: 0, minute: 8 * 60, history: ['pending', 'confirmed'] },
+  {
+    kind: 'appointment',
+    visitType: 'first_visit',
+    dayOffset: -14,
+    minute: 10 * 60,
+    history: ['pending', 'confirmed', 'completed'],
+  },
+  { kind: 'exam', examType: 'hemograma', dayOffset: 3, minute: 8 * 60, history: ['confirmed'] },
+  { kind: 'exam', examType: 'glicemia', dayOffset: -10, minute: 8 * 60, history: ['confirmed', 'completed'] },
 ];

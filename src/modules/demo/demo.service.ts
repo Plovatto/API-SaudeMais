@@ -1,10 +1,15 @@
 import { randomBytes } from 'node:crypto';
 import type { Clock } from '../../lib/clock.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
+import { CLINIC_TIME_ZONE, DAY, HOUR, instantOfWallClock, MINUTE, startOfDayIn, wallClockIn } from '../../lib/time.js';
+import { WORKDAYS } from '../../lib/week.js';
 import type { DoctorScheduleService } from '../doctor-schedule/doctor-schedule.service.js';
-import { DEMO_DOCTOR, type SeedAccount } from '../users/user.demo.js';
+import { newPublicCode } from '../exam-bookings/exam-bookings.code.js';
+import type { NotificationsService } from '../notifications/notifications.service.js';
+import { DEMO_DOCTOR, DEMO_PATIENT, type SeedAccount } from '../users/user.demo.js';
 import { SeedAccountConflictError, type UserService } from '../users/user.service.js';
 import {
+  DEMO_BOOKINGS,
   DEMO_DOCTOR_PROFILE,
   EXAM_TYPES,
   OFFERS,
@@ -12,11 +17,24 @@ import {
   SAMPLE_PATIENTS,
   SPECIALTIES,
   UNITS,
+  type DemoBookingSeed,
   type DoctorProfileTarget,
 } from './demo.data.js';
-import type { DemoRepository } from './demo.repository.js';
+import type { DemoBooking, DemoRepository, RestoredDemo } from './demo.repository.js';
 
 const randomPassword = () => randomBytes(24).toString('base64url');
+
+type DemoDoctor = NonNullable<Awaited<ReturnType<DemoRepository['demoDoctor']>>>;
+
+const SYSTEM = { actorType: 'system' as const, actorUserId: null };
+
+function demoStart(now: Date, { dayOffset, minute }: DemoBookingSeed): Date {
+  const step = dayOffset < 0 ? -DAY : DAY;
+  const wallNow = wallClockIn(CLINIC_TIME_ZONE, now);
+  let day = wallNow - (wallNow % DAY) + dayOffset * DAY;
+  while (!(WORKDAYS as readonly number[]).includes(new Date(day).getUTCDay())) day += step;
+  return instantOfWallClock(CLINIC_TIME_ZONE, day + minute * MINUTE);
+}
 
 export class DemoService {
   constructor(
@@ -24,6 +42,7 @@ export class DemoService {
     private readonly users: UserService,
     private readonly schedules: DoctorScheduleService,
     private readonly clock: Clock,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async ensure(): Promise<string[]> {
@@ -64,6 +83,71 @@ export class DemoService {
     }
     for (const patient of SAMPLE_PATIENTS) await this.createSampleAccount(patient);
     return warnings;
+  }
+
+  async restore(): Promise<RestoredDemo | undefined> {
+    const now = this.clock.now();
+    const patientId = await this.repository.userIdByEmail(DEMO_PATIENT.email);
+    const doctor = await this.repository.demoDoctor(DEMO_DOCTOR.email);
+    if (!patientId || !doctor) return undefined;
+    const demoBookings: DemoBooking[] = [];
+    for (const seed of DEMO_BOOKINGS) {
+      const demoBooking = await this.demoBooking(seed, patientId, doctor, now);
+      if (demoBooking) demoBookings.push(demoBooking);
+    }
+    const restoration = await this.repository.restoreBookings(startOfDayIn(CLINIC_TIME_ZONE, now), now, demoBookings);
+    if (!restoration) return undefined;
+    this.notifications.forget(restoration.recipients);
+    return restoration.restored;
+  }
+
+  private async demoBooking(
+    seed: DemoBookingSeed,
+    patientId: string,
+    doctor: DemoDoctor,
+    now: Date,
+  ): Promise<DemoBooking | undefined> {
+    const startsAt = demoStart(now, seed);
+    const [initial, ...transitions] = seed.history;
+    const offer = seed.kind === 'exam' ? await this.repository.examOffer(doctor.unitId, seed.examType) : undefined;
+    const endsAt = new Date(startsAt.getTime() + (offer?.durationMin ?? doctor.durationMin) * MINUTE);
+    const columns = { patientId, unitId: doctor.unitId, startsAt, endsAt, status: transitions.at(-1) ?? initial };
+    let placement: Pick<DemoBooking, 'booking' | 'exam'>;
+    if (seed.kind === 'appointment') {
+      const { visitType } = seed;
+      placement = {
+        booking: { ...columns, kind: 'appointment', doctorId: doctor.id, specialtyId: doctor.specialtyId, visitType },
+      };
+    } else if (offer) {
+      const { examTypeId, capacity } = offer;
+      placement = {
+        booking: { ...columns, kind: 'exam', publicCode: newPublicCode() },
+        exam: { examTypeId, capacity },
+      };
+    } else {
+      return undefined;
+    }
+    const actor = seed.kind === 'appointment' ? { actorType: 'doctor' as const, actorUserId: doctor.id } : SYSTEM;
+    const createdAt = Math.min(now.getTime() - HOUR, startsAt.getTime() - 7 * DAY);
+    return {
+      ...placement,
+      events: [
+        {
+          eventType: 'created',
+          actorType: 'patient',
+          actorUserId: patientId,
+          toStatus: initial,
+          createdAt: new Date(createdAt),
+        },
+        ...transitions.map((status, index) => ({
+          ...actor,
+          eventType: status,
+          fromStatus: seed.history[index],
+          toStatus: status,
+          createdAt: status === 'completed' ? endsAt : new Date(createdAt + (index + 1) * 10 * MINUTE),
+        })),
+      ],
+    };
   }
 
   private async createSampleAccount({ fullName, email }: Pick<SeedAccount, 'fullName' | 'email'>) {

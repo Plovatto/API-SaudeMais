@@ -1,8 +1,14 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
+import { auditLogs } from '../../database/schema/audit-logs.js';
+import { bookingEvents, bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
+import { notifications } from '../../database/schema/notifications.js';
 import { userRoles, users } from '../../database/schema/users.js';
+import { MAINTENANCE_LOCK } from '../../jobs/maintenance.js';
+import { freeLanes, lanesInUse } from '../exam-bookings/exam-bookings.repository.js';
+import type { Recipient } from '../notifications/notifications.service.js';
 import type { ExamTypeSeed, SpecialtySeed, UnitSeed } from './demo.data.js';
 
 export interface SpecialtyRef {
@@ -24,6 +30,24 @@ export interface DoctorProfileSeed {
   registryUf: string;
   now: Date;
 }
+
+export interface DemoBooking {
+  booking: Omit<typeof bookings.$inferInsert, 'examTypeId' | 'lane'>;
+  exam?: { examTypeId: string; capacity: number };
+  events: Omit<typeof bookingEvents.$inferInsert, 'bookingId'>[];
+}
+
+export interface RestoredDemo {
+  deleted: number;
+  created: number;
+}
+
+interface Restoration {
+  restored: RestoredDemo;
+  recipients: Recipient[];
+}
+
+const RESTORE_ACTION = 'demo.restored';
 
 export class DemoRepository {
   constructor(private readonly db: Database) {}
@@ -80,6 +104,74 @@ export class DemoRepository {
         .values({ userId, specialtyId: specialty.id, council: specialty.council, unitId, registryNumber, registryUf })
         .onConflictDoNothing({ target: doctorProfiles.userId });
       await tx.insert(userRoles).values({ userId, role: 'doctor', grantedAt: now }).onConflictDoNothing();
+    });
+  }
+
+  async demoDoctor(email: string) {
+    const [row] = await this.db
+      .select({
+        id: users.id,
+        specialtyId: doctorProfiles.specialtyId,
+        unitId: doctorProfiles.unitId,
+        durationMin: specialties.appointmentDurationMin,
+      })
+      .from(users)
+      .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
+      .innerJoin(specialties, eq(specialties.id, doctorProfiles.specialtyId))
+      .where(eq(users.email, email));
+    return row;
+  }
+
+  async examOffer(unitId: string, code: string) {
+    const [row] = await this.db
+      .select({
+        examTypeId: examTypes.id,
+        durationMin: examTypes.durationMin,
+        capacity: unitExamOffers.capacityPerSlot,
+      })
+      .from(unitExamOffers)
+      .innerJoin(examTypes, eq(examTypes.id, unitExamOffers.examTypeId))
+      .where(and(eq(unitExamOffers.unitId, unitId), eq(examTypes.code, code)));
+    return row;
+  }
+
+  restoreBookings(since: Date, now: Date, demoBookings: DemoBooking[]): Promise<Restoration | undefined> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${MAINTENANCE_LOCK}, 1)`);
+      if (
+        (await tx.$count(auditLogs, and(eq(auditLogs.action, RESTORE_ACTION), gte(auditLogs.createdAt, since)))) > 0
+      ) {
+        return undefined;
+      }
+      const protectedIds = tx.select({ id: users.id }).from(users).where(eq(users.isProtected, true));
+      const demoScope = or(inArray(bookings.patientId, protectedIds), inArray(bookings.doctorId, protectedIds));
+      const recipients = await tx
+        .delete(notifications)
+        .where(inArray(notifications.bookingId, tx.select({ id: bookings.id }).from(bookings).where(demoScope)))
+        .returning({ userId: notifications.userId, audienceRole: notifications.audienceRole });
+      const deleted = await tx.delete(bookings).where(demoScope).returning({ id: bookings.id });
+      let created = 0;
+      for (const { booking, exam, events } of demoBookings) {
+        const { startsAt, endsAt } = booking;
+        const offer = exam && { unitId: booking.unitId, examTypeId: exam.examTypeId };
+        const [lane] = offer
+          ? freeLanes(exam.capacity, await lanesInUse(tx, offer, { from: startsAt, to: endsAt }), startsAt, endsAt)
+          : [];
+        if (offer && lane === undefined) continue;
+        const [inserted] = await tx
+          .insert(bookings)
+          .values({ ...booking, ...offer, lane })
+          .onConflictDoNothing()
+          .returning({ id: bookings.id });
+        if (!inserted) continue;
+        created += 1;
+        await tx.insert(bookingEvents).values(events.map((event) => ({ ...event, bookingId: inserted.id })));
+      }
+      const restored = { deleted: deleted.length, created };
+      await tx
+        .insert(auditLogs)
+        .values({ actorType: 'system', action: RESTORE_ACTION, metadata: restored, createdAt: now });
+      return { restored, recipients };
     });
   }
 }

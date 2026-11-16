@@ -30,6 +30,7 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  MAINTENANCE_SCHEDULER: z.enum(['true', 'false']).optional(),
   MAIL_DRIVER: z.enum(['console', 'smtp']).default('console'),
   SMTP_HOST: z.string().min(1).default('smtp.gmail.com'),
   SMTP_PORT: integer(1, 65535, 465),
@@ -51,6 +52,7 @@ export interface Env {
   ADMIN_PASSWORD?: string | undefined;
   APP_PUBLIC_URL: string;
   DEMO_ACCOUNTS_ENABLED: boolean;
+  MAINTENANCE_SCHEDULER: boolean;
   MAIL_DRIVER: 'console' | 'smtp';
   SMTP_HOST: string;
   SMTP_PORT: number;
@@ -100,6 +102,7 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     ...parsed.data,
     CORS_ORIGIN: new URL(parsed.data.CORS_ORIGIN ?? DEV_CORS_ORIGIN).origin,
     APP_PUBLIC_URL: (parsed.data.APP_PUBLIC_URL ?? DEV_CORS_ORIGIN).replace(/\/+$/, ''),
+    MAINTENANCE_SCHEDULER: (parsed.data.MAINTENANCE_SCHEDULER ?? String(production)) === 'true',
   };
 }
 

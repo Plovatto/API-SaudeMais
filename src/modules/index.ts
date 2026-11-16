@@ -1,5 +1,7 @@
+import type { Env } from '../config/env.js';
 import type { Database } from '../database/pg-client.js';
-import type { Clock } from '../lib/clock.js';
+import { createMaintenance } from '../jobs/maintenance.js';
+import { systemClock, type Clock } from '../lib/clock.js';
 import type { MailQueue } from '../mail/index.js';
 import { createAdminHomeModule } from './admin-home/index.js';
 import { createAdminUsersModule } from './admin-users/index.js';
@@ -46,6 +48,7 @@ export function createModules(deps: ModulesDeps) {
     users: users.service,
     schedules: doctorSchedule.service,
     clock: deps.clock,
+    notifications: notifications.service,
   });
   const doctors = createDoctorsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const appointments = createAppointmentsModule({
@@ -74,6 +77,13 @@ export function createModules(deps: ModulesDeps) {
     notifications: notifications.service,
   });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
+  const maintenance = createMaintenance({
+    db: deps.db,
+    clock: deps.clock,
+    bookings: bookings.service,
+    demo: demo.service,
+    notifications: notifications.service,
+  });
   return {
     users,
     passwordReset,
@@ -85,6 +95,7 @@ export function createModules(deps: ModulesDeps) {
     doctors,
     appointments,
     notifications,
+    maintenance,
     routers: [
       users.router,
       passwordReset.router,
@@ -100,4 +111,18 @@ export function createModules(deps: ModulesDeps) {
       notifications.routerFor(users.requireAuth),
     ],
   };
+}
+
+export function createModulesFromEnv(
+  config: Pick<Env, 'APP_PUBLIC_URL' | 'SESSION_TTL_HOURS' | 'SESSION_REMEMBER_DAYS'>,
+  db: Database,
+  mail: MailQueue,
+) {
+  return createModules({
+    db,
+    mail,
+    clock: systemClock,
+    appUrl: config.APP_PUBLIC_URL,
+    policy: { idleHours: config.SESSION_TTL_HOURS, maxDays: config.SESSION_REMEMBER_DAYS, maxSessionsPerUser: 10 },
+  });
 }

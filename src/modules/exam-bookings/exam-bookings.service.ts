@@ -20,7 +20,13 @@ import type {
   ExamBooking,
 } from './exam-bookings.model.js';
 import type { RescheduleInput } from '../appointments/appointments.model.js';
-import type { ExamBookingsRepository, ExamSlotContext, LaneUse, Offer } from './exam-bookings.repository.js';
+import {
+  freeLanes,
+  lanesInUse,
+  type ExamBookingsRepository,
+  type ExamSlotContext,
+  type Offer,
+} from './exam-bookings.repository.js';
 
 const exclusionConflicts = {
   bookings_exam_lane_no_overlap_excl: examConflicts.noCapacity,
@@ -28,11 +34,6 @@ const exclusionConflicts = {
 };
 
 const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
-
-function freeLanes(capacity: number, lanes: LaneUse[], startsAt: Date, endsAt: Date): number[] {
-  const taken = new Set(lanes.filter((use) => use.startsAt < endsAt && startsAt < use.endsAt).map((use) => use.lane));
-  return Array.from({ length: capacity }, (_, index) => index + 1).filter((lane) => !taken.has(lane));
-}
 
 export class ExamBookingsService {
   constructor(
@@ -145,7 +146,7 @@ export class ExamBookingsService {
     if (!slot) throw unprocessableField(outsideExamAvailability);
     const endsAt = new Date(slot.endsAt);
     const except = current && exceptOwn(current.patientId, current.id);
-    const lanes = await this.repository.lanesInUse(tx, offer, { from: startsAt, to: endsAt }, except);
+    const lanes = await lanesInUse(tx, offer, { from: startsAt, to: endsAt }, except);
     const free = freeLanes(context.capacity, lanes, startsAt, endsAt);
     const lane = current?.lane && free.includes(current.lane) ? current.lane : free[0];
     if (lane === undefined) throw conflictError(examConflicts.noCapacity);

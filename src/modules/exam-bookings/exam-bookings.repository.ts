@@ -63,6 +63,33 @@ async function slotFrame(db: Pick<Database, 'select'>, unitId: string, sizing: S
 const examWith = (id: string, patientId: string) =>
   and(eq(bookings.id, id), eq(bookings.kind, 'exam'), eq(bookings.patientId, patientId));
 
+export function lanesInUse(
+  db: Pick<Database, 'select'>,
+  { unitId, examTypeId }: Offer,
+  { from, to }: Period,
+  except?: SQL,
+): Promise<LaneUse[]> {
+  return db
+    .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt, lane: sql<number>`${bookings.lane}` })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.unitId, unitId),
+        eq(bookings.examTypeId, examTypeId),
+        eq(bookings.kind, 'exam'),
+        eq(bookings.status, 'confirmed'),
+        lt(bookings.startsAt, to),
+        gt(bookings.endsAt, from),
+        except,
+      ),
+    );
+}
+
+export function freeLanes(capacity: number, lanes: LaneUse[], startsAt: Date, endsAt: Date): number[] {
+  const taken = new Set(lanes.filter((use) => use.startsAt < endsAt && startsAt < use.endsAt).map((use) => use.lane));
+  return Array.from({ length: capacity }, (_, index) => index + 1).filter((lane) => !taken.has(lane));
+}
+
 export class ExamBookingsRepository {
   constructor(private readonly db: Database) {}
 
@@ -89,7 +116,7 @@ export class ExamBookingsRepository {
       if (!sizing) return undefined;
       return {
         ...(await slotFrame(tx, offer.unitId, sizing)),
-        lanes: await this.lanesInUse(tx, offer, period, except),
+        lanes: await lanesInUse(tx, offer, period, except),
       };
     }, readSnapshot);
   }
@@ -108,23 +135,6 @@ export class ExamBookingsRepository {
       .for('no key update');
     if (!unit?.isActive || !examType?.isActive || !offer?.isActive) return undefined;
     return slotFrame(tx, unitId, { capacity: offer.capacity, durationMin: examType.durationMin });
-  }
-
-  lanesInUse(tx: Transaction, { unitId, examTypeId }: Offer, { from, to }: Period, except?: SQL): Promise<LaneUse[]> {
-    return tx
-      .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt, lane: sql<number>`${bookings.lane}` })
-      .from(bookings)
-      .where(
-        and(
-          eq(bookings.unitId, unitId),
-          eq(bookings.examTypeId, examTypeId),
-          eq(bookings.kind, 'exam'),
-          eq(bookings.status, 'confirmed'),
-          lt(bookings.startsAt, to),
-          gt(bookings.endsAt, from),
-          except,
-        ),
-      );
   }
 
   async create(tx: Transaction, exam: NewExam, attempt = 1): Promise<string> {

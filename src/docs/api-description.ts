@@ -102,7 +102,16 @@ Para testar sem criar conta, entre com uma das contas de demonstração. As cred
 - Paciente: \`paciente@saudemais.test\`, senha \`paciente-demo-123\`.
 - Médico, que também é paciente e passa pela escolha de perfil: \`medico@saudemais.test\`, senha \`medico-demo-123\`.
 
-Os dados delas são de exemplo, e elas não podem ser alteradas nem desativadas. Esses e-mails não podem ser usados em um cadastro novo.
+Os dados delas são de exemplo, e elas não podem ser alteradas nem desativadas. Esses e-mails não podem ser usados em um cadastro novo. Uma vez por dia, os agendamentos delas voltam ao exemplo inicial.
+
+## Rotinas automáticas
+
+Uma rotina de manutenção grava o que o tempo já decidiu. Ela aproveita quando o banco já está ativo, no máximo de hora em hora, e roda no mínimo uma vez por dia; por isso, uma mudança abaixo pode levar até um dia para aparecer:
+
+- Pedido de consulta \`pending\` cujo horário chegou passa a \`expired\`, e o paciente recebe a notificação \`appointment_expired\`. Antes disso, as listas já o mostram como \`expired\`.
+- Exame \`confirmed\` cujo horário terminou passa a \`completed\`.
+- Consulta \`confirmed\` que começou há 72 horas sem registro do médico passa a \`completed\`, com o sistema como autor no histórico.
+- Sessões vencidas são apagadas, assim como links de redefinição de senha com mais de 48 horas, notificações com mais de 90 dias e registros de auditoria com mais de 180 dias.
 
 ## Datas
 

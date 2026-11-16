@@ -9,7 +9,8 @@ import type { Area, NotificationView } from './notifications.model.js';
 import type { NewNotification, NotificationsRepository } from './notifications.repository.js';
 
 type Notice = Pick<NewNotification, 'type' | 'params' | 'bookingId'>;
-type Delivery = Notice & Pick<NewNotification, 'userId' | 'audienceRole'>;
+export type Recipient = Pick<NewNotification, 'userId' | 'audienceRole'>;
+export type Delivery = Notice & Recipient;
 
 const keyOf = (userId: string, role: Role) => `${userId}:${role}`;
 
@@ -27,9 +28,11 @@ export class NotificationsService {
       tx,
       deliveries.map((delivery) => ({ ...delivery, createdAt })),
     );
-    return () => {
-      for (const { userId, audienceRole } of deliveries) this.counter.delete(keyOf(userId, audienceRole));
-    };
+    return () => this.forget(deliveries);
+  }
+
+  forget(recipients: Recipient[]): void {
+    for (const { userId, audienceRole } of recipients) this.counter.delete(keyOf(userId, audienceRole));
   }
 
   async notifyAdmins(tx: Transaction, notice: Notice): Promise<AfterCommit> {

@@ -3,21 +3,35 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { runMigrations } from './database/migrate.js';
 import { createDb, createPool } from './database/pg-client.js';
-import { systemClock } from './lib/clock.js';
 import { createMailer, MailQueue } from './mail/index.js';
+import { MAINTENANCE_SCHEDULE, startScheduler } from './jobs/scheduler.js';
 import { createShutdown } from './lib/graceful-shutdown.js';
-import { createModules } from './modules/index.js';
+import { systemClock } from './lib/clock.js';
+import { createModulesFromEnv } from './modules/index.js';
 
 const SHUTDOWN_DEADLINE_MS = 20_000;
 
 const pool = createPool(env.DATABASE_URL);
+let lastDbActivityAt = 0;
+pool.on('acquire', () => {
+  lastDbActivityAt = systemClock.now().getTime();
+});
 
 const mail = new MailQueue(createMailer(env, logger), logger);
-const shutdown = createShutdown({ pool, flush: () => mail.drain(), timeoutMs: 8_000 });
+let scheduler: ReturnType<typeof startScheduler> | undefined;
+const shutdown = createShutdown({
+  pool,
+  flush: async () => {
+    await scheduler?.settled();
+    await mail.drain();
+  },
+  timeoutMs: 8_000,
+});
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     logger.info(`${signal} received, shutting down`);
+    scheduler?.stop();
     setTimeout(() => {
       logger.fatal('Shutdown deadline exceeded');
       process.exit(1);
@@ -45,17 +59,7 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-const { users, demo, routers } = createModules({
-  mail,
-  appUrl: env.APP_PUBLIC_URL,
-  db: createDb(pool),
-  clock: systemClock,
-  policy: {
-    idleHours: env.SESSION_TTL_HOURS,
-    maxDays: env.SESSION_REMEMBER_DAYS,
-    maxSessionsPerUser: 10,
-  },
-});
+const { users, demo, maintenance, routers } = createModulesFromEnv(env, createDb(pool), mail);
 
 try {
   await runMigrations(pool);
@@ -80,6 +84,15 @@ const server = app.listen(env.PORT, () => {
   logger.info(`CORS origin: ${env.CORS_ORIGIN}`);
 });
 shutdown.attach(server);
+
+if (env.MAINTENANCE_SCHEDULER) {
+  scheduler = startScheduler(() => maintenance.runExclusive({ restoreDemo: env.DEMO_ACCOUNTS_ENABLED }), {
+    schedule: MAINTENANCE_SCHEDULE,
+    clock: systemClock,
+    lastActivityAt: () => lastDbActivityAt,
+    logger,
+  });
+}
 
 server.on('error', (err) => {
   logger.fatal({ err }, 'Server failed to start');
