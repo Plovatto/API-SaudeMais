@@ -106,3 +106,6 @@ export function notFoundResponse(message: string) {
 export function nullableRef<T extends z.ZodType>(schema: T) {
   return z.union([schema, z.null()]);
 }
+
+export const countSchema = (description: string, example: number) =>
+  z.int().nonnegative().openapi({ description, example });

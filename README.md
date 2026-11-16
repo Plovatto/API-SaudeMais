@@ -23,6 +23,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Reagendamento de consultas e exames pelo paciente, na mesma linha e em uma transação, até o limite de reagendamentos e, se confirmado, fora da janela da política: a consulta volta a pendente e avisa o médico, o exame continua confirmado e mantém o lugar quando livre, e a vaga antiga só é liberada se a nova for garantida
 - Desativar uma conta ou remover o perfil médico cancela os agendamentos ativos futuros e avisa a outra parte; especialidade, unidade, tipo de exame ou oferta com agendamento futuro não podem ser desativados, e a capacidade da oferta não fica abaixo de um lugar ocupado por exame que ainda não terminou
 - Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
+- Relatórios do administrador por período no fuso de São Paulo: totais de consultas e exames pela situação atual, aguardando registro à parte, cancelamentos tardios e por autor, taxa de faltas, série diária (ou semanal acima de 62 dias) e especialidades e exames mais procurados, só com números e sem as contas de demonstração
 - Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
 - Senhas com scrypt, login em tempo constante e limites de tentativas por IP e por e-mail
 - Banco PostgreSQL com migrations em SQL aplicadas ao iniciar
@@ -262,6 +263,7 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | PUT | `/api/admin/units/{id}/exam-offers/{examTypeId}` | Oferece um exame na unidade (admin) |
 | GET, PUT | `/api/admin/policy` | Política de agendamento (admin) |
 | GET | `/api/admin/home` | Números do painel do administrador, com as consultas de hoje |
+| GET | `/api/admin/reports` | Totais de consultas e exames por situação no período `from`–`to` (padrão: últimos 30 dias; máximo 366), com série diária ou semanal (admin) |
 | GET | `/api/admin/users` | Lista e busca usuários (admin) |
 | GET, PATCH | `/api/admin/users/{id}` | Vê e altera nome e telefone (admin) |
 | GET | `/api/admin/users/{id}/deactivation-impact` | Agendamentos afetados por desativar (admin) |

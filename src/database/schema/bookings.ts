@@ -153,5 +153,8 @@ export const notActiveFuture = (now: Date): SQL => sql`not (${isActiveFuture(now
 export const effectiveStatus = (now: Date) =>
   sql<BookingStatus>`case when ${bookings.status} = 'pending' and ${bookings.startsAt} <= ${now} then 'expired' else ${bookings.status} end`;
 
+export const isAwaitingRecord = (now: Date): SQL =>
+  sql`${bookings.status} = 'confirmed' and ${bookings.startsAt} <= ${now}`;
+
 export const isLateCancellation = (now: Date): SQL =>
   sql`${bookings.status} = 'confirmed' and ${bookings.startsAt} > ${now} and ${bookings.startsAt} - make_interval(hours => (select case when ${bookings.kind} = 'exam' then ${settings.examLateWindowHours} else ${settings.appointmentLateWindowHours} end from ${settings})) < ${now}`;
