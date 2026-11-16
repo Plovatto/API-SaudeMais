@@ -34,27 +34,44 @@ export const slot = (date: string, time: string) => `${date}T${time}:00.000Z`;
 
 export const ids = (items: Item[]) => items.map((item) => item.id);
 
+export interface Attending {
+  patient: string;
+  doctor: string;
+  owner: Doctor;
+}
+
 export function agendaHelpers(clinic: () => Clinic) {
   const app = () => clinic().app;
+  const book = async (token: string, doctor: Doctor, startsAt: string, notes?: string): Promise<Item> => {
+    const response = await request(app())
+      .post('/api/appointments')
+      .set(as(token))
+      .send({ doctorId: doctor.id, specialtyId: doctor.specialty.id, visitType: 'routine', startsAt, notes })
+      .expect(201);
+    return response.body as Item;
+  };
+  const confirm = (token: string, id: string, body: Record<string, unknown>) =>
+    request(app()).post(`/api/appointments/${id}/confirm`).set(as(token)).send(body);
+  const moveTo = (id: string, startsAt: string) =>
+    clinic().db.execute(sql`
+      update bookings set starts_at = ${startsAt}::timestamptz, ends_at = ${startsAt}::timestamptz + (ends_at - starts_at)
+      where id = ${id}
+    `);
   return {
-    book: async (token: string, doctor: Doctor, startsAt: string, notes?: string): Promise<Item> => {
-      const response = await request(app())
-        .post('/api/appointments')
-        .set(as(token))
-        .send({ doctorId: doctor.id, specialtyId: doctor.specialty.id, visitType: 'routine', startsAt, notes })
-        .expect(201);
-      return response.body as Item;
-    },
+    book,
     list: (token: string, query: Record<string, string | number> = {}) =>
       request(app()).get('/api/doctor/appointments').query(query).set(as(token)),
-    confirm: (token: string, id: string, body: Record<string, unknown>) =>
-      request(app()).post(`/api/appointments/${id}/confirm`).set(as(token)).send(body),
+    confirm,
     cancel: (token: string, id: string, startsAt: string) =>
       request(app()).post(`/api/appointments/${id}/cancel`).set(as(token)).send({ startsAt }).expect(200),
-    moveTo: (id: string, startsAt: string) =>
-      clinic().db.execute(sql`
-        update bookings set starts_at = ${startsAt}::timestamptz, ends_at = ${startsAt}::timestamptz + (ends_at - starts_at)
-        where id = ${id}
-      `),
+    moveTo,
+    started: async ({ patient, doctor, owner }: Attending, startsAt: string, at: string): Promise<Item> => {
+      const booked = await book(patient, owner, startsAt);
+      await confirm(doctor, booked.id, { startsAt }).expect(200);
+      await moveTo(booked.id, at);
+      return { ...booked, startsAt: at };
+    },
+    record: (token: string, action: string, id: string, body: Record<string, unknown>) =>
+      request(app()).post(`/api/appointments/${id}/${action}`).set(as(token)).send(body),
   };
 }

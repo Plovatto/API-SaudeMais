@@ -1,16 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import {
-  agendaHelpers,
-  ids,
-  NO_ACTIONS,
-  RECORDABLE,
-  slot,
-  UNKNOWN_ID,
-  type AgendaPage,
-  type Item,
-} from './support/agenda.js';
+import { agendaHelpers, ids, NO_ACTIONS, RECORDABLE, slot, UNKNOWN_ID, type AgendaPage } from './support/agenda.js';
 import { createDoctor, setupClinic, type Clinic, type Doctor } from './support/doctors.js';
 import { as, signUp, START } from './support/users.js';
 
@@ -23,7 +14,7 @@ beforeAll(async () => {
   context = await setupClinic();
 }, 60_000);
 
-const { book, list, confirm, cancel, moveTo } = agendaHelpers(() => context);
+const { book, list, confirm, cancel, moveTo, record, started: startedFor } = agendaHelpers(() => context);
 
 describe('POST /api/appointments/:id/complete and /no-show', () => {
   let doctor: string;
@@ -39,15 +30,7 @@ describe('POST /api/appointments/:id/complete and /no-show', () => {
     other = await createDoctor(context, 'registro.outro@email.com', 'Dr. Registro Outro', '700007');
   });
 
-  const record = (token: string, action: string, id: string, body: Record<string, unknown>) =>
-    request(context.app).post(`/api/appointments/${id}/${action}`).set(as(token)).send(body);
-
-  async function started(startsAt: string, at: string): Promise<Item> {
-    const booked = await book(patient, owner, startsAt);
-    await confirm(doctor, booked.id, { startsAt }).expect(200);
-    await moveTo(booked.id, at);
-    return { ...booked, startsAt: at };
-  }
+  const started = (startsAt: string, at: string) => startedFor({ patient, doctor, owner }, startsAt, at);
 
   const eventsOf = async (id: string) =>
     (
