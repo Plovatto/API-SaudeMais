@@ -1,6 +1,5 @@
-import { Writable } from 'node:stream';
 import { createApp, type AppConfig } from '@/app.js';
-import { createLogger } from '@/config/create-logger.js';
+import { captureLogger } from './capture-logger.js';
 import type { Database } from '@/database/pg-client.js';
 import { systemClock } from '@/lib/clock.js';
 import { MailQueue } from '@/mail/index.js';
@@ -19,14 +18,7 @@ const noDatabase = new Proxy(
 ) as Database;
 
 export function buildTestApp(overrides: Partial<AppConfig> = {}, deps: Partial<ModulesDeps> = {}) {
-  const logLines: string[] = [];
-  const destination = new Writable({
-    write(chunk: Buffer, _encoding, callback) {
-      logLines.push(chunk.toString());
-      callback();
-    },
-  });
-  const logger = createLogger({ NODE_ENV: 'test', LOG_LEVEL: 'info' }, destination);
+  const { logger, lines: logLines } = captureLogger();
   const config: AppConfig = {
     NODE_ENV: 'test',
     CORS_ORIGIN: TEST_CORS_ORIGIN,

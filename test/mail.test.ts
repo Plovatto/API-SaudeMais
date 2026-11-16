@@ -1,7 +1,6 @@
-import { Writable } from 'node:stream';
 import nodemailer from 'nodemailer';
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger } from '@/config/create-logger.js';
+import { captureLogger } from './support/capture-logger.js';
 import { ConsoleMailer } from '@/mail/console-mailer.js';
 import { createMailer, MailQueue, type MailMessage } from '@/mail/index.js';
 import { SmtpMailer } from '@/mail/smtp-mailer.js';
@@ -13,17 +12,6 @@ const message: MailMessage = {
   html: '<p>Use o link para redefinir a senha.</p>',
   text: 'Use o link para redefinir a senha.',
 };
-
-function captureLogger() {
-  const lines: string[] = [];
-  const destination = new Writable({
-    write(chunk: Buffer, _encoding, callback) {
-      lines.push(chunk.toString());
-      callback();
-    },
-  });
-  return { logger: createLogger({ NODE_ENV: 'test', LOG_LEVEL: 'info' }, destination), lines };
-}
 
 describe('MailQueue', () => {
   it('sends outside the request and lets callers wait for delivery', async () => {
