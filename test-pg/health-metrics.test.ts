@@ -77,7 +77,7 @@ describe('health_metrics on PostgreSQL', () => {
       constraint: 'health_metrics_pkey',
     });
     await expect(pool.query('delete from bookings where id = $1', [appointmentId])).rejects.toMatchObject({
-      code: '23503',
+      code: '23001',
       constraint: 'health_metrics_booking_kind_fkey',
     });
   });
