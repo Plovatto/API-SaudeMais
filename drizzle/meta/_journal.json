@@ -92,6 +92,20 @@
       "when": 1794666687265,
       "tag": "0012_bookings_no_overlap",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794791117869,
+      "tag": "0013_lab_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794791120640,
+      "tag": "0014_exam_result_versions_immutable",
+      "breakpoints": true
     }
   ]
 }
