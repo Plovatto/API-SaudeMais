@@ -5,218 +5,265 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22%20%7C%2024%20%7C%2026-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 
-API do Saúde+, sistema de agendamento de consultas e exames com três perfis: paciente, médico e administrador. Desenvolvida com Node.js, TypeScript e Express.
+API do Saúde+, um sistema de agendamento de consultas e exames com três perfis: o **paciente** agenda consultas e exames, acompanha o histórico, vê os resultados e recebe avisos; o **médico** define a agenda semanal, confirma pedidos e registra a conclusão ou a falta, com pressão e peso; o **administrador** cuida de usuários, perfis, catálogo, política de agendamento, integrações e relatórios. Os resultados de exame chegam por uma integração com um laboratório parceiro, simulada por um job diário. É um projeto de portfólio, com Node.js, TypeScript, Express e PostgreSQL.
 
-> Projeto em desenvolvimento. O andamento está no [quadro do projeto](https://github.com/users/Plovatto/projects/2).
+| | |
+|---|---|
+| **Aplicação no ar** | https://plovatto.github.io/SaudeMais/ |
+| **Documentação interativa da API** | https://p01--saudemais--pgj2h2jjxzb4.code.run/docs/ |
+| **Repositório do front-end** | [Plovatto/SaudeMais](https://github.com/Plovatto/SaudeMais) |
+| **Quadro do projeto** | [Saúde+](https://github.com/users/Plovatto/projects/2) |
 
-**Documentação interativa no ar:** https://p01--saudemais--pgj2h2jjxzb4.code.run/docs/ · **Front-end:** [Plovatto/SaudeMais](https://github.com/Plovatto/SaudeMais)
+**Sumário:** [Funcionalidades](#funcionalidades) · [Decisões técnicas](#decisões-técnicas) · [Arquitetura](#arquitetura) · [Modelo de dados](#modelo-de-dados) · [Como executar](#como-executar-localmente) · [Deploy](#deploy) · [API](#api) · [Laboratório](#integração-com-o-laboratório) · [Contas de demonstração](#contas-de-demonstração) · [Segurança e LGPD](#segurança-e-lgpd) · [Testes](#testes) · [Fluxo de trabalho](#fluxo-de-trabalho)
 
 ## Funcionalidades
 
-- Cadastro, login e logout com sessão por token opaco, guardado no banco só como hash e validado a partir de um cache em memória de 5 min, limpo no mesmo processo a cada logout, troca de senha, desativação ou mudança de perfil
-- Perfis de paciente, médico e administrador, com cada rota restrita ao perfil exigido
-- Lista de médicos com busca e vagas livres por período, calculadas pela agenda do médico, pelo horário da unidade e pela política de agendamento, no fuso de São Paulo
-- Pedido de consulta só em vaga gerada, com exclusion constraints que impedem horário duplicado para o médico e para o paciente, mesmo com pedidos simultâneos, e limite de 5 agendamentos ativos por paciente
-- Agendamento de exames nas vagas geradas pelo horário da unidade, com os lugares restantes de cada vaga, capacidade garantida por raias e exclusion constraint mesmo com pedidos simultâneos, código público para apresentar na unidade e cancelamento pelo paciente
-- Início e agendamentos do paciente nas abas agendados e realizados, com filtros, totais e as ações permitidas calculadas pela política; cancelamento pelo paciente ou pelo médico, condicionado ao horário que a tela mostrava, com aviso à outra parte e marcação de cancelamento tardio
-- Início e agenda do médico nas abas a confirmar, confirmadas e histórico, com o resumo de hoje no fuso de São Paulo, totais e as ações permitidas; confirmação pelo médico condicionada ao horário que a tela mostrava, com aviso ao paciente, e conclusão ou registro de falta das consultas que já começaram e aguardam registro
-- Pressão e peso registrados pelo médico ao concluir a consulta, na mesma transação, com faixas e combinações validadas pela API e por checks nomeados no banco; aparecem no detalhe da consulta para as duas partes e nos cartões do início do paciente com a medida mais recente de cada uma, e nunca vão para logs, auditoria ou notificações
-- Reagendamento de consultas e exames pelo paciente, na mesma linha e em uma transação, até o limite de reagendamentos e, se confirmado, fora da janela da política: a consulta volta a pendente e avisa o médico, o exame continua confirmado e mantém o lugar quando livre, e a vaga antiga só é liberada se a nova for garantida
-- Desativar uma conta ou remover o perfil médico cancela os agendamentos ativos futuros e avisa a outra parte; especialidade, unidade, tipo de exame ou oferta com agendamento futuro não podem ser desativados, e a capacidade da oferta não fica abaixo de um lugar ocupado por exame que ainda não terminou
-- Integração com o laboratório por chave de API (guardada só como hash, exibida uma vez e revogável pelo administrador): lista de exames do dia que aguardam resultado, sem dados pessoais, e publicação de resultados idempotente, com versões imutáveis, retificação, conclusão do exame e aviso ao paciente
-- Leitura de resultados de exame pelo paciente, com a versão atual e as anteriores, e pelo médico, só com uma consulta de avaliação de exames com o paciente confirmada ou concluída que começou há no máximo 30 dias; cada leitura fica na auditoria, sem os valores, e o administrador não vê resultados
-- Notificações por perfil da área aberta, com o contador de não lidas guardado na memória da API para a consulta periódica não acordar o banco
-- Relatórios do administrador por período no fuso de São Paulo: totais de consultas e exames pela situação atual, aguardando registro à parte, cancelamentos tardios e por autor, taxa de faltas, série diária (ou semanal acima de 62 dias) e especialidades e exames mais procurados, só com números e sem as contas de demonstração
-- Catálogo de especialidades, unidades com horários, tipos de exame e ofertas, com a política de agendamento e registro de auditoria das alterações
-- Senhas com scrypt, login em tempo constante e limites de tentativas por IP e por e-mail
-- Banco PostgreSQL com migrations em SQL aplicadas ao iniciar
-- Configuração centralizada e validada por variáveis de ambiente
-- Respostas de erro padronizadas no formato `{ message, code, fields? }`
-- Cabeçalhos de segurança com Helmet e CORS restrito à origem do front
-- Logging estruturado sem query string, cabeçalhos ou corpo das requisições, e com dados sensíveis ocultados
-- Documentação interativa (Swagger UI) gerada a partir dos schemas Zod
-- Testes automatizados com Vitest, em PostgreSQL em memória e em PostgreSQL real
+- **Contas:** cadastro, login com token opaco, sessões, troca e redefinição de senha por e-mail; só o administrador concede os perfis de médico e de administrador
+- **Vagas:** geradas pela agenda do médico, pelo horário da unidade e pela política, no fuso de São Paulo
+- **Consultas:** pedido só em vaga gerada, sem horário duplicado para médico ou paciente, mesmo com pedidos simultâneos, e até 5 agendamentos ativos
+- **Exames:** agendamento com os lugares restantes de cada vaga e código público para apresentar na unidade
+- **Cancelamento e reagendamento:** cancelamento marcado como tardio dentro da janela da política; reagendamento em uma transação, que só libera a vaga antiga se a nova for garantida
+- **Médico:** agenda semanal em faixas, abas a confirmar, confirmadas e histórico, confirmação, conclusão com pressão e peso ou registro de falta
+- **Resultados de exame:** recebidos do laboratório em versões imutáveis; o paciente vê todas, o médico só com uma consulta de avaliação de exames recente
+- **Administração:** usuários e perfis, catálogo de especialidades, unidades, exames e ofertas, política, chaves de integração e auditoria
+- **Relatórios:** totais por situação, cancelamentos tardios, taxa de faltas e série diária ou semanal, só com números
+- **Notificações:** por perfil, com o contador de não lidas servido da memória da API
+- **Documentação:** Swagger UI gerado a partir dos schemas Zod, com exemplos e as respostas de cada rota
 
-## Tecnologias
+## Decisões técnicas
 
-- [Node.js](https://nodejs.org/) 22, 24 ou 26 (26 LTS recomendado)
-- [TypeScript](https://www.typescriptlang.org/)
-- [Express](https://expressjs.com/)
-- [PostgreSQL](https://www.postgresql.org/) com [Drizzle ORM](https://orm.drizzle.team/)
-- [Zod](https://zod.dev/) - validação de requisições e variáveis de ambiente
-- [zod-to-openapi](https://github.com/asteasolutions/zod-to-openapi) + [Swagger UI](https://github.com/scottie1984/swagger-ui-express) - documentação da API em OpenAPI 3.1
-- [Helmet](https://helmetjs.github.io/) e [cors](https://github.com/expressjs/cors) - segurança HTTP
-- [Pino](https://getpino.io/) - logging estruturado
-- [Vitest](https://vitest.dev/), [Supertest](https://github.com/ladjs/supertest) e [PGlite](https://pglite.dev/) - testes automatizados
-- ESLint - análise e padronização do código
+| Decisão | Por quê |
+|---|---|
+| **Express 5 + TypeScript + Drizzle ORM + Zod** | Stack enxuta e explícita. O Express 5 propaga erros de handlers `async` sem wrapper. O Drizzle fica perto do SQL e gera migrations versionadas; o que ele não gera (extensões, exclusion constraints, triggers) é escrito à mão em migrations `--custom`. O Zod valida corpo, query e variáveis de ambiente e alimenta o OpenAPI 3.1, de onde o front gera os tipos |
+| **PostgreSQL 18 no Neon, com exclusion constraints** | A regra "sem reserva dupla" fica no banco. Consultas e exames vivem em uma única tabela `bookings`, e três `EXCLUDE USING gist` sobre `tstzrange(starts_at, ends_at)` impedem horário duplicado para o médico e para o paciente e garantem a capacidade de cada exame por **raias** (`lane`): um exame ocupa a menor raia livre entre 1 e a capacidade, e reservas na mesma raia não se sobrepõem. Pedidos simultâneos perdem para a constraint, que vira `409` com código próprio |
+| **Token opaco em `Authorization: Bearer`, guardado como hash** | Front (GitHub Pages) e API ficam em sites diferentes, o que inviabiliza cookie de sessão. O token tem 32 bytes aleatórios e o banco guarda só o SHA-256: um vazamento do banco não dá acesso a sessões. Validade deslizante com teto absoluto; revogar é apagar a linha |
+| **Status calculado em uma única expressão SQL** | Pedido pendente cujo horário chegou é `expired`, e consulta confirmada que já começou está "aguardando registro". Isso é calculado na consulta com o instante do relógio injetado, e a mesma expressão serve listas, contadores e relatórios; a manutenção só grava o que a expressão já mostra |
+| **Travas em ordem fixa e travas consultivas** | Todo fluxo trava na mesma ordem (usuário, catálogo, perfil ou oferta, agendamento), sem `FOR UPDATE` em `users`, para não conflitar com checagens de chave estrangeira. Travas consultivas protegem as migrations, o conjunto de administradores (nunca fica vazio), o limite de e-mails e a manutenção (`pg_try_advisory_xact_lock`: uma segunda execução só pula). Deadlock tem uma nova tentativa, e efeitos fora do banco acontecem depois do commit |
+| **Manutenção que deixa o Neon dormir** | O plano gratuito do Neon desliga o banco após 5 min sem uso e tem uma cota mensal de horas de computação. Por isso `/health` não toca o banco, sessões e contador de notificações ficam em cache na memória, e a manutenção roda dentro da API de forma oportunista: ao iniciar e quando o banco já está ativo por uso real, no mínimo uma vez por dia. Um job de hora em hora acordaria o banco 24 vezes por dia |
+| **Integração com laboratório por chave de API** | O laboratório usa só a API pública, com chave em `X-Api-Key` guardada como hash, exibida uma vez e revogável. A worklist não tem dados pessoais. A publicação é idempotente, e cada resultado gera versões imutáveis (um trigger recusa `UPDATE`): retificar cria uma versão nova |
+| **Erros por código** | Toda resposta de erro é `{ message, code, fields? }`: o front traduz pelo `code` e mostra `fields` junto de cada campo |
 
-## Como Executar
+## Arquitetura
 
-### Pré-requisitos
+```text
+src/
+  app.ts, server.ts   montagem do Express e inicialização (migrations, contas iniciais, agendador)
+  config/             variáveis de ambiente validadas e logger
+  database/           pool do pg, migrations, seed e schema do Drizzle (um arquivo por agregado)
+  docs/               registro OpenAPI, descrição da API e schemas comuns
+  routes/             /health e /docs (Swagger UI e openapi.json)
+  jobs/               manutenção, agendador interno e entrada dos jobs
+  lab-simulator/      lógica do simulador do laboratório
+  scripts/            entrada do simulador (lab-simulator.ts)
+  lib/                erros, relógio, vagas, fuso, paginação, tradução de erros do Postgres, cache
+  mail/               interface Mailer, drivers console e SMTP e fila de envio
+  middleware/         sessão, perfil, chave de API, limites e tratamento de erros
+  modules/            um módulo por domínio
+drizzle/              migrations SQL versionadas
+test/                 suíte em PGlite
+test-pg/              suíte em PostgreSQL real
+```
 
-- [Node.js](https://nodejs.org/) 22.22.2+, 24.15+ ou 26+
-- npm
-- [PostgreSQL](https://www.postgresql.org/) 18 ou superior, com as extensões `citext` e `btree_gist` disponíveis
+Os módulos são `users`, `password-reset`, `catalog`, `doctors`, `doctor-schedule`, `doctor-agenda`, `appointments`, `exam-bookings`, `bookings` (regras comuns aos dois tipos de agendamento), `patient-bookings`, `exam-results`, `lab-integration`, `notifications`, `admin-users`, `admin-home`, `admin-reports` e `demo` (contas de demonstração). Os módulos com rotas seguem as mesmas camadas:
 
-### Instalação
+```text
+requisição → routes (rota, limite, sessão, perfil, documentação OpenAPI)
+           → controller (valida com Zod e formata a resposta)
+           → service (regras, política, transações, notificações)
+           → repository (consultas Drizzle e SQL)
+```
 
-Clone o repositório:
+O `index.ts` de cada módulo expõe `create<Módulo>Module(deps)`, que monta repository, service, controller e router. `createModules` (`src/modules/index.ts`) é a única composição: recebe banco, relógio, fila de e-mail, política de sessão e a URL do front, cria os serviços compartilhados (cache de sessões, notificações, regras de agendamento) e os injeta nos módulos que dependem deles. Servidor, jobs e testes usam a mesma composição; os testes trocam o banco (PGlite), o relógio (fixo) e o e-mail (em memória).
+
+- Toda comparação de tempo usa o instante do `Clock` injetado; `now()` do banco aparece só em valores padrão e no trigger `set_updated_at`.
+- Erros do Postgres são traduzidos pelo código e pelo nome da constraint (`src/lib/pg-errors.ts`): exclusão vira vaga ocupada, unicidade vira nome ou e-mail em uso; o resto vira `500`, sem detalhes.
+- Vagas são geradas no fuso `America/Sao_Paulo`, nunca com deslocamento fixo.
+
+## Modelo de dados
+
+```mermaid
+erDiagram
+  users ||--o{ user_roles : "tem"
+  users ||--o{ sessions : "abre"
+  users ||--o| doctor_profiles : "pode ter"
+  specialties ||--o{ doctor_profiles : "classifica"
+  units ||--o{ doctor_profiles : "atende em"
+  units ||--o{ unit_hours : "abre em"
+  units ||--o{ unit_exam_offers : "oferece"
+  exam_types ||--o{ unit_exam_offers : "é oferecido"
+  doctor_profiles ||--o{ doctor_schedule_days : "agenda"
+  doctor_schedule_days ||--o{ doctor_schedule_ranges : "faixas"
+  users ||--o{ bookings : "paciente"
+  doctor_profiles ||--o{ bookings : "consulta"
+  specialties ||--o{ bookings : "consulta"
+  units ||--o{ bookings : "local"
+  unit_exam_offers ||--o{ bookings : "exame"
+  bookings ||--o{ booking_events : "histórico"
+  bookings ||--o{ notifications : "avisa"
+  bookings ||--o| health_metrics : "medidas"
+  bookings ||--o| exam_results : "resultado"
+  exam_results ||--|{ exam_result_versions : "versões"
+  integration_clients ||--o{ exam_results : "publica"
+  users ||--o{ notifications : "recebe"
+```
+
+Também existem `terms_acceptances`, `password_reset_tokens`, `settings` (linha única com a política) e `audit_logs` (sem chave estrangeira, para o registro sobreviver ao alvo).
+
+| Regra | Onde fica no banco |
+|---|---|
+| Médico sem duas consultas no mesmo horário | `bookings_doctor_no_overlap_excl`, para consultas `pending` ou `confirmed` |
+| Paciente sem dois agendamentos sobrepostos | `bookings_patient_no_overlap_excl`, para `pending` ou `confirmed` |
+| Capacidade de exame por vaga | `bookings_exam_lane_no_overlap_excl` sobre (unidade, tipo de exame, raia), para exames `confirmed` |
+| Faixas da agenda do médico sem sobreposição | `doctor_schedule_ranges_no_overlap_excl` |
+| Colunas certas para cada tipo de agendamento | `bookings_kind_columns_check`; exame só `confirmed`, `cancelled` ou `completed` |
+| Cancelamento coerente (autor, data, motivo obrigatório para o médico) | `bookings_cancellation_check` |
+| Resultado só em exame, medidas só em consulta | chave estrangeira composta para `bookings(id, kind)` |
+| Resultados imutáveis | triggers `exam_results_immutable` e `exam_result_versions_immutable` |
+| Pressão e peso em faixas válidas | checks nomeados em `health_metrics` |
+
+Convenções: chaves `uuid` com `uuidv7()`; conjuntos fechados como `text` com `CHECK`, não enum nativo; datas em `timestamptz` e horários do dia em minutos desde 00:00; nomes de catálogo em `citext`; texto livre com limite de tamanho; toda constraint com nome explícito, porque a tradução de erros depende dele.
+
+## Como executar localmente
+
+**Pré-requisitos:** [Node.js](https://nodejs.org/) 22.22.2+, 24.15+ ou 26+ (26 LTS recomendado) e [PostgreSQL](https://www.postgresql.org/) 18+, com as extensões `citext`, `btree_gist` e `unaccent` (pacote contrib) disponíveis.
 
 ```bash
 git clone https://github.com/Plovatto/API-SaudeMais.git
-```
-
-Acesse a pasta do projeto:
-
-```bash
 cd API-SaudeMais
-```
-
-Instale as dependências:
-
-```bash
 npm install
-```
-
-Crie o arquivo de variáveis de ambiente:
-
-```bash
 cp .env.example .env
-```
-
-Execute em modo de desenvolvimento:
-
-```bash
+# crie o banco (ou suba um com Docker) e ajuste DATABASE_URL no .env
+docker run --rm -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=saudemais postgres:18-alpine
 npm run dev
 ```
 
-A API estará disponível em:
+O `.env.example` já aponta para `postgres://postgres:postgres@localhost:5432/saudemais`. As migrations pendentes são aplicadas ao iniciar; a API fica em `http://localhost:3001` e a documentação em `http://localhost:3001/docs`.
 
-```text
-http://localhost:3001
-```
-
-## Variáveis de Ambiente
-
-As variáveis são definidas no arquivo `.env`, que não deve ser versionado. Utilize `.env.example` como referência:
-
-```env
-NODE_ENV=development
-PORT=3001
-LOG_LEVEL=info
-TRUST_PROXY_HOPS=0
-CORS_ORIGIN=http://localhost:5173
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/saudemais
-SESSION_TTL_HOURS=12
-SESSION_REMEMBER_DAYS=7
-ADMIN_EMAIL=
-ADMIN_PASSWORD=
-APP_PUBLIC_URL=http://localhost:5173
-DEMO_ACCOUNTS_ENABLED=true
-MAINTENANCE_SCHEDULER=false
-MAIL_DRIVER=console
-SMTP_USER=
-SMTP_PASS=
-MAIL_FROM=
-LAB_API_URL=http://localhost:3001
-LAB_API_KEY=
-```
-
-`NODE_ENV` vale `production` quando não é definida; use `development` localmente, como no `.env.example`.
-
-`CORS_ORIGIN` é a origem do front (esquema, domínio e porta, sem caminho) e é obrigatória em produção. Variáveis vazias são tratadas como não definidas.
-
-`DATABASE_URL` é a conexão direta com o PostgreSQL (sem pooler). As migrations pendentes são aplicadas quando a API inicia.
-
-`TRUST_PROXY_HOPS` é o número de proxies reversos na frente da API. Com o valor certo, os limites de requisição usam o IP de cada usuário em vez do IP do proxy. Mantenha `0` quando a API recebe as conexões diretamente.
-
-`SESSION_TTL_HOURS` é quanto tempo uma sessão sem "Lembrar de mim" dura sem uso (padrão 12). `SESSION_REMEMBER_DAYS` é a duração de uma sessão com "Lembrar de mim" e também o teto de qualquer sessão (padrão 7).
-
-`ADMIN_EMAIL` e `ADMIN_PASSWORD` (mínimo de 12 caracteres) criam o primeiro administrador ao iniciar a API; defina as duas ou nenhuma. Se a conta já existir, ela só ganha o perfil de administrador quando a senha dela for igual a `ADMIN_PASSWORD`; caso contrário, a API não inicia, para que um cadastro feito antes com esse e-mail não vire administrador.
-
-`APP_PUBLIC_URL` é o endereço do front com o caminho (em produção, `https://plovatto.github.io/SaudeMais`), usado nos links dos e-mails; é obrigatória em produção.
-
-`MAIL_DRIVER` escolhe como os e-mails saem: `console` (padrão, só fora de produção) escreve no log; `smtp` envia pelo servidor configurado em `SMTP_HOST` (padrão `smtp.gmail.com`), `SMTP_PORT` (padrão 465), `SMTP_USER`, `SMTP_PASS` (senha de app do Gmail) e `MAIL_FROM`. Em produção, `smtp` é obrigatório. Os envios acontecem fora da requisição, e uma falha fica só no log.
-
-`DEMO_ACCOUNTS_ENABLED` (padrão `true`) faz a API garantir, ao iniciar, as contas protegidas de demonstração exibidas na tela de login. Com `false`, nenhuma conta de demonstração é criada nem alterada. As credenciais abaixo são públicas e servem só para demonstração; nunca as use em contas reais:
-
-- Paciente: `paciente@saudemais.test` (senha `paciente-demo-123`).
-- Médico, também paciente: `medico@saudemais.test` (senha `medico-demo-123`), com perfil de Clínica Geral na Unidade Central e o registro reservado CRM 999999/SP.
-
-Esses e-mails ficam reservados: o cadastro os recusa. Na primeira vez, a especialidade e a unidade do médico são criadas apenas se ainda não existirem, e os horários só entram em uma unidade criada nesse momento; itens que já existem nunca são alterados. Se um desses itens estiver inativo, se o registro já pertencer a outro médico ou se o e-mail já pertencer a uma conta comum, a API registra um aviso no log e segue sem a conta ou o perfil de demonstração.
-
-`MAINTENANCE_SCHEDULER` liga o agendador interno das [rotinas de manutenção](#rotinas-de-manutenção). Quando não é definida, vale `true` em produção e `false` nos demais ambientes.
-
-## Scripts
+`npm run db:seed` cria dados de demonstração (especialidades, unidades Central e Sul, tipos de exame, ofertas, médicos e pacientes de exemplo com senhas aleatórias não exibidas). Pode rodar quantas vezes for preciso: só cria o que falta e não altera contas existentes. Com `NODE_ENV=production`, exige `SEED_ALLOW_PRODUCTION=1`.
 
 | Script | Descrição |
 |---|---|
 | `npm run dev` | Inicia em modo de desenvolvimento, recarregando a cada alteração |
-| `npm run build` | Compila para `dist/` |
-| `npm start` | Executa a versão compilada |
+| `npm run build` / `npm start` | Compila para `dist/` / executa a versão compilada |
 | `npm run typecheck` | Verifica os tipos |
-| `npm run lint` | Analisa o código |
-| `npm test` | Roda os testes |
-| `npm run test:coverage` | Roda os testes com relatório de cobertura |
-| `npm run test:pg` | Roda a suíte que exige um PostgreSQL real (`TEST_DATABASE_URL`) |
+| `npm run lint` / `npm run lint:fix` | Analisa o código com ESLint / corrige o que for automático |
+| `npm test` / `npm run test:watch` | Roda a suíte em PGlite, sem infraestrutura / em modo observação |
+| `npm run test:coverage` | Roda a suíte com relatório de cobertura |
+| `npm run test:pg` | Roda a suíte em PostgreSQL real (`TEST_DATABASE_URL`) |
 | `npm run db:generate` | Gera uma migration a partir do schema |
 | `npm run db:seed` | Cria os dados de demonstração |
-| `npm run jobs:run maintenance` | Roda as rotinas de manutenção uma vez (usa a versão compilada em `dist/`) |
-| `npm run lab:simulate` | Publica resultados simulados para os exames de ontem pela API do laboratório (usa a versão compilada em `dist/`) |
+| `npm run jobs:run maintenance` | Roda a manutenção uma vez (usa `dist/`) |
+| `npm run lab:simulate` | Publica resultados simulados pela API do laboratório (usa `dist/`) |
 
-## Banco de Dados
+Extensões, exclusion constraints, triggers e índices parciais vão em migrations escritas à mão: `npx drizzle-kit generate --custom --name=nome_da_migration`.
 
-O schema fica em `src/database/schema` e as migrations, em `drizzle/`, como arquivos SQL versionados.
+`npm test` usa um PostgreSQL em memória ([PGlite](https://pglite.dev/), também 18) com as mesmas migrations. `npm run test:pg` cobre travas e concorrência reais: aponte `TEST_DATABASE_URL` para um banco descartável (padrão `postgres://postgres:postgres@localhost:5432/saudemais_test`), porque a suíte apaga os schemas `public` e `drizzle` dele.
 
-Para criar uma migration a partir de mudanças no schema:
+## Deploy
 
-```bash
-npm run db:generate
-```
+A API roda em Docker na [Northflank](https://northflank.com/), o banco é um PostgreSQL 18 no [Neon](https://neon.tech/) (conexão direta, sem pooler) e o front fica no GitHub Pages.
 
-Para popular o banco com dados de demonstração (especialidades, unidades Central e Sul com horários, tipos de exame, ofertas, médicos e pacientes de exemplo):
+O `Dockerfile` tem dois estágios, imagens base fixadas por digest e usuário sem privilégios. A imagem define `NODE_ENV=production` e escuta na porta `8080`; ao receber `SIGTERM`, para o agendador, termina as requisições em andamento, espera a fila de e-mails e encerra. Para testar localmente, em modo de desenvolvimento:
 
 ```bash
-npm run db:seed
+docker build -t api-saudemais .
+docker run --rm -p 8080:8080 -e NODE_ENV=development \
+  -e DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/saudemais api-saudemais
 ```
 
-O seed pode rodar quantas vezes for preciso: só cria o que falta, mantém o que o administrador já cadastrou com o mesmo nome (tipos de exame são procurados pelo código) e não altera contas existentes. Os médicos de exemplo só recebem perfil quando a conta é criada pelo próprio seed. As contas de exemplo recebem senhas aleatórias que não são exibidas. No fim, o seed recria os agendamentos das contas de demonstração, se a [restauração diária](#rotinas-de-manutenção) ainda não aconteceu no dia; ele usa a mesma trava da restauração, então nunca restaura duas vezes ao mesmo tempo que a manutenção.
+No Linux, acrescente `--add-host=host.docker.internal:host-gateway` ao `docker run`. Em produção, a API não inicia sem as variáveis obrigatórias abaixo. O CI constrói a imagem, a executa contra um PostgreSQL 18 e confere `/health`, o usuário sem privilégios e o desligamento com código 0.
 
-Com `NODE_ENV=production`, o seed se recusa a rodar, a menos que `SEED_ALLOW_PRODUCTION=1` esteja definida. O log mostra só o host do banco de destino.
+### Variáveis de ambiente
 
-Extensões, exclusion constraints e índices parciais são escritos à mão em uma migration vazia:
+Localmente no `.env` (modelo em `.env.example`); em produção, nas variáveis do serviço. Variáveis vazias valem como não definidas.
 
-```bash
-npx drizzle-kit generate --custom --name=nome_da_migration
-```
+| Variável | Obrigatória em produção | O que faz |
+|---|---|---|
+| `NODE_ENV` | | `development`, `test` ou `production` (padrão quando não definida) |
+| `PORT` | | Porta HTTP (padrão `3001`; `8080` na imagem) |
+| `LOG_LEVEL` | | Nível do log do Pino (padrão `info`) |
+| `TRUST_PROXY_HOPS` | Sim | Proxies reversos na frente da API, para os limites usarem o IP real; `0` sem proxy |
+| `CORS_ORIGIN` | Sim | Origem do front, sem caminho (por exemplo, `https://plovatto.github.io`) |
+| `APP_PUBLIC_URL` | Sim | Endereço do front com o caminho (por exemplo, `https://plovatto.github.io/SaudeMais`), usado nos links dos e-mails |
+| `DATABASE_URL` | Sim | Conexão direta com o PostgreSQL |
+| `SESSION_TTL_HOURS` | | Duração de uma sessão sem uso, sem "Lembrar de mim" (padrão 12) |
+| `SESSION_REMEMBER_DAYS` | | Duração com "Lembrar de mim" e teto de qualquer sessão (padrão 7) |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | | Criam o primeiro administrador ao iniciar; as duas ou nenhuma, senha com 12+ caracteres. Conta existente só vira administradora se a senha dela for igual a `ADMIN_PASSWORD`; senão, a API não inicia |
+| `DEMO_ACCOUNTS_ENABLED` | | Garante e restaura todo dia as contas de demonstração (padrão `true`) |
+| `MAINTENANCE_SCHEDULER` | | Liga o agendador interno da manutenção (padrão `true` em produção, `false` fora dela) |
+| `MAIL_DRIVER` | Sim, `smtp` | `console` escreve os e-mails no log (só fora de produção); `smtp` envia |
+| `SMTP_HOST`, `SMTP_PORT` | | Servidor SMTP (padrão `smtp.gmail.com` e `465`) |
+| `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Com `smtp` | Usuário, senha de app e remetente |
+| `LAB_API_URL`, `LAB_API_KEY` | Só no simulador | Endereço da API e chave da integração usados por `lab:simulate` |
+| `SEED_ALLOW_PRODUCTION` | | `1` permite o seed com `NODE_ENV=production` |
+| `TEST_DATABASE_URL` | Só nos testes | Banco descartável de `npm run test:pg` |
 
-Os testes de `npm test` usam um PostgreSQL em memória (PGlite) com as mesmas migrations. O que depende de travas e concorrência reais fica em `test-pg/` e roda com `npm run test:pg`, apontando `TEST_DATABASE_URL` para um banco descartável: a suíte apaga os schemas `public` e `drizzle` desse banco.
+### Rotinas agendadas
 
-## Rotinas de manutenção
+- **Manutenção, dentro da API (padrão).** Roda ao iniciar e, a cada 5 min, olha só a memória do processo: roda se a última execução foi há 1 h ou mais e a API usou o banco nos últimos 5 min, ou se foi há 24 h ou mais. Assim o Neon continua podendo desligar.
+- **Manutenção como job (alternativa opcional).** Job agendado da Northflank com a mesma imagem e variáveis, comando `node dist/jobs/run.js maintenance`, frequência `0 * * * *` e `MAINTENANCE_SCHEDULER=false` na API. Acorda o banco de hora em hora e consome a cota do Neon; os avisos que cria aparecem no contador quando o cache vence (até 10 min).
+- **Simulador do laboratório (diário).** Job com a mesma imagem, comando `node dist/scripts/lab-simulator.js`, frequência `0 9 * * *` em UTC (06:00 em São Paulo) e só `LAB_API_URL` e `LAB_API_KEY`, criada em Integrações na área do administrador e exibida uma vez. Fala com a API por HTTP, sem `DATABASE_URL`.
 
-`npm run jobs:run maintenance` executa, nesta ordem, cada passo na própria transação, e registra no log só as contagens:
+<details>
+<summary>Passos da manutenção</summary>
 
-1. Pedidos de consulta pendentes cujo horário chegou passam a `expired`, com evento do sistema, e o paciente recebe a notificação `appointment_expired`.
+Cada passo roda na própria transação, pode rodar de novo sem efeito duplicado e registra no log só as contagens. Uma execução segura `pg_try_advisory_xact_lock`; se outra estiver em andamento, a nova só registra que pulou. O job termina com código 0 ao concluir ou pular e 1 ao falhar.
+
+1. Pedidos de consulta pendentes cujo horário chegou passam a `expired`, e o paciente é avisado.
 2. Exames confirmados cujo horário terminou passam a `completed`.
 3. Consultas confirmadas que começaram há 72 h ou mais sem registro do médico passam a `completed`, com o sistema como autor.
-4. Retenção: apaga sessões vencidas, links de redefinição de senha com mais de 48 h, notificações com mais de 90 dias e registros de auditoria com mais de 180 dias. Agendamentos não têm prazo de exclusão.
-5. Uma vez por dia (no fuso de São Paulo) e só com `DEMO_ACCOUNTS_ENABLED=true`, restaura as contas de demonstração: apaga as medidas de saúde e depois os agendamentos em que o paciente ou o médico é uma conta protegida (eventos e notificações vão junto) e recria os agendamentos de exemplo da paciente de demonstração com o médico de demonstração: um pedido pendente, uma consulta confirmada, uma do dia (que fica aguardando registro depois do horário), uma concluída com pressão e peso, um exame confirmado, uma avaliação de exames concluída (que libera os resultados para o médico de demonstração) e um exame de glicemia concluído, com datas em dias úteis relativas ao dia. Os exames ocupam a menor raia livre, e um horário que um visitante ocupou é pulado. Depois, o resultado da glicemia é publicado pelo mesmo caminho da integração, em nome da integração `Laboratório de demonstração`, criada pelo sistema na primeira restauração (`created_by` nulo e auditoria com o autor `system`), com uma chave que nunca é exibida: a versão 1 `final` e a versão 2 `amended`, que avisam a paciente com `exam_result_available`. Se essa integração foi revogada ou não foi criada pelo sistema, ou se a publicação falhar, a restauração continua sem o resultado e o log registra só o código do motivo. A execução fica registrada na auditoria como `demo.restored`, e é esse registro que impede uma segunda restauração no mesmo dia.
+4. Retenção: apaga sessões vencidas, links de redefinição com mais de 48 h, notificações com mais de 90 dias e auditoria com mais de 180 dias. Agendamentos e resultados não têm prazo de exclusão.
+5. Uma vez por dia (fuso de São Paulo), com `DEMO_ACCOUNTS_ENABLED=true`, restaura as [contas de demonstração](#contas-de-demonstração).
 
-Todos os passos podem rodar de novo sem efeito duplicado, e uma execução segura uma trava consultiva do PostgreSQL (`pg_try_advisory_xact_lock`): se outra execução estiver em andamento, a nova só registra um aviso de que pulou. Os contadores de não lidas das pessoas afetadas são atualizados na hora quando a manutenção roda dentro da API.
+</details>
 
-Por padrão, em produção, a própria API roda a manutenção (`MAINTENANCE_SCHEDULER`). Para o banco do Neon poder desligar, o agendador aproveita quando o banco já está ativo e roda no mínimo uma vez por dia: roda ao iniciar (o banco acabou de acordar para as migrations) e, a cada 5 min, confere só a memória do processo e roda se a última execução foi há 1 h ou mais e a API usou o banco nos últimos 5 min, ou se a última execução foi há 24 h ou mais. Ao receber `SIGTERM`, o agendador para na hora e o desligamento espera a execução em andamento terminar.
+## API
 
-Como alternativa, a manutenção pode rodar como job agendado da Northflank, com a mesma imagem e as mesmas variáveis da API, o comando `node dist/jobs/run.js maintenance` e a frequência `0 * * * *`; nesse caso, defina `MAINTENANCE_SCHEDULER=false` na API. O job é opcional e acorda o banco de hora em hora, o que consome a cota de horas de computação do Neon. Ele termina com código 0 quando conclui ou pula e com 1 quando falha, e as notificações que ele cria aparecem no contador da API quando o cache vence (até 10 min).
+A documentação completa, com a lista de todas as rotas, é gerada a partir do código e servida em [`/docs`](https://p01--saudemais--pgj2h2jjxzb4.code.run/docs/), com autenticação, formato de erro, datas, paginação, exemplos e as respostas de cada rota. O OpenAPI 3.1 fica em `/docs/openapi.json`. Rotas protegidas recebem `Authorization: Bearer <token>`; as do laboratório, `X-Api-Key`. Recurso de outra pessoa responde `404`.
+
+| Grupo | Prefixo principal | Acesso |
+|---|---|---|
+| Sistema | `/health`, `/docs` | Público; `/health` não consulta o banco |
+| Contas | `/api/users`, `/api/password-reset` | Público (logout exige login) |
+| Perfil | `/api/me` | Login |
+| Catálogo | `/api/specialties`, `/api/units`, `/api/exam-types` | Login |
+| Agendamento | `/api/doctors`, `/api/appointments`, `/api/exam-availability`, `/api/exam-bookings` | Paciente; detalhe, confirmação, conclusão, registro de falta e cancelamento de consulta também para o médico dela |
+| Paciente | `/api/patient` | Paciente |
+| Médico | `/api/doctor` | Médico |
+| Notificações | `/api/notifications` | Login, por perfil da área aberta (`role`) |
+| Administração | `/api/admin` | Administrador |
+| Integrações | `/api/integrations/lab` | Chave de API |
+
+Formato de erro: `{ "message": "Dados inválidos.", "code": "VALIDATION_ERROR", "fields": { "email": "E-mail inválido." } }`
+
+| Status | Códigos principais |
+|---|---|
+| 400 | `VALIDATION_ERROR` (com `fields`), `INVALID_JSON`, `BAD_REQUEST` |
+| 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS`, `INVALID_API_KEY` |
+| 403 | `FORBIDDEN`, `FORBIDDEN_NO_LINK`, `PROTECTED_ACCOUNT`, `USER_INACTIVE` (login de conta desativada) |
+| 404 | `NOT_FOUND`, `ROUTE_NOT_FOUND` |
+| 409 | `SLOT_TAKEN`, `PATIENT_CONFLICT`, `NO_CAPACITY`, `INVALID_STATE`, `NOT_STARTED`, `RESCHEDULE_LIMIT`, `RESCHEDULE_WINDOW_CLOSED`, `EMAIL_TAKEN`, `NAME_TAKEN`, `IN_USE`, `USER_INACTIVE`, `RESULT_FINAL`, `RESULT_EXISTS` |
+| 413 | `PAYLOAD_TOO_LARGE` |
+| 415 | `BAD_REQUEST` (charset ou codificação do corpo não suportados) |
+| 422 | `OUTSIDE_AVAILABILITY`, `ACTIVE_LIMIT`, `SAME_SLOT`, `REASON_REQUIRED`, `NOT_ELIGIBLE`, `WRONG_RESULT_FORMAT` |
+| 429 | `TOO_MANY_REQUESTS` |
+| 500 | `INTERNAL_ERROR`, sem detalhes internos |
+| 503 | `SERVER_BUSY`, servidor ocupado conferindo senhas |
 
 ## Integração com o laboratório
 
-O laboratório parceiro (ou o simulador) usa só a API pública, autenticado pelo cabeçalho `X-Api-Key`:
+O laboratório parceiro (ou o simulador) usa só a API pública, com o cabeçalho `X-Api-Key`:
 
-1. O administrador cria a integração em `POST /api/admin/integration-clients` e recebe a chave, no formato `slab_<prefixo de 8 caracteres>_<segredo de 32 bytes>`. Ela aparece só nessa resposta: o banco guarda o hash SHA-256 e o prefixo visível, que identifica a chave na lista. `POST /api/admin/integration-clients/{id}/revoke` revoga a chave na hora. Criar e revogar ficam na auditoria.
-2. `GET /api/integrations/lab/worklist?date=AAAA-MM-DD` lista os exames do dia (fuso de São Paulo) que podem receber resultado e ainda não têm: confirmados cujo horário começou ou concluídos. Cada um vem só com o código público, o código do tipo de exame e o início.
-3. `POST /api/integrations/lab/results` publica o resultado com `externalId`, `examCode`, `status` (`final` ou `amended`), `issuedAt` e `items` (exame laboratorial: nome, valor, unidade, faixa de referência e indicador `normal`, `low`, `high` ou `critical`) ou `report` (exame de imagem: laudo em texto).
+1. O administrador cria a integração em `POST /api/admin/integration-clients` e recebe a chave `slab_<prefixo de 8 caracteres>_<segredo de 32 bytes>` só nessa resposta; o banco guarda o hash SHA-256 e o prefixo. `POST /api/admin/integration-clients/{id}/revoke` revoga na hora.
+2. `GET /api/integrations/lab/worklist?date=AAAA-MM-DD` lista os exames do dia que podem receber resultado e ainda não têm, só com o código público, o código do tipo de exame e o início.
+3. `POST /api/integrations/lab/results` publica com `externalId`, `examCode`, `status` (`final` ou `amended`), `issuedAt` e `items` (laboratorial: nome, valor, unidade, faixa de referência e indicador `normal`, `low`, `high` ou `critical`) ou `report` (imagem: laudo em texto).
 
-A publicação trava o exame (`FOR NO KEY UPDATE`) e compara o conteúdo com a versão atual por igualdade de `jsonb`:
+Cada versão nova conclui o exame, grava o evento `result_received`, avisa o paciente e fica na auditoria sem o conteúdo. Cada chave tem limite de 60 requisições por minuto. O paciente lê os próprios resultados; o médico só com uma consulta de avaliação de exames (`exam_review`) confirmada ou concluída que começou há no máximo 30 dias, senão recebe `403` `FORBIDDEN_NO_LINK`, sem revelar se o paciente existe. O administrador não tem rota que devolva resultados.
+
+<details>
+<summary>Respostas da publicação</summary>
+
+A publicação trava o exame (`FOR NO KEY UPDATE`) e compara o conteúdo com a versão atual por igualdade de `jsonb`.
 
 | Situação | Resposta |
 |---|---|
@@ -231,128 +278,59 @@ A publicação trava o exame (`FOR NO KEY UPDATE`) e compara o conteúdo com a v
 | `items` em exame de imagem ou `report` em exame laboratorial | `422` `WRONG_RESULT_FORMAT` |
 | `issuedAt` mais de 5 min à frente do relógio da API | `422` `ISSUED_IN_FUTURE` |
 
-Cada versão nova conclui o exame, grava o evento `result_received`, avisa o paciente com `exam_result_available` e fica na auditoria com a versão e o status, nunca com o conteúdo, que também não vai para os logs nem para as notificações. As versões não podem ser alteradas: um trigger recusa `UPDATE` em `exam_result_versions`. Cada chave tem um limite próprio de 60 requisições por minuto.
+</details>
 
-### Leitura dos resultados
+<details>
+<summary>Simulador</summary>
 
-- `GET /api/patient/exam-results/{bookingId}` devolve ao paciente o resultado do próprio exame: o cabeçalho (código, tipo de exame, unidade e início), a versão atual (`current`, a de maior número) e as anteriores (`previous`, da mais nova para a mais antiga), todas com `items` (exame laboratorial) ou `report` (exame de imagem). Exame de outra pessoa ou sem resultado responde `404`. A lista de agendamentos do paciente e o detalhe do exame trazem `hasResult`, para mostrar "Ver resultado".
-- `GET /api/doctor/patients/{patientId}/exam-results` devolve ao médico a página de resultados do paciente, do exame mais recente para o mais antigo, no mesmo formato. Só responde quando o médico tem com o paciente uma consulta `exam_review` confirmada ou concluída que já começou há no máximo 30 dias; caso contrário, inclusive para um paciente inexistente, responde `403` `FORBIDDEN_NO_LINK`, sem revelar se o paciente existe.
+`npm run lab:simulate` lê a worklist de ontem (fuso de São Paulo) e publica um resultado por exame: `hemograma`, `glicemia` e `colesterol` recebem itens com indicador calculado pela faixa de referência; `ultrassom` e `raio_x`, um laudo; um tipo sem modelo é pulado com aviso. Os valores são sorteados a partir do código do exame e o `externalId` é `SIM-<código>`, então repetir gera o mesmo conteúdo (`unchanged`).
 
-Cada resultado devolvido fica na auditoria como `exam_result.read`, com o exame e a versão atual, nunca com os valores. O administrador não tem rota que devolva resultados.
+Opções: `--date=AAAA-MM-DD` (padrão: ontem) e `--amend-chance=0..1` (chance de enviar uma retificação logo depois; padrão `0`). Cada requisição tem tempo limite de 15 s; erro de rede ou `5xx` tem uma nova tentativa, e `429` espera o `Retry-After` (até 1 min). O log traz só contagens e, nas falhas, o código público do exame. Termina com código 1 se a worklist falhar ou algum resultado não for publicado.
 
-### Simulador do laboratório
+</details>
 
-`npm run lab:simulate` faz o papel do laboratório usando só a API pública: lê a worklist de ontem (fuso de São Paulo) e publica um resultado para cada exame. Os valores saem de um modelo por tipo de exame guardado no próprio script: `hemograma`, `glicemia` e `colesterol` recebem itens com nome, valor, unidade, faixa de referência e indicador calculado a partir da faixa (`critical` só além dos limites críticos); `ultrassom` e `raio_x` recebem um laudo em texto. Um tipo sem modelo é pulado com um aviso no log.
+## Contas de demonstração
 
-Os valores são sorteados a partir do código do exame, e o `externalId` é `SIM-<código do exame>`. Assim, repetir a publicação de um exame gera o mesmo conteúdo e recebe `200` `unchanged`, e rodar de novo no mesmo dia não publica nada, porque a worklist só traz exames sem resultado.
+A tela de login do front mostra duas contas públicas, só para demonstração (nunca use essas credenciais em contas reais):
 
-O simulador lê `LAB_API_URL` (endereço da API, como `https://api.exemplo.com`) e `LAB_API_KEY` (a chave da integração) e para com uma mensagem clara se faltar alguma ou se forem inválidas. Opções:
-
-- `--date=AAAA-MM-DD`: dia da worklist; o padrão é ontem.
-- `--amend-chance=0..1`: chance de, logo depois de publicar, enviar uma retificação (`amended`) do mesmo resultado; o padrão é `0`.
-
-Cada requisição tem tempo limite de 15 s. Erro de rede ou `5xx` é tentado de novo uma vez; `429` espera o `Retry-After` (até 1 min) e tenta de novo uma vez. O log traz só as contagens (`created`, `unchanged`, `amended`, `skipped`, `failed`) e, nas falhas, o código público do exame, sem dados do paciente. O processo termina com código 1 se a worklist falhar ou se algum resultado não for publicado.
-
-Para rodar em produção:
-
-1. Na área do administrador, em Integrações, crie a integração (por exemplo, "Simulador") e copie a chave: ela aparece uma única vez.
-2. Na Northflank, crie um job agendado com a mesma imagem da API, o comando `node dist/scripts/lab-simulator.js`, a frequência `0 9 * * *` em UTC (06:00 em São Paulo; se o agendamento aceitar fuso, use `0 6 * * *` com `America/Sao_Paulo`) e as variáveis `LAB_API_URL` e `LAB_API_KEY`. O job não precisa de `DATABASE_URL`.
-
-O simulador fala com a API por HTTP e acorda o banco do Neon uma vez por execução; por isso roda uma vez por dia, fora da API, e não há agendador interno para ele.
-
-## Docker
-
-A imagem de produção é gerada pelo `Dockerfile`, em dois estágios, e roda com usuário sem privilégios:
-
-```bash
-docker build -t api-saudemais .
-docker run --rm -p 8080:8080 -e DATABASE_URL=... -e CORS_ORIGIN=http://localhost:5173 api-saudemais
-```
-
-A API escuta na porta `8080` dentro do container, aplica as migrations ao iniciar e, ao receber `SIGTERM`, termina as requisições em andamento antes de encerrar. O CI constrói a imagem e a executa contra um PostgreSQL a cada pull request.
-
-O cache de sessões fica na memória de cada processo. Depois de revogar uma sessão direto no banco, reinicie a API ou espere até 5 min; rodar mais de uma instância exige um cache compartilhado.
-
-## Documentação da API
-
-A documentação é gerada a partir do código e servida pela própria API. Ela explica autenticação, formato de erro, códigos de erro, datas e paginação, e cada rota traz exemplos e as respostas possíveis. Localmente:
-
-```text
-http://localhost:3001/docs
-```
-
-O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/openapi.json`.
-
-## Rotas
-
-| Método | Rota | Descrição |
+| Perfil | E-mail | Senha |
 |---|---|---|
-| GET | `/health` | Verifica se o servidor está no ar |
-| POST | `/api/users/register` | Cria uma conta de paciente |
-| POST | `/api/users/login` | Entra e recebe o token de sessão |
-| POST | `/api/users/logout` | Encerra a sessão atual |
-| POST | `/api/password-reset/request` | Envia o link para redefinir a senha |
-| POST | `/api/password-reset/confirm` | Cria uma nova senha com o link |
-| GET | `/api/specialties` | Especialidades ativas |
-| GET | `/api/units` | Unidades ativas com horários (filtro `examTypeId`) |
-| GET | `/api/exam-types` | Tipos de exame ativos |
-| GET | `/api/doctors` | Médicos com especialidade e unidade (filtros `specialtyId`, `search`; paciente) |
-| GET | `/api/doctors/{id}/availability` | Vagas livres de um médico entre `from` e `to`, até 31 dias; `rescheduling` libera a vaga da própria consulta na tela de reagendar (paciente) |
-| POST | `/api/appointments` | Pede uma consulta em uma vaga livre; nasce pendente e avisa o médico (paciente) |
-| GET | `/api/appointments/{id}` | Detalhe e histórico da consulta (paciente dela ou médico que a atende) |
-| POST | `/api/appointments/{id}/confirm` | Confirma um pedido pendente e avisa o paciente (médico que a atende) |
-| POST | `/api/appointments/{id}/complete`, `/no-show` | Conclui, com pressão e peso opcionais em `metrics`, ou registra falta em uma consulta confirmada que já começou (médico que a atende) |
-| POST | `/api/appointments/{id}/cancel` | Cancela a consulta e avisa a outra parte; motivo obrigatório para o médico (paciente dela ou médico que a atende) |
-| POST | `/api/appointments/{id}/reschedule` | Troca o horário dentro da política de reagendamento; volta a pendente e avisa o médico (paciente dela) |
-| GET | `/api/exam-availability` | Vagas de um exame na unidade entre `from` e `to`, até 31 dias, com os lugares restantes; `rescheduling` libera o lugar do próprio exame na tela de reagendar (paciente) |
-| POST | `/api/exam-bookings` | Agenda um exame em uma vaga com lugar; nasce confirmado, com código público (paciente) |
-| GET | `/api/exam-bookings/{id}` | Detalhe, preparo e histórico do exame (paciente dele) |
-| POST | `/api/exam-bookings/{id}/cancel` | Cancela o exame e libera o lugar (paciente dele) |
-| POST | `/api/exam-bookings/{id}/reschedule` | Troca o horário dentro da política de reagendamento; continua confirmado, sujeito à capacidade (paciente dele) |
-| GET | `/api/patient/home` | Próximos agendamentos, totais das abas, último aviso e a pressão e o peso mais recentes (paciente) |
-| GET | `/api/patient/bookings` | Agendamentos do paciente por aba `scope`, com filtros `kind` e `status` e ações permitidas (paciente) |
-| GET | `/api/patient/exam-results/{bookingId}` | Resultado de um exame, com a versão atual e as anteriores (paciente dele) |
-| GET | `/api/doctor/patients/{patientId}/exam-results` | Resultados de exame do paciente, com avaliação de exames nos últimos 30 dias (médico) |
-| GET, POST | `/api/admin/specialties` | Lista e cria especialidades (admin) |
-| PATCH | `/api/admin/specialties/{id}` | Altera, ativa ou desativa uma especialidade (admin) |
-| GET, POST | `/api/admin/units` | Lista e cria unidades com horários (admin) |
-| PATCH | `/api/admin/units/{id}` | Altera, ativa ou desativa uma unidade (admin) |
-| GET, POST | `/api/admin/exam-types` | Lista e cria tipos de exame (admin) |
-| PATCH | `/api/admin/exam-types/{id}` | Altera, ativa ou desativa um tipo de exame (admin) |
-| GET | `/api/admin/units/{id}/exam-offers` | Exames oferecidos pela unidade (admin) |
-| PUT | `/api/admin/units/{id}/exam-offers/{examTypeId}` | Oferece um exame na unidade (admin) |
-| GET, PUT | `/api/admin/policy` | Política de agendamento (admin) |
-| GET, POST | `/api/admin/integration-clients` | Lista as integrações e cria uma, com a chave exibida uma única vez (admin) |
-| POST | `/api/admin/integration-clients/{id}/revoke` | Revoga a chave de uma integração (admin) |
-| GET | `/api/integrations/lab/worklist` | Exames do dia `date` que aguardam resultado, só com os códigos (chave de API) |
-| POST | `/api/integrations/lab/results` | Publica ou retifica o resultado de um exame (chave de API) |
-| GET | `/api/admin/home` | Números do painel do administrador, com as consultas de hoje |
-| GET | `/api/admin/reports` | Totais de consultas e exames por situação no período `from`–`to` (padrão: últimos 30 dias; máximo 366), com série diária ou semanal (admin) |
-| GET | `/api/admin/users` | Lista e busca usuários (admin) |
-| GET, PATCH | `/api/admin/users/{id}` | Vê e altera nome e telefone (admin) |
-| GET | `/api/admin/users/{id}/deactivation-impact` | Agendamentos afetados por desativar (admin) |
-| POST | `/api/admin/users/{id}/deactivate`, `/reactivate` | Desativa e reativa a conta (admin) |
-| POST | `/api/admin/users/{id}/password-reset` | Envia link de redefinição de senha (admin) |
-| POST, DELETE | `/api/admin/users/{id}/roles/admin` | Concede e remove o perfil de administrador (admin) |
-| POST, PATCH, DELETE | `/api/admin/users/{id}/doctor-profile` | Cria, altera e remove o perfil médico (admin) |
-| GET, PUT | `/api/doctor/schedule` | Agenda semanal do médico, em minutos desde 00:00 (médico) |
-| GET | `/api/doctor/home` | Resumo de hoje, próximos pedidos a confirmar, totais das abas e último aviso (médico) |
-| GET | `/api/doctor/appointments` | Consultas do médico por aba `tab`, a partir do dia `from`, com o paciente e as ações permitidas (médico) |
-| GET | `/api/notifications` | Avisos da conta no perfil `role`, do mais novo para o mais antigo |
-| GET | `/api/notifications/unread-count` | Total de avisos não lidos no perfil `role`, servido da memória |
-| POST | `/api/notifications/{id}/read` | Marca um aviso como lido |
-| POST | `/api/notifications/read-all` | Marca como lidos todos os avisos do perfil `role` |
-| GET | `/api/me` | Dados da própria conta |
-| PATCH | `/api/me` | Altera nome ou telefone |
-| POST | `/api/me/password` | Troca a senha e encerra as outras sessões |
-| GET | `/api/me/sessions` | Lista as sessões ativas |
-| DELETE | `/api/me/sessions` | Sai de todas as sessões |
-| GET | `/docs` | Documentação interativa |
-| GET | `/docs/openapi.json` | Documento OpenAPI 3.1 |
+| Paciente | `paciente@saudemais.test` | `paciente-demo-123` |
+| Médico (também paciente) | `medico@saudemais.test` | `medico-demo-123` |
 
-## Contribuindo
+O médico atende Clínica Geral na Unidade Central, com o registro reservado CRM 999999/SP. Não há conta pública de administrador. Como várias pessoas usam as mesmas contas, elas são **protegidas**: a API as garante ao iniciar e o cadastro recusa esses e-mails; senha, nome e telefone não mudam (`403` `PROTECTED_ACCOUNT`); "sair de todas" encerra só a própria sessão; o médico de demonstração só aparece para contas de demonstração, então quem entra como médico nunca vê dados de visitantes; o limite de login por e-mail não vale para elas, para um visitante não bloquear os demais; e painel e relatórios não as contam.
 
-Veja o [guia de contribuição](CONTRIBUTING.md) e a [política de segurança](SECURITY.md).
+<details>
+<summary>Restauração diária</summary>
+
+Uma vez por dia, a manutenção apaga as medidas, os resultados e os agendamentos em que paciente ou médico é uma conta protegida e recria um conjunto de exemplo com datas em dias úteis relativas ao dia: um pedido pendente, uma consulta confirmada, uma do dia, uma concluída com pressão e peso, um exame confirmado, uma avaliação de exames concluída e um exame de glicemia concluído. O resultado da glicemia é publicado pelo caminho da integração, em nome do `Laboratório de demonstração` (criado pelo sistema, com uma chave nunca exibida), nas versões `final` e `amended`. A execução fica na auditoria como `demo.restored`, o que impede uma segunda restauração no mesmo dia; o seed usa a mesma trava.
+
+</details>
+
+## Segurança e LGPD
+
+- **Senhas:** scrypt com os parâmetros gravados no hash e login em tempo constante (e-mail inexistente é verificado contra um hash fictício).
+- **Sessões:** token de 32 bytes guardado como hash, validade deslizante com teto absoluto e limite por usuário; cache em memória de 5 min, limpo no mesmo processo a cada logout, troca de senha, desativação ou mudança de perfil (mais de uma instância exigiria um cache compartilhado).
+- **Redefinição de senha:** link com hash, válido por 30 min e de uso único, com limites por destinatário e teto diário no banco; a resposta é a mesma exista ou não o e-mail.
+- **Autorização:** sessão, perfil exigido pela rota e conferência de dono na própria consulta ao banco.
+- **Requisições:** Zod estrito, corpo até 100 kB, limites por IP em todas as rotas (no login também por e-mail; na integração, por chave), Helmet e CORS só para `CORS_ORIGIN`, sem cookie e portanto sem CSRF.
+- **Logs:** estruturados, sem query string, cabeçalhos nem corpo, com dados sensíveis ocultados.
+- **LGPD:** dados de saúde são sensíveis. Observações, motivos, valores de resultado e medidas nunca vão para logs, auditoria ou notificações; o administrador não os vê (os repositórios dele usam lista explícita de colunas); ações administrativas, chaves de integração e leituras de resultado ficam na auditoria; a retenção tem prazos definidos e contas são desativadas, não apagadas. O ambiente publicado avisa no cadastro para não usar dados reais.
+
+Falhas de segurança devem ser reportadas pela [política de segurança](SECURITY.md).
+
+## Testes
+
+| Suíte | Onde roda | Cobre |
+|---|---|---|
+| `npm test` | Vitest + Supertest + PGlite, relógio fixo e e-mail em memória | Cada rota com sucesso e erros, matriz de perfil por rota, acesso a recurso de outra pessoa, vagas, política, manutenção, simulador, logs sem dados sensíveis e qualidade do OpenAPI |
+| Propriedades | [fast-check](https://fast-check.dev/), dentro de `npm test` | Vagas geradas nunca se sobrepõem e ficam dentro das faixas da agenda e do horário da unidade |
+| `npm run test:pg` | PostgreSQL 18 real, job próprio no CI | Exclusion constraints, pedidos simultâneos na mesma vaga, capacidade e paciente, travas, versões imutáveis, manutenção e migrations |
+| Imagem Docker | CI | Build, inicialização contra PostgreSQL, usuário sem privilégios e desligamento limpo |
+
+## Fluxo de trabalho
+
+Cada tarefa é uma issue no [quadro do projeto](https://github.com/users/Plovatto/projects/2), com branch, commits em [gitmoji](https://gitmoji.dev/) + [Conventional Commits](https://www.conventionalcommits.org/) e pull request com merge depois do CI (lint, typecheck, testes, build e `npm audit` em Node 22, 24 e 26, suíte em PostgreSQL 18 e imagem Docker). Detalhes no [guia de contribuição](CONTRIBUTING.md).
 
 ## Licença
 
