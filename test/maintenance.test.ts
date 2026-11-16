@@ -20,6 +20,10 @@ import { as, HOUR, registration, START } from './support/users.js';
 const MINUTE = 60_000;
 const DAY = 24 * HOUR;
 const NOTHING_PURGED = { sessions: 0, resetTokens: 0, notifications: 0, auditLogs: 0 };
+const DEMO_RESULTS = DEMO_BOOKINGS.reduce(
+  (total, seed) => total + (seed.kind === 'exam' ? (seed.results?.length ?? 0) : 0),
+  0,
+);
 
 let context: Clinic;
 
@@ -246,13 +250,14 @@ describe('maintenance', () => {
       'confirmed',
       undefined,
     ]);
-    expect(await unread()).toEqual({ count: 0 });
+    expect(await unread()).toEqual({ count: DEMO_RESULTS });
     const lanes = await context.db
       .select({ lane: bookings.lane })
       .from(bookings)
       .where(eq(bookings.startsAt, new Date('2026-11-23T11:00:00.000Z')));
     expect(lanes.map(({ lane }) => lane).sort()).toEqual([1, 2]);
     expect(await demoBookings()).toEqual([
+      'appointment:completed',
       'appointment:completed',
       'appointment:confirmed',
       'appointment:confirmed',
@@ -265,7 +270,7 @@ describe('maintenance', () => {
       .from(bookingEvents)
       .innerJoin(bookings, eq(bookings.id, bookingEvents.bookingId))
       .where(eq(bookings.patientId, demoPatient));
-    expect(timeline).toHaveLength(DEMO_BOOKINGS.reduce((total, seed) => total + seed.history.length, 0));
+    expect(timeline).toHaveLength(DEMO_BOOKINGS.reduce((total, seed) => total + seed.history.length, DEMO_RESULTS));
     expect((await run(true)).demoRestored).toBeNull();
 
     context.clock.advance(DAY);

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
 import { offerOf, type Offer } from './support/exams.js';
@@ -14,7 +15,7 @@ import {
   valueOf,
   type Exam,
 } from './support/lab.js';
-import { as, createPatient, HOUR, START } from './support/users.js';
+import { as, createPatient, HOUR, login, START } from './support/users.js';
 
 interface Version {
   version: number;
@@ -283,5 +284,36 @@ describe('doctor exam results', () => {
       code: 'FORBIDDEN_NO_LINK',
     });
     expect([unknown.body, notDoctor.body]).toMatchObject([{ code: 'FORBIDDEN_NO_LINK' }, { code: 'FORBIDDEN' }]);
+  });
+});
+
+describe('demo exam results', () => {
+  it('gives the demo patient a corrected result that the demo doctor can review', async () => {
+    await context.modules.demo.service.restore();
+    const page = await request(context.app)
+      .get('/api/patient/bookings')
+      .query({ scope: 'past', kind: 'exam' })
+      .set(as(context.demoPatient))
+      .expect(200);
+    const resulted = (page.body as { items: { id: string; hasResult: boolean }[] }).items.filter(
+      (item) => item.hasResult,
+    );
+    expect(resulted).toHaveLength(1);
+
+    const result = await patientRead(context.demoPatient, resulted[0]?.id ?? '').expect(200);
+    const demoDoctor = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password });
+    const reviewed = await doctorRead((demoDoctor.body as { token: string }).token, await userId(DEMO_PATIENT.email));
+
+    expect(result.body).toMatchObject({
+      booking: { examType: { name: 'Glicemia' } },
+      current: {
+        version: 2,
+        status: 'amended',
+        items: [{ name: 'Glicose em jejum' }, { name: 'Hemoglobina glicada' }],
+      },
+      previous: [{ version: 1, status: 'final', items: [{ name: 'Glicose em jejum', flag: 'high' }] }],
+    });
+    expect(reviewed.status).toBe(200);
+    expect(reviewed.body).toMatchObject({ total: 1, items: [{ booking: { id: resulted[0]?.id } }] });
   });
 });

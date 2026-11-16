@@ -46,12 +46,19 @@ export function createModules(deps: ModulesDeps) {
     bookings: bookings.service,
   });
   const doctorSchedule = createDoctorScheduleModule({ db: deps.db, requireAuth: users.requireAuth });
+  const labIntegration = createLabIntegrationModule({
+    db: deps.db,
+    clock: deps.clock,
+    requireAuth: users.requireAuth,
+    notifications: notifications.service,
+  });
   const demo = createDemoModule({
     db: deps.db,
     users: users.service,
     schedules: doctorSchedule.service,
     clock: deps.clock,
     notifications: notifications.service,
+    lab: labIntegration.service,
   });
   const doctors = createDoctorsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const appointments = createAppointmentsModule({
@@ -74,12 +81,6 @@ export function createModules(deps: ModulesDeps) {
     notifications: notifications.service,
   });
   const doctorAgenda = createDoctorAgendaModule({
-    db: deps.db,
-    clock: deps.clock,
-    requireAuth: users.requireAuth,
-    notifications: notifications.service,
-  });
-  const labIntegration = createLabIntegrationModule({
     db: deps.db,
     clock: deps.clock,
     requireAuth: users.requireAuth,

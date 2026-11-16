@@ -1,6 +1,7 @@
 import type { BookingStatus, VisitType } from '../../database/schema/bookings.js';
 import type { ExamKind } from '../../database/schema/catalog.js';
 import { WORKDAYS } from '../../lib/week.js';
+import type { ResultInput } from '../lab-integration/lab-integration.model.js';
 
 export interface SpecialtySeed {
   name: string;
@@ -141,11 +142,20 @@ export const SAMPLE_PATIENTS: readonly { fullName: string; email: string }[] = [
   { fullName: 'Paulo Silva', email: 'paulo.silva@saudemais.test' },
 ];
 
+export const DEMO_LAB = 'Laboratório de demonstração';
+
+export type DemoResultSeed = Pick<ResultInput, 'status' | 'items' | 'report'>;
+
 type Transition = Extract<BookingStatus, 'confirmed' | 'completed'>;
 
 export type DemoBookingSeed = { dayOffset: number; minute: number } & (
   | { kind: 'appointment'; visitType: VisitType; history: readonly ['pending', ...Transition[]] }
-  | { kind: 'exam'; examType: string; history: readonly ['confirmed', ...Extract<Transition, 'completed'>[]] }
+  | {
+      kind: 'exam';
+      examType: string;
+      history: readonly ['confirmed', ...Extract<Transition, 'completed'>[]];
+      results?: readonly DemoResultSeed[];
+    }
 );
 
 export const DEMO_BOOKINGS: readonly DemoBookingSeed[] = [
@@ -160,5 +170,31 @@ export const DEMO_BOOKINGS: readonly DemoBookingSeed[] = [
     history: ['pending', 'confirmed', 'completed'],
   },
   { kind: 'exam', examType: 'hemograma', dayOffset: 3, minute: 8 * 60, history: ['confirmed'] },
-  { kind: 'exam', examType: 'glicemia', dayOffset: -10, minute: 8 * 60, history: ['confirmed', 'completed'] },
+  {
+    kind: 'appointment',
+    visitType: 'exam_review',
+    dayOffset: -3,
+    minute: 11 * 60,
+    history: ['pending', 'confirmed', 'completed'],
+  },
+  {
+    kind: 'exam',
+    examType: 'glicemia',
+    dayOffset: -10,
+    minute: 8 * 60,
+    history: ['confirmed', 'completed'],
+    results: [
+      {
+        status: 'final',
+        items: [{ name: 'Glicose em jejum', value: 121, unit: 'mg/dL', referenceRange: '70 a 99', flag: 'high' }],
+      },
+      {
+        status: 'amended',
+        items: [
+          { name: 'Glicose em jejum', value: 112, unit: 'mg/dL', referenceRange: '70 a 99', flag: 'high' },
+          { name: 'Hemoglobina glicada', value: 5.4, unit: '%', referenceRange: '4,0 a 5,6', flag: 'normal' },
+        ],
+      },
+    ],
+  },
 ];

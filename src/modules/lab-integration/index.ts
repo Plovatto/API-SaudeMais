@@ -24,5 +24,5 @@ export function createLabIntegrationModule({ db, clock, requireAuth, notificatio
     requireAdmin: createRequireRole('admin'),
     requireApiKey: createRequireApiKey((apiKey) => service.authenticate(apiKey)),
   });
-  return { router };
+  return { router, service };
 }

@@ -5,12 +5,14 @@ import { CLINIC_TIME_ZONE, DAY, HOUR, instantOfWallClock, MINUTE, startOfDayIn, 
 import { WORKDAYS } from '../../lib/week.js';
 import type { DoctorScheduleService } from '../doctor-schedule/doctor-schedule.service.js';
 import { newPublicCode } from '../exam-bookings/exam-bookings.code.js';
+import type { LabIntegrationService } from '../lab-integration/lab-integration.service.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import { DEMO_DOCTOR, DEMO_PATIENT, type SeedAccount } from '../users/user.demo.js';
 import { SeedAccountConflictError, type UserService } from '../users/user.service.js';
 import {
   DEMO_BOOKINGS,
   DEMO_DOCTOR_PROFILE,
+  DEMO_LAB,
   EXAM_TYPES,
   OFFERS,
   SAMPLE_DOCTORS,
@@ -43,6 +45,7 @@ export class DemoService {
     private readonly schedules: DoctorScheduleService,
     private readonly clock: Clock,
     private readonly notifications: NotificationsService,
+    private readonly lab: LabIntegrationService,
   ) {}
 
   async ensure(): Promise<string[]> {
@@ -98,7 +101,26 @@ export class DemoService {
     const restoration = await this.repository.restoreBookings(startOfDayIn(CLINIC_TIME_ZONE, now), now, demoBookings);
     if (!restoration) return undefined;
     this.notifications.forget(restoration.recipients);
+    await this.publishResults(demoBookings, restoration.examCodes, doctor.id, now);
     return restoration.restored;
+  }
+
+  private async publishResults(demoBookings: DemoBooking[], examCodes: string[], doctorId: string, now: Date) {
+    const publications = demoBookings.flatMap(({ booking: { publicCode, endsAt }, results }) =>
+      publicCode && examCodes.includes(publicCode)
+        ? results.map((result, index) => ({
+            ...result,
+            externalId: `DEMO-${publicCode}`,
+            examCode: publicCode,
+            issuedAt: new Date(Math.min(now.getTime(), endsAt.getTime() + (index + 1) * HOUR)).toISOString(),
+          }))
+        : [],
+    );
+    if (publications.length === 0) return;
+    const clientId =
+      (await this.repository.integrationClientId(DEMO_LAB)) ??
+      (await this.lab.createClient({ name: DEMO_LAB }, { actorId: doctorId, ip: null })).id;
+    for (const publication of publications) await this.lab.publish(publication, { clientId, ip: null });
   }
 
   private async demoBooking(
@@ -112,17 +134,19 @@ export class DemoService {
     const offer = seed.kind === 'exam' ? await this.repository.examOffer(doctor.unitId, seed.examType) : undefined;
     const endsAt = new Date(startsAt.getTime() + (offer?.durationMin ?? doctor.durationMin) * MINUTE);
     const columns = { patientId, unitId: doctor.unitId, startsAt, endsAt, status: transitions.at(-1) ?? initial };
-    let placement: Pick<DemoBooking, 'booking' | 'exam'>;
+    let placement: Pick<DemoBooking, 'booking' | 'exam' | 'results'>;
     if (seed.kind === 'appointment') {
       const { visitType } = seed;
       placement = {
         booking: { ...columns, kind: 'appointment', doctorId: doctor.id, specialtyId: doctor.specialtyId, visitType },
+        results: [],
       };
     } else if (offer) {
       const { examTypeId, capacity } = offer;
       placement = {
         booking: { ...columns, kind: 'exam', publicCode: newPublicCode() },
         exam: { examTypeId, capacity },
+        results: seed.results ?? [],
       };
     } else {
       return undefined;

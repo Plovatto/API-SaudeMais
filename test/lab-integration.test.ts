@@ -388,21 +388,23 @@ describe('POST /api/integrations/lab/results', () => {
     expect(JSON.stringify([audit, notices])).not.toMatch(/SIGILOSO|sigiloso/);
   });
 
-  it('lets the demo restoration remove the results of demo exams', async () => {
+  it('lets the demo restoration replace the results of demo exams', async () => {
     const restore = async () => {
       await context.db.execute(sql`delete from audit_logs where action = 'demo.restored'`);
       return context.modules.demo.service.restore();
     };
+    const demoResults = () =>
+      rows<{ booking_id: string }>(sql`
+        select r.booking_id from exam_results r join bookings b on b.id = r.booking_id
+        join users u on u.id = b.patient_id where u.is_protected
+      `);
     await restore();
-    const demoExam = await rows<{ id: string; code: string }>(sql`
-      select b.id, b.public_code as code from bookings b join users u on u.id = b.patient_id
-      where u.is_protected and b.kind = 'exam' and b.status = 'completed'
-    `);
-    const exam = demoExam[0] as Exam;
-    await publish(labResult(exam)).expect(201);
+    const before = await demoResults();
 
     await expect(restore()).resolves.toBeDefined();
 
-    expect(await rows(sql`select id from exam_results where booking_id = ${exam.id}`)).toEqual([]);
+    const after = await demoResults();
+    expect([before.length, after.length]).toEqual([1, 1]);
+    expect(after).not.toEqual(before);
   });
 });
