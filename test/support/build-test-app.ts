@@ -1,6 +1,6 @@
 import { Writable } from 'node:stream';
 import { createApp, type AppConfig } from '@/app.js';
-import { createLogger } from '@/config/logger.js';
+import { createLogger } from '@/config/create-logger.js';
 import type { Database } from '@/database/pg-client.js';
 import { systemClock } from '@/lib/clock.js';
 import { MailQueue } from '@/mail/index.js';

@@ -1,6 +1,6 @@
 import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { buildLoggerOptions, createLogger } from '@/config/logger.js';
+import { buildLoggerOptions, createLogger } from '@/config/create-logger.js';
 
 function captureLogger() {
   const lines: string[] = [];

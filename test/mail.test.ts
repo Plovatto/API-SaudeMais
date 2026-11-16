@@ -1,7 +1,7 @@
 import { Writable } from 'node:stream';
 import nodemailer from 'nodemailer';
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger } from '@/config/logger.js';
+import { createLogger } from '@/config/create-logger.js';
 import { ConsoleMailer } from '@/mail/console-mailer.js';
 import { createMailer, MailQueue, type MailMessage } from '@/mail/index.js';
 import { SmtpMailer } from '@/mail/smtp-mailer.js';
