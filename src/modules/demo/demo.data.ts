@@ -1,6 +1,7 @@
 import type { BookingStatus, VisitType } from '../../database/schema/bookings.js';
 import type { ExamKind } from '../../database/schema/catalog.js';
 import { WORKDAYS } from '../../lib/week.js';
+import type { HealthMetricsInput } from '../appointments/appointments.model.js';
 
 export interface SpecialtySeed {
   name: string;
@@ -144,7 +145,12 @@ export const SAMPLE_PATIENTS: readonly { fullName: string; email: string }[] = [
 type Transition = Extract<BookingStatus, 'confirmed' | 'completed'>;
 
 export type DemoBookingSeed = { dayOffset: number; minute: number } & (
-  | { kind: 'appointment'; visitType: VisitType; history: readonly ['pending', ...Transition[]] }
+  | {
+      kind: 'appointment';
+      visitType: VisitType;
+      history: readonly ['pending', ...Transition[]];
+      metrics?: HealthMetricsInput;
+    }
   | { kind: 'exam'; examType: string; history: readonly ['confirmed', ...Extract<Transition, 'completed'>[]] }
 );
 
@@ -158,6 +164,7 @@ export const DEMO_BOOKINGS: readonly DemoBookingSeed[] = [
     dayOffset: -14,
     minute: 10 * 60,
     history: ['pending', 'confirmed', 'completed'],
+    metrics: { systolic: 118, diastolic: 76, weightKg: 72.4 },
   },
   { kind: 'exam', examType: 'hemograma', dayOffset: 3, minute: 8 * 60, history: ['confirmed'] },
   { kind: 'exam', examType: 'glicemia', dayOffset: -10, minute: 8 * 60, history: ['confirmed', 'completed'] },

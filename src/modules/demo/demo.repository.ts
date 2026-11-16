@@ -5,9 +5,12 @@ import { bookingEvents, bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { examResults } from '../../database/schema/exam-results.js';
+import { healthMetrics } from '../../database/schema/health-metrics.js';
 import { notifications } from '../../database/schema/notifications.js';
 import { userRoles, users } from '../../database/schema/users.js';
 import { MAINTENANCE_LOCK } from '../../jobs/maintenance.js';
+import type { HealthMetricsInput } from '../appointments/appointments.model.js';
+import { insertMetrics } from '../appointments/appointments.repository.js';
 import { freeLanes, lanesInUse } from '../exam-bookings/exam-bookings.repository.js';
 import type { Recipient } from '../notifications/notifications.service.js';
 import type { ExamTypeSeed, SpecialtySeed, UnitSeed } from './demo.data.js';
@@ -36,6 +39,7 @@ export interface DemoBooking {
   booking: Omit<typeof bookings.$inferInsert, 'examTypeId' | 'lane'>;
   exam?: { examTypeId: string; capacity: number };
   events: Omit<typeof bookingEvents.$inferInsert, 'bookingId'>[];
+  metrics?: HealthMetricsInput | undefined;
 }
 
 export interface RestoredDemo {
@@ -148,13 +152,14 @@ export class DemoRepository {
       const demoScope = or(inArray(bookings.patientId, protectedIds), inArray(bookings.doctorId, protectedIds));
       const demoBookingIds = tx.select({ id: bookings.id }).from(bookings).where(demoScope);
       await tx.delete(examResults).where(inArray(examResults.bookingId, demoBookingIds));
+      await tx.delete(healthMetrics).where(inArray(healthMetrics.bookingId, demoBookingIds));
       const recipients = await tx
         .delete(notifications)
         .where(inArray(notifications.bookingId, demoBookingIds))
         .returning({ userId: notifications.userId, audienceRole: notifications.audienceRole });
       const deleted = await tx.delete(bookings).where(demoScope).returning({ id: bookings.id });
       let created = 0;
-      for (const { booking, exam, events } of demoBookings) {
+      for (const { booking, exam, events, metrics } of demoBookings) {
         const { startsAt, endsAt } = booking;
         const offer = exam && { unitId: booking.unitId, examTypeId: exam.examTypeId };
         const [lane] = offer
@@ -169,6 +174,7 @@ export class DemoRepository {
         if (!inserted) continue;
         created += 1;
         await tx.insert(bookingEvents).values(events.map((event) => ({ ...event, bookingId: inserted.id })));
+        if (metrics) await insertMetrics(tx, inserted.id, metrics, endsAt);
       }
       const restored = { deleted: deleted.length, created };
       await tx

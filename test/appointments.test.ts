@@ -108,6 +108,7 @@ describe('POST /api/appointments', () => {
         reschedulesLeft: 2,
       },
       doctorActions: null,
+      metrics: null,
       events: [
         {
           type: 'created',

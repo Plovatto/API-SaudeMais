@@ -17,10 +17,11 @@ export class PatientBookingsService {
   }
 
   async home(patientId: string): Promise<PatientHome> {
-    const [upcoming, lastNotification] = await Promise.all([
+    const [upcoming, lastNotification, metrics] = await Promise.all([
       this.page(patientId, { scope: 'upcoming', page: 1, pageSize: HOME_UPCOMING }),
       this.notifications.latest({ userId: patientId, role: 'patient' }),
+      this.repository.metrics(patientId),
     ]);
-    return { upcoming: upcoming.items, counts: upcoming.counts, lastNotification };
+    return { upcoming: upcoming.items, counts: upcoming.counts, lastNotification, metrics };
   }
 }

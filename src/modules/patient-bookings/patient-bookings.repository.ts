@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import {
@@ -9,8 +9,10 @@ import {
   type VisitType,
 } from '../../database/schema/bookings.js';
 import { examTypes, specialties, units } from '../../database/schema/catalog.js';
+import { healthMetrics } from '../../database/schema/health-metrics.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf } from '../../lib/pagination.js';
+import { latestMetrics } from '../appointments/appointments.repository.js';
 import {
   actionsAt,
   cancellationColumns,
@@ -19,7 +21,12 @@ import {
   splitActions,
   viewOf,
 } from '../bookings/bookings.repository.js';
-import type { BookingScope, PatientBookingPage, PatientBookingsQuery } from './patient-bookings.model.js';
+import type {
+  BookingScope,
+  PatientBookingPage,
+  PatientBookingsQuery,
+  PatientMetrics,
+} from './patient-bookings.model.js';
 
 const doctorUsers = alias(users, 'doctor_users');
 
@@ -82,6 +89,22 @@ export class PatientBookingsRepository {
           return { ...viewOf(view), actions };
         }),
         counts: await countsOf(tx, patientId, now),
+      };
+    }, readSnapshot);
+  }
+
+  metrics(patientId: string): Promise<PatientMetrics> {
+    return this.db.transaction(async (tx) => {
+      const ofPatient = eq(bookings.patientId, patientId);
+      const pressure = await latestMetrics(tx, and(ofPatient, isNotNull(healthMetrics.systolic)));
+      const weight = await latestMetrics(tx, and(ofPatient, isNotNull(healthMetrics.weightKg)));
+      const { systolic, diastolic } = pressure ?? {};
+      return {
+        bloodPressure:
+          pressure && systolic != null && diastolic != null
+            ? { systolic, diastolic, recordedAt: pressure.recordedAt }
+            : null,
+        weight: weight?.weightKg != null ? { kg: weight.weightKg, recordedAt: weight.recordedAt } : null,
       };
     }, readSnapshot);
   }
