@@ -8,7 +8,7 @@ import { CLINIC_TIME_ZONE, type DayRange } from '../../lib/time.js';
 import { countWhere, startsWithin, statusTotals } from '../bookings/bookings.repository.js';
 import { TOP_ITEMS } from './admin-reports.model.js';
 
-export interface Buckets {
+interface Buckets {
   from: string;
   days: number;
 }

@@ -14,5 +14,6 @@ export interface AdminReportsModuleDeps {
 
 export function createAdminReportsModule({ db, clock, requireAuth }: AdminReportsModuleDeps) {
   const service = new AdminReportsService(new AdminReportsRepository(db), clock);
-  return createAdminReportsRouter({ service, requireAuth, requireAdmin: createRequireRole('admin') });
+  const router = createAdminReportsRouter({ service, requireAuth, requireAdmin: createRequireRole('admin') });
+  return { router };
 }

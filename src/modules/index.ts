@@ -104,7 +104,7 @@ export function createModules(deps: ModulesDeps) {
       catalog.router,
       adminUsers.router,
       adminHome.router,
-      adminReports,
+      adminReports.router,
       doctorSchedule.router,
       doctors.router,
       appointments.router,

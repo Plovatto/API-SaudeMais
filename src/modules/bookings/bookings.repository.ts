@@ -303,7 +303,7 @@ export function recordStarted(
 ): Promise<ChangedBooking[]> {
   return change(tx, {
     set: { status: outcome },
-    where: and(eq(bookings.status, 'confirmed'), lte(bookings.startsAt, now), scope),
+    where: and(isAwaitingRecord(now), scope),
     event: { eventType: outcome, actorType: 'doctor', actorUserId: doctorId, createdAt: now },
   });
 }
