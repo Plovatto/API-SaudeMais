@@ -6,7 +6,7 @@ import { hashToken } from '@/modules/users/user.token.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { insertExam, offerOf, type Offer } from './support/exams.js';
-import { as, createPatient, START } from './support/users.js';
+import { as, createAdmin, createPatient, START } from './support/users.js';
 
 interface Client {
   id: string;
@@ -41,11 +41,7 @@ let names = 0;
 
 beforeAll(async () => {
   context = await setupClinic();
-  admin = await createPatient(context, 'admin.lab@email.com');
-  await context.db.execute(sql`
-    update user_roles set role = 'admin'
-    where role = 'patient' and user_id = (select id from users where email = 'admin.lab@email.com')
-  `);
+  admin = await createAdmin(context, 'admin.lab@email.com');
   await createPatient(context, 'paciente.lab@email.com');
   patientId = await one<string>(sql`select id as value from users where email = 'paciente.lab@email.com'`);
   hemograma = await offerOf(context, 'Unidade Central', 'hemograma');

@@ -1,4 +1,6 @@
+import { sql } from 'drizzle-orm';
 import request from 'supertest';
+import type { Database } from '@/database/pg-client.js';
 import { loginSchema, registerSchema } from '@/modules/users/user.model.js';
 import type { UserService } from '@/modules/users/user.service.js';
 import { buildTestApp } from './build-test-app.js';
@@ -59,4 +61,13 @@ export async function createPatient({ auth }: { auth: UserService }, email: stri
   await auth.register(registerSchema.parse(registration({ email })));
   const credentials = loginSchema.parse({ email, password: registration().password });
   return (await auth.login(credentials, { ip: null, userAgent: null })).token;
+}
+
+export async function createAdmin(context: { auth: UserService; db: Database }, email: string) {
+  const token = await createPatient(context, email);
+  await context.db.execute(sql`
+    update user_roles set role = 'admin'
+    where role = 'patient' and user_id = (select id from users where email = ${email})
+  `);
+  return token;
 }

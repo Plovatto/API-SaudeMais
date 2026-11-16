@@ -11,7 +11,7 @@ import {
 } from './support/doctors.js';
 import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
 import { bookedBy, rescheduleOn, slot } from './support/bookings.js';
-import { as, createPatient, login, START } from './support/users.js';
+import { as, createAdmin, login, START } from './support/users.js';
 
 interface Appointment {
   id: string;
@@ -32,11 +32,7 @@ beforeAll(async () => {
   context = await setupClinic();
   carlos = await doctorNamed(context, 'Dr. Carlos Mendes');
   ana = await doctorNamed(context, 'Dra. Ana Ferreira');
-  admin = await createPatient(context, 'admin.reagenda@email.com');
-  await context.db.execute(sql`
-    update user_roles set role = 'admin'
-    where role = 'patient' and user_id = (select id from users where email = 'admin.reagenda@email.com')
-  `);
+  admin = await createAdmin(context, 'admin.reagenda@email.com');
 }, 60_000);
 
 const appointmentBody = (doctor: Doctor, startsAt: string) => ({

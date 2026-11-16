@@ -11,7 +11,7 @@ import { resultInputSchema, type ResultInput } from '@/modules/lab-integration/l
 import { captureLogger } from './support/capture-logger.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { insertExam, offerOf } from './support/exams.js';
-import { as, createPatient, START } from './support/users.js';
+import { as, createAdmin, createPatient, START } from './support/users.js';
 
 const NOW = new Date('2026-11-20T12:00:00.000Z');
 const API_KEY = `slab_7f3k2q9a_${'a'.repeat(43)}`;
@@ -50,11 +50,11 @@ describe('result models', () => {
 
   it('gives the same result to the same exam and varies across exams', () => {
     expect(simulated('hemograma')).toEqual(simulated('hemograma'));
-    const codes = Array.from({ length: 40 }, (_, index) => `EX-${String(index).padStart(6, 'A')}`);
+    const codes = Array.from({ length: 60 }, (_, index) => `EX-${String(index).padStart(6, 'A')}`);
     const values = new Set(codes.map((code) => simulated('glicemia', code)?.result.items?.[0]?.value));
     const flags = new Set(codes.map((code) => simulated('glicemia', code)?.result.items?.[0]?.flag));
     expect(values.size).toBeGreaterThan(20);
-    expect([...flags].sort()).toEqual(['high', 'low', 'normal']);
+    expect([...flags].sort()).toEqual(['critical', 'high', 'low', 'normal']);
     const reports = new Set(codes.map((code) => simulated('ultrassom', code)?.result.report));
     expect(reports.size).toBeGreaterThan(1);
   });
@@ -125,6 +125,12 @@ describe('lab client', () => {
     expect(JSON.parse(init?.body as string)).toEqual(result);
   });
 
+  it('counts a malformed success response as a failure for that exam', async () => {
+    const { client } = clientWith(json(201, { ok: true }), new Response('<html>', { status: 200 }));
+    expect(await client.publish(result)).toEqual({ failed: 201, code: 'INVALID_RECEIPT' });
+    expect(await client.publish(result)).toEqual({ failed: 200, code: 'INVALID_RECEIPT' });
+  });
+
   it('reports a conflict without retrying', async () => {
     const { client, fetch } = clientWith(json(409, { code: 'RESULT_FINAL', message: 'Já publicado.' }));
     expect(await client.publish(result)).toEqual({ failed: 409, code: 'RESULT_FINAL' });
@@ -189,7 +195,7 @@ describe('simulator configuration', () => {
 
   it('exits with an error from the command line without the settings', () => {
     const run = spawnSync(process.execPath, ['--import', 'tsx', 'src/scripts/lab-simulator.ts'], {
-      env: { PATH: process.env.PATH, SYSTEMROOT: process.env.SYSTEMROOT },
+      env: { ...process.env, LAB_API_URL: '', LAB_API_KEY: '' },
       encoding: 'utf8',
     });
     expect(run.status).toBe(1);
@@ -236,14 +242,11 @@ describe('simulator against the API', () => {
 
   beforeAll(async () => {
     context = await setupClinic();
-    const admin = await createPatient(context, 'admin.simulador@email.com');
+    const admin = await createAdmin(context, 'admin.simulador@email.com');
+    await createPatient(context, 'paciente.simulador@email.com');
     patientId =
-      (await context.db.execute<{ id: string }>(sql`select id from users where email = 'admin.simulador@email.com'`))
+      (await context.db.execute<{ id: string }>(sql`select id from users where email = 'paciente.simulador@email.com'`))
         .rows[0]?.id ?? '';
-    await context.db.execute(sql`
-      update user_roles set role = 'admin'
-      where role = 'patient' and user_id = (select id from users where email = 'admin.simulador@email.com')
-    `);
     const created = await request(context.app)
       .post('/api/admin/integration-clients')
       .set(as(admin))
