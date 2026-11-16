@@ -4,18 +4,16 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
-import { offerOf, type Offer } from './support/exams.js';
+import { insertExam, offerOf, type Offer } from './support/exams.js';
 import {
-  createAdmin,
   createLabKey,
-  insertExam,
   ISSUED_AT,
   publishResult,
   rowsOf,
   valueOf,
   type Exam,
 } from './support/lab.js';
-import { as, createPatient, HOUR, login, START } from './support/users.js';
+import { as, createAdmin, createPatient, HOUR, login, START } from './support/users.js';
 
 interface Version {
   version: number;
@@ -85,9 +83,23 @@ beforeAll(async () => {
   otherDoctor = await doctorAccount('otavio.reis@email.com', 'Dr. Otávio Reis', '55502');
   hemograma = await offerOf(context, 'Unidade Central', 'hemograma');
   ultrassom = await offerOf(context, 'Unidade Central', 'ultrassom');
-  labExam = await insertExam(context.db, patientId, hemograma, '2026-11-18T12:00:00.000Z', 'completed');
-  imagingExam = await insertExam(context.db, patientId, ultrassom, '2026-11-19T12:00:00.000Z', 'completed');
-  waitingExam = await insertExam(context.db, patientId, hemograma, '2026-11-19T13:00:00.000Z');
+  labExam = await insertExam(context, {
+    patientId,
+    ...hemograma,
+    startsAt: new Date('2026-11-18T12:00:00.000Z'),
+    status: 'completed',
+  });
+  imagingExam = await insertExam(context, {
+    patientId,
+    ...ultrassom,
+    startsAt: new Date('2026-11-19T12:00:00.000Z'),
+    status: 'completed',
+  });
+  waitingExam = await insertExam(context, {
+    patientId,
+    ...hemograma,
+    startsAt: new Date('2026-11-19T13:00:00.000Z'),
+  });
   const result = (exam: Exam, body: Record<string, unknown>) => ({
     externalId: `LAB-${exam.code}`,
     examCode: exam.code,

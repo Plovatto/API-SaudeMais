@@ -11,7 +11,7 @@ import {
   type Clinic,
   type DoctorPage,
 } from './support/doctors.js';
-import { as, login, registration } from './support/users.js';
+import { as, createAdmin } from './support/users.js';
 
 const SAMPLE_NAMES = ['Dr. Carlos Mendes', 'Dr. Rafael Costa', 'Dra. Ana Ferreira', 'Dra. Beatriz Lima'];
 const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
@@ -26,15 +26,7 @@ beforeAll(async () => {
 
 describe('doctor routes', () => {
   it('require a session and the patient role', async () => {
-    await request(context.app)
-      .post('/api/users/register')
-      .send(registration({ fullName: 'Paulo Souza', email: 'paulo@email.com' }))
-      .expect(201);
-    await context.db.execute(sql`
-      update user_roles set role = 'admin'
-      where role = 'patient' and user_id = (select id from users where email = 'paulo@email.com')
-    `);
-    const admin = ((await login(context.app, { email: 'paulo@email.com' })).body as { token: string }).token;
+    const admin = await createAdmin(context, 'paulo@email.com');
     const doctor = await doctorNamed(context, 'Dr. Carlos Mendes');
     const period = { from: '2026-11-23', to: '2026-11-23' };
 

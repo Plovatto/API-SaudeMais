@@ -4,7 +4,7 @@ import { Router } from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '@/app.js';
-import { createLogger } from '@/config/logger.js';
+import { createLogger } from '@/config/create-logger.js';
 import { rateLimit } from 'express-rate-limit';
 import { createRequireRole, createRequireWritable } from '@/middleware/auth.js';
 import { rateLimitDefaults } from '@/middleware/rate-limit.js';

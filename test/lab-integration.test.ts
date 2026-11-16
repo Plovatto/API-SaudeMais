@@ -5,11 +5,9 @@ import { integrationClients } from '@/database/schema/integration-clients.js';
 import { hashToken } from '@/modules/users/user.token.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
-import { offerOf, type Offer } from './support/exams.js';
+import { insertExam, offerOf, type Offer } from './support/exams.js';
 import {
-  createAdmin,
   createIntegrationClient,
-  insertExam,
   ISSUED_AT,
   postIntegrationClient,
   publishResult,
@@ -17,9 +15,8 @@ import {
   valueOf,
   type ClientBody,
   type Exam,
-  type ExamStatus,
 } from './support/lab.js';
-import { as, createPatient, START } from './support/users.js';
+import { as, createAdmin, createPatient, START } from './support/users.js';
 
 const API_KEY = /^slab_([0-9a-f]{8})_[A-Za-z0-9_-]{43}$/;
 const ITEMS = [
@@ -67,8 +64,14 @@ const labResult = (exam: Exam, overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const examAt = (offer: Offer, startsAt: string, status?: ExamStatus) =>
-  insertExam(context.db, patientId, offer, startsAt, status);
+const examAt = (offer: Offer, startsAt: string, status: 'confirmed' | 'completed' | 'cancelled' = 'confirmed') =>
+  insertExam(context, {
+    patientId,
+    ...offer,
+    startsAt: new Date(startsAt),
+    status,
+    ...(status === 'cancelled' ? { cancelledAt: START, cancelledByRole: 'system' as const } : {}),
+  });
 
 const notificationsOf = (exam: Exam) =>
   rows<{ type: string; user_id: string; params: Record<string, unknown> }>(
