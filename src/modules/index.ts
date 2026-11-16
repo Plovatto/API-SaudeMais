@@ -4,6 +4,7 @@ import { createMaintenance } from '../jobs/maintenance.js';
 import { systemClock, type Clock } from '../lib/clock.js';
 import type { MailQueue } from '../mail/index.js';
 import { createAdminHomeModule } from './admin-home/index.js';
+import { createAdminReportsModule } from './admin-reports/index.js';
 import { createAdminUsersModule } from './admin-users/index.js';
 import { createAppointmentsModule } from './appointments/index.js';
 import { createBookingsModule } from './bookings/index.js';
@@ -77,6 +78,7 @@ export function createModules(deps: ModulesDeps) {
     notifications: notifications.service,
   });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
+  const adminReports = createAdminReportsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const maintenance = createMaintenance({
     db: deps.db,
     clock: deps.clock,
@@ -102,6 +104,7 @@ export function createModules(deps: ModulesDeps) {
       catalog.router,
       adminUsers.router,
       adminHome.router,
+      adminReports,
       doctorSchedule.router,
       doctors.router,
       appointments.router,
