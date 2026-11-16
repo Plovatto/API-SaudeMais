@@ -1,5 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, gte, inArray, or } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
+import { auditLogs } from '../../database/schema/audit-logs.js';
+import { bookingEvents, bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { userRoles, users } from '../../database/schema/users.js';
@@ -24,6 +26,18 @@ export interface DoctorProfileSeed {
   registryUf: string;
   now: Date;
 }
+
+export interface DemoBooking {
+  booking: typeof bookings.$inferInsert;
+  events: Omit<typeof bookingEvents.$inferInsert, 'bookingId'>[];
+}
+
+export interface RestoredDemo {
+  deleted: number;
+  created: number;
+}
+
+const RESTORE_ACTION = 'demo.restored';
 
 export class DemoRepository {
   constructor(private readonly db: Database) {}
@@ -80,6 +94,61 @@ export class DemoRepository {
         .values({ userId, specialtyId: specialty.id, council: specialty.council, unitId, registryNumber, registryUf })
         .onConflictDoNothing({ target: doctorProfiles.userId });
       await tx.insert(userRoles).values({ userId, role: 'doctor', grantedAt: now }).onConflictDoNothing();
+    });
+  }
+
+  async demoDoctor(email: string) {
+    const [row] = await this.db
+      .select({
+        id: users.id,
+        specialtyId: doctorProfiles.specialtyId,
+        unitId: doctorProfiles.unitId,
+        durationMin: specialties.appointmentDurationMin,
+      })
+      .from(users)
+      .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
+      .innerJoin(specialties, eq(specialties.id, doctorProfiles.specialtyId))
+      .where(eq(users.email, email));
+    return row;
+  }
+
+  async examOffer(unitId: string, code: string) {
+    const [row] = await this.db
+      .select({ examTypeId: examTypes.id, durationMin: examTypes.durationMin })
+      .from(unitExamOffers)
+      .innerJoin(examTypes, eq(examTypes.id, unitExamOffers.examTypeId))
+      .where(and(eq(unitExamOffers.unitId, unitId), eq(examTypes.code, code)));
+    return row;
+  }
+
+  restoreBookings(since: Date, now: Date, demoBookings: DemoBooking[]): Promise<RestoredDemo | undefined> {
+    return this.db.transaction(async (tx) => {
+      if (
+        (await tx.$count(auditLogs, and(eq(auditLogs.action, RESTORE_ACTION), gte(auditLogs.createdAt, since)))) > 0
+      ) {
+        return undefined;
+      }
+      const protectedIds = tx.select({ id: users.id }).from(users).where(eq(users.isProtected, true));
+      const deleted = await tx
+        .delete(bookings)
+        .where(or(inArray(bookings.patientId, protectedIds), inArray(bookings.doctorId, protectedIds)))
+        .returning({ id: bookings.id });
+      let created = 0;
+      for (const { booking, events } of demoBookings) {
+        const [inserted] = await tx
+          .insert(bookings)
+          .values(booking)
+          .onConflictDoNothing()
+          .returning({ id: bookings.id });
+        if (!inserted) continue;
+        created += 1;
+        await tx.insert(bookingEvents).values(events.map((event) => ({ ...event, bookingId: inserted.id })));
+      }
+      const restored = { deleted: deleted.length, created };
+      await tx
+        .insert(auditLogs)
+        .values({ actorType: 'system', action: RESTORE_ACTION, metadata: restored, createdAt: now });
+      return restored;
     });
   }
 }
