@@ -84,8 +84,9 @@ export class AppointmentsService {
     { metrics, ...input }: CompleteAppointmentInput,
   ): Promise<Appointment> {
     return this.changeAsDoctor(id, doctorId, input, appointmentConflicts.notRecordable, async (tx, seen) => {
-      const afterCommit = await this.bookings.recordSeen(tx, seen, doctorId, outcome);
-      if (afterCommit && metrics) await insertMetrics(tx, id, metrics, this.clock.now());
+      const now = this.clock.now();
+      const afterCommit = await this.bookings.recordSeen(tx, seen, doctorId, outcome, now);
+      if (afterCommit && metrics) await insertMetrics(tx, id, metrics, now);
       return afterCommit;
     });
   }
