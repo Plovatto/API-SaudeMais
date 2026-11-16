@@ -2,6 +2,7 @@ import { and, eq, gt, lt, sql, type SQL } from 'drizzle-orm';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, unitExamOffers, units } from '../../database/schema/catalog.js';
+import { hasResult } from '../../database/schema/exam-results.js';
 import type { SlotRequest } from '../../lib/time-slots.js';
 import {
   actionsAt,
@@ -175,6 +176,7 @@ export class ExamBookingsRepository {
             preparationNotes: examTypes.preparationNotes,
           },
           unit: placeColumns.unit,
+          hasResult,
           cancellation: cancellationColumns,
           createdAt: bookings.createdAt,
           rescheduleCount: bookings.rescheduleCount,

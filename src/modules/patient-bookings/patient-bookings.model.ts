@@ -49,6 +49,10 @@ export const patientBookingSchema = registry.register(
       .string()
       .nullable()
       .openapi({ description: 'Código do exame para apresentar na unidade; nulo em consultas.', example: null }),
+    hasResult: z.boolean().openapi({
+      description:
+        'Se o exame já tem resultado, aberto em `GET /api/patient/exam-results/{bookingId}`; sempre falso em consultas.',
+    }),
     unit: doctorSchema.shape.unit,
     cancellation: cancellationSchema,
     actions: bookingActionsSchema,

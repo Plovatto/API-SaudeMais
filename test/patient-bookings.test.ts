@@ -147,6 +147,7 @@ describe('GET /api/patient/bookings', () => {
       specialty: carlos.specialty,
       examType: null,
       publicCode: null,
+      hasResult: false,
       unit: carlos.unit,
       cancellation: null,
       actions: {

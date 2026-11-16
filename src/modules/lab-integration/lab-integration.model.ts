@@ -67,7 +67,7 @@ export const worklistSchema = registry.register(
   ),
 );
 
-const resultItemSchema = z.strictObject({
+export const resultItemSchema = z.strictObject({
   name: boundedText('O nome do item', 1, 80).openapi({ example: 'Hemoglobina' }),
   value: z
     .union([z.number(), boundedText('O valor', 1, 40)])

@@ -2,11 +2,20 @@ import { eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { integrationClients } from '@/database/schema/integration-clients.js';
-import { newPublicCode } from '@/modules/exam-bookings/exam-bookings.code.js';
 import { hashToken } from '@/modules/users/user.token.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { offerOf, type Offer } from './support/exams.js';
+import {
+  createAdmin,
+  insertExam,
+  ISSUED_AT,
+  publishResult,
+  rowsOf,
+  valueOf,
+  type Exam,
+  type ExamStatus,
+} from './support/lab.js';
 import { as, createPatient, START } from './support/users.js';
 
 interface Client {
@@ -19,13 +28,7 @@ interface Client {
   apiKey?: string;
 }
 
-interface Exam {
-  id: string;
-  code: string;
-}
-
 const API_KEY = /^slab_([0-9a-f]{8})_[A-Za-z0-9_-]{43}$/;
-const ISSUED_AT = '2026-11-20T11:30:00.000Z';
 const ITEMS = [
   { name: 'Hemoglobina', value: 13.8, unit: 'g/dL', referenceRange: '12,0 a 16,0', flag: 'normal' },
   { name: 'Leucócitos', value: 'Ausentes', flag: 'low' },
@@ -42,11 +45,7 @@ let names = 0;
 
 beforeAll(async () => {
   context = await setupClinic();
-  admin = await createPatient(context, 'admin.lab@email.com');
-  await context.db.execute(sql`
-    update user_roles set role = 'admin'
-    where role = 'patient' and user_id = (select id from users where email = 'admin.lab@email.com')
-  `);
+  admin = await createAdmin(context, 'admin.lab@email.com');
   await createPatient(context, 'paciente.lab@email.com');
   patientId = await one<string>(sql`select id as value from users where email = 'paciente.lab@email.com'`);
   hemograma = await offerOf(context, 'Unidade Central', 'hemograma');
@@ -54,15 +53,9 @@ beforeAll(async () => {
   lab = (await newClient()).apiKey ?? '';
 }, 60_000);
 
-async function rows<T>(query: ReturnType<typeof sql>): Promise<T[]> {
-  return (await context.db.execute(query)).rows as T[];
-}
+const rows = <T>(query: ReturnType<typeof sql>) => rowsOf<T>(context.db, query);
 
-async function one<T>(query: ReturnType<typeof sql>): Promise<T> {
-  const [row] = await rows<{ value: T }>(query);
-  if (!row) throw new Error('No row');
-  return row.value;
-}
+const one = <T>(query: ReturnType<typeof sql>) => valueOf<T>(context.db, query);
 
 const createClient = (name: string, token = admin) =>
   request(context.app).post('/api/admin/integration-clients').set(as(token)).send({ name });
@@ -77,8 +70,7 @@ const revoke = (id: string) => request(context.app).post(`/api/admin/integration
 const worklist = (date: string, key = lab) =>
   request(context.app).get('/api/integrations/lab/worklist').query({ date }).set('X-Api-Key', key);
 
-const publish = (body: Record<string, unknown>, key = lab) =>
-  request(context.app).post('/api/integrations/lab/results').set('X-Api-Key', key).send(body);
+const publish = (body: Record<string, unknown>, key = lab) => publishResult(context.app, key, body);
 
 const labResult = (exam: Exam, overrides: Record<string, unknown> = {}) => ({
   externalId: `LAB-${exam.code}`,
@@ -89,18 +81,8 @@ const labResult = (exam: Exam, overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-async function examAt(offer: Offer, startsAt: string, status: 'confirmed' | 'completed' | 'cancelled' = 'confirmed') {
-  const code = newPublicCode();
-  const cancelled = status === 'cancelled' ? sql`${START}::timestamptz, 'system'` : sql`null, null`;
-  const id = await one<string>(sql`
-    insert into bookings (kind, patient_id, unit_id, exam_type_id, public_code, lane, starts_at, ends_at, status,
-      cancelled_at, cancelled_by_role)
-    values ('exam', ${patientId}, ${offer.unitId}, ${offer.examTypeId}, ${code}, 1, ${startsAt}::timestamptz,
-      ${startsAt}::timestamptz + interval '10 minutes', ${status}, ${cancelled})
-    returning id as value
-  `);
-  return { id, code };
-}
+const examAt = (offer: Offer, startsAt: string, status?: ExamStatus) =>
+  insertExam(context.db, patientId, offer, startsAt, status);
 
 const notificationsOf = (exam: Exam) =>
   rows<{ type: string; user_id: string; params: Record<string, unknown> }>(
