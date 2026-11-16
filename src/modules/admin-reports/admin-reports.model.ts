@@ -11,7 +11,7 @@ export const TOP_ITEMS = 5;
 
 export const reportsQuery = z.strictObject({
   from: civilDay.optional().openapi({
-    description: `Primeiro dia, no fuso de São Paulo. Sem ele, ${DEFAULT_REPORT_DAYS - 1} dias antes do último.`,
+    description: `Primeiro dia, no fuso de São Paulo. Sem ele, ${DEFAULT_REPORT_DAYS - 1} dias antes do último, que por padrão é hoje.`,
     example: '2026-10-22',
   }),
   to: civilDay.optional().openapi({
@@ -49,7 +49,10 @@ const kindTotalsSchema = z.object({
 const rankedSchema = z.object({
   id: z.uuid(),
   name: z.string().openapi({ example: 'Cardiologia' }),
-  total: countSchema('Agendamentos do período.', 42),
+  total: countSchema(
+    'Agendamentos do período em qualquer situação, inclusive cancelados e não confirmados a tempo.',
+    42,
+  ),
 });
 
 export const adminReportSchema = registry.register(
@@ -73,7 +76,7 @@ export const adminReportSchema = registry.register(
       .openapi({ description: 'Consultas do período, pela situação atual.' }),
     exams: kindTotalsSchema.openapi({
       description:
-        'Exames do período, pela situação atual. Exames não têm pedido a confirmar nem falta, então esses totais são sempre 0.',
+        'Exames do período, pela situação atual. Exames não têm pedido a confirmar nem falta, então esses totais são sempre 0; `awaitingRecord` conta os exames em andamento, que já começaram e ainda não terminaram.',
     }),
     series: z
       .array(
@@ -87,10 +90,10 @@ export const adminReportSchema = registry.register(
           'Consultas e exames por intervalo, pela situação atual, do primeiro ao último dia do período, inclusive os intervalos vazios. As semanas começam no primeiro dia do período; a última pode ser mais curta.',
       }),
     topSpecialties: z.array(rankedSchema).openapi({
-      description: `As ${TOP_ITEMS} especialidades com mais consultas no período, da maior para a menor; empates pelo nome.`,
+      description: `As ${TOP_ITEMS} especialidades com mais consultas no período, em qualquer situação (inclusive canceladas e não confirmadas a tempo), da maior para a menor; empates pelo nome.`,
     }),
     topExamTypes: z.array(rankedSchema).openapi({
-      description: `Os ${TOP_ITEMS} tipos de exame com mais agendamentos no período, do maior para o menor; empates pelo nome.`,
+      description: `Os ${TOP_ITEMS} tipos de exame com mais agendamentos no período, em qualquer situação (inclusive cancelados), do maior para o menor; empates pelo nome.`,
     }),
   }),
 );
