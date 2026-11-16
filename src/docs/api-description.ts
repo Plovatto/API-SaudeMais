@@ -106,7 +106,7 @@ Os dados delas são de exemplo, e elas não podem ser alteradas nem desativadas.
 
 ## Rotinas automáticas
 
-De hora em hora, uma rotina de manutenção grava o que o tempo já decidiu:
+Uma rotina de manutenção grava o que o tempo já decidiu. Ela aproveita quando o banco já está ativo, no máximo de hora em hora, e roda no mínimo uma vez por dia; por isso, uma mudança abaixo pode levar até um dia para aparecer:
 
 - Pedido de consulta \`pending\` cujo horário chegou passa a \`expired\`, e o paciente recebe a notificação \`appointment_expired\`. Antes disso, as listas já o mostram como \`expired\`.
 - Exame \`confirmed\` cujo horário terminou passa a \`completed\`.
