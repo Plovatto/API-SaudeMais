@@ -109,6 +109,7 @@ ADMIN_EMAIL=
 ADMIN_PASSWORD=
 APP_PUBLIC_URL=http://localhost:5173
 DEMO_ACCOUNTS_ENABLED=true
+MAINTENANCE_SCHEDULER=false
 MAIL_DRIVER=console
 SMTP_USER=
 SMTP_PASS=
@@ -138,20 +139,23 @@ MAIL_FROM=
 
 Esses e-mails ficam reservados: o cadastro os recusa. Na primeira vez, a especialidade e a unidade do médico são criadas apenas se ainda não existirem, e os horários só entram em uma unidade criada nesse momento; itens que já existem nunca são alterados. Se um desses itens estiver inativo, se o registro já pertencer a outro médico ou se o e-mail já pertencer a uma conta comum, a API registra um aviso no log e segue sem a conta ou o perfil de demonstração.
 
+`MAINTENANCE_SCHEDULER` liga o agendador interno das [rotinas de manutenção](#rotinas-de-manutenção). Quando não é definida, vale `true` em produção e `false` nos demais ambientes.
+
 ## Scripts
 
-| Script | Descrição |
-|---|---|
-| `npm run dev` | Inicia em modo de desenvolvimento, recarregando a cada alteração |
-| `npm run build` | Compila para `dist/` |
-| `npm start` | Executa a versão compilada |
-| `npm run typecheck` | Verifica os tipos |
-| `npm run lint` | Analisa o código |
-| `npm test` | Roda os testes |
-| `npm run test:coverage` | Roda os testes com relatório de cobertura |
-| `npm run test:pg` | Roda a suíte que exige um PostgreSQL real (`TEST_DATABASE_URL`) |
-| `npm run db:generate` | Gera uma migration a partir do schema |
-| `npm run db:seed` | Cria os dados de demonstração |
+| Script                         | Descrição                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------- |
+| `npm run dev`                  | Inicia em modo de desenvolvimento, recarregando a cada alteração          |
+| `npm run build`                | Compila para `dist/`                                                      |
+| `npm start`                    | Executa a versão compilada                                                |
+| `npm run typecheck`            | Verifica os tipos                                                         |
+| `npm run lint`                 | Analisa o código                                                          |
+| `npm test`                     | Roda os testes                                                            |
+| `npm run test:coverage`        | Roda os testes com relatório de cobertura                                 |
+| `npm run test:pg`              | Roda a suíte que exige um PostgreSQL real (`TEST_DATABASE_URL`)           |
+| `npm run db:generate`          | Gera uma migration a partir do schema                                     |
+| `npm run db:seed`              | Cria os dados de demonstração                                             |
+| `npm run jobs:run maintenance` | Roda as rotinas de manutenção uma vez (usa a versão compilada em `dist/`) |
 
 ## Banco de Dados
 
@@ -169,7 +173,7 @@ Para popular o banco com dados de demonstração (especialidades, unidades Centr
 npm run db:seed
 ```
 
-O seed pode rodar quantas vezes for preciso: só cria o que falta, mantém o que o administrador já cadastrou com o mesmo nome (tipos de exame são procurados pelo código) e não altera contas existentes. Os médicos de exemplo só recebem perfil quando a conta é criada pelo próprio seed. As contas de exemplo recebem senhas aleatórias que não são exibidas.
+O seed pode rodar quantas vezes for preciso: só cria o que falta, mantém o que o administrador já cadastrou com o mesmo nome (tipos de exame são procurados pelo código) e não altera contas existentes. Os médicos de exemplo só recebem perfil quando a conta é criada pelo próprio seed. As contas de exemplo recebem senhas aleatórias que não são exibidas. No fim, o seed também restaura os agendamentos das contas de demonstração, como a [restauração diária](#rotinas-de-manutenção).
 
 Com `NODE_ENV=production`, o seed se recusa a rodar, a menos que `SEED_ALLOW_PRODUCTION=1` esteja definida. O log mostra só o host do banco de destino.
 
@@ -180,6 +184,22 @@ npx drizzle-kit generate --custom --name=nome_da_migration
 ```
 
 Os testes de `npm test` usam um PostgreSQL em memória (PGlite) com as mesmas migrations. O que depende de travas e concorrência reais fica em `test-pg/` e roda com `npm run test:pg`, apontando `TEST_DATABASE_URL` para um banco descartável: a suíte apaga os schemas `public` e `drizzle` desse banco.
+
+## Rotinas de manutenção
+
+`npm run jobs:run maintenance` executa, nesta ordem, cada passo na própria transação, e registra no log só as contagens:
+
+1. Pedidos de consulta pendentes cujo horário chegou passam a `expired`, com evento do sistema, e o paciente recebe a notificação `appointment_expired`.
+2. Exames confirmados cujo horário terminou passam a `completed`.
+3. Consultas confirmadas que começaram há 72 h ou mais sem registro do médico passam a `completed`, com o sistema como autor.
+4. Retenção: apaga sessões vencidas, links de redefinição de senha com mais de 48 h, notificações com mais de 90 dias e registros de auditoria com mais de 180 dias. Agendamentos não têm prazo de exclusão.
+5. Uma vez por dia (no fuso de São Paulo) e só com `DEMO_ACCOUNTS_ENABLED=true`, restaura as contas de demonstração: apaga os agendamentos em que o paciente ou o médico é uma conta protegida (eventos e notificações vão junto) e recria os agendamentos de exemplo da paciente de demonstração com o médico de demonstração: um pedido pendente, uma consulta confirmada, uma aguardando registro, uma concluída, um exame confirmado e um exame concluído, com datas relativas ao dia. Um horário que um visitante ocupou é pulado. A execução fica registrada na auditoria como `demo.restored`, e é esse registro que impede uma segunda restauração no mesmo dia.
+
+Todos os passos podem rodar de novo sem efeito duplicado, e uma execução segura uma trava consultiva do PostgreSQL (`pg_try_advisory_xact_lock`): se outra execução estiver em andamento, a nova só registra que pulou.
+
+Por padrão, em produção, a própria API roda a manutenção ao iniciar e depois de hora em hora (`MAINTENANCE_SCHEDULER`), e espera a execução em andamento terminar ao receber `SIGTERM`. Para rodar como job agendado da Northflank, use a mesma imagem e as mesmas variáveis da API, com o comando `node dist/jobs/run.js maintenance` e a frequência `0 * * * *`; nesse caso, defina `MAINTENANCE_SCHEDULER=false` na API. O job termina com código 0 quando conclui ou pula e com 1 quando falha.
+
+As notificações criadas pelo job externo aparecem no contador da API quando o cache dele vence (até 10 min); com o agendador interno, o contador é atualizado na hora.
 
 ## Docker
 
@@ -206,63 +226,63 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 
 ## Rotas
 
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/health` | Verifica se o servidor está no ar |
-| POST | `/api/users/register` | Cria uma conta de paciente |
-| POST | `/api/users/login` | Entra e recebe o token de sessão |
-| POST | `/api/users/logout` | Encerra a sessão atual |
-| POST | `/api/password-reset/request` | Envia o link para redefinir a senha |
-| POST | `/api/password-reset/confirm` | Cria uma nova senha com o link |
-| GET | `/api/specialties` | Especialidades ativas |
-| GET | `/api/units` | Unidades ativas com horários (filtro `examTypeId`) |
-| GET | `/api/exam-types` | Tipos de exame ativos |
-| GET | `/api/doctors` | Médicos com especialidade e unidade (filtros `specialtyId`, `search`; paciente) |
-| GET | `/api/doctors/{id}/availability` | Vagas livres de um médico entre `from` e `to`, até 31 dias; `rescheduling` libera a vaga da própria consulta na tela de reagendar (paciente) |
-| POST | `/api/appointments` | Pede uma consulta em uma vaga livre; nasce pendente e avisa o médico (paciente) |
-| GET | `/api/appointments/{id}` | Detalhe e histórico da consulta (paciente dela ou médico que a atende) |
-| POST | `/api/appointments/{id}/confirm` | Confirma um pedido pendente e avisa o paciente (médico que a atende) |
-| POST | `/api/appointments/{id}/complete`, `/no-show` | Conclui ou registra falta em uma consulta confirmada que já começou (médico que a atende) |
-| POST | `/api/appointments/{id}/cancel` | Cancela a consulta e avisa a outra parte; motivo obrigatório para o médico (paciente dela ou médico que a atende) |
-| POST | `/api/appointments/{id}/reschedule` | Troca o horário dentro da política de reagendamento; volta a pendente e avisa o médico (paciente dela) |
-| GET | `/api/exam-availability` | Vagas de um exame na unidade entre `from` e `to`, até 31 dias, com os lugares restantes; `rescheduling` libera o lugar do próprio exame na tela de reagendar (paciente) |
-| POST | `/api/exam-bookings` | Agenda um exame em uma vaga com lugar; nasce confirmado, com código público (paciente) |
-| GET | `/api/exam-bookings/{id}` | Detalhe, preparo e histórico do exame (paciente dele) |
-| POST | `/api/exam-bookings/{id}/cancel` | Cancela o exame e libera o lugar (paciente dele) |
-| POST | `/api/exam-bookings/{id}/reschedule` | Troca o horário dentro da política de reagendamento; continua confirmado, sujeito à capacidade (paciente dele) |
-| GET | `/api/patient/home` | Próximos agendamentos, totais das abas e último aviso (paciente) |
-| GET | `/api/patient/bookings` | Agendamentos do paciente por aba `scope`, com filtros `kind` e `status` e ações permitidas (paciente) |
-| GET, POST | `/api/admin/specialties` | Lista e cria especialidades (admin) |
-| PATCH | `/api/admin/specialties/{id}` | Altera, ativa ou desativa uma especialidade (admin) |
-| GET, POST | `/api/admin/units` | Lista e cria unidades com horários (admin) |
-| PATCH | `/api/admin/units/{id}` | Altera, ativa ou desativa uma unidade (admin) |
-| GET, POST | `/api/admin/exam-types` | Lista e cria tipos de exame (admin) |
-| PATCH | `/api/admin/exam-types/{id}` | Altera, ativa ou desativa um tipo de exame (admin) |
-| GET | `/api/admin/units/{id}/exam-offers` | Exames oferecidos pela unidade (admin) |
-| PUT | `/api/admin/units/{id}/exam-offers/{examTypeId}` | Oferece um exame na unidade (admin) |
-| GET, PUT | `/api/admin/policy` | Política de agendamento (admin) |
-| GET | `/api/admin/home` | Números do painel do administrador, com as consultas de hoje |
-| GET | `/api/admin/users` | Lista e busca usuários (admin) |
-| GET, PATCH | `/api/admin/users/{id}` | Vê e altera nome e telefone (admin) |
-| GET | `/api/admin/users/{id}/deactivation-impact` | Agendamentos afetados por desativar (admin) |
-| POST | `/api/admin/users/{id}/deactivate`, `/reactivate` | Desativa e reativa a conta (admin) |
-| POST | `/api/admin/users/{id}/password-reset` | Envia link de redefinição de senha (admin) |
-| POST, DELETE | `/api/admin/users/{id}/roles/admin` | Concede e remove o perfil de administrador (admin) |
-| POST, PATCH, DELETE | `/api/admin/users/{id}/doctor-profile` | Cria, altera e remove o perfil médico (admin) |
-| GET, PUT | `/api/doctor/schedule` | Agenda semanal do médico, em minutos desde 00:00 (médico) |
-| GET | `/api/doctor/home` | Resumo de hoje, próximos pedidos a confirmar, totais das abas e último aviso (médico) |
-| GET | `/api/doctor/appointments` | Consultas do médico por aba `tab`, a partir do dia `from`, com o paciente e as ações permitidas (médico) |
-| GET | `/api/notifications` | Avisos da conta no perfil `role`, do mais novo para o mais antigo |
-| GET | `/api/notifications/unread-count` | Total de avisos não lidos no perfil `role`, servido da memória |
-| POST | `/api/notifications/{id}/read` | Marca um aviso como lido |
-| POST | `/api/notifications/read-all` | Marca como lidos todos os avisos do perfil `role` |
-| GET | `/api/me` | Dados da própria conta |
-| PATCH | `/api/me` | Altera nome ou telefone |
-| POST | `/api/me/password` | Troca a senha e encerra as outras sessões |
-| GET | `/api/me/sessions` | Lista as sessões ativas |
-| DELETE | `/api/me/sessions` | Sai de todas as sessões |
-| GET | `/docs` | Documentação interativa |
-| GET | `/docs/openapi.json` | Documento OpenAPI 3.1 |
+| Método              | Rota                                              | Descrição                                                                                                                                                               |
+| ------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET                 | `/health`                                         | Verifica se o servidor está no ar                                                                                                                                       |
+| POST                | `/api/users/register`                             | Cria uma conta de paciente                                                                                                                                              |
+| POST                | `/api/users/login`                                | Entra e recebe o token de sessão                                                                                                                                        |
+| POST                | `/api/users/logout`                               | Encerra a sessão atual                                                                                                                                                  |
+| POST                | `/api/password-reset/request`                     | Envia o link para redefinir a senha                                                                                                                                     |
+| POST                | `/api/password-reset/confirm`                     | Cria uma nova senha com o link                                                                                                                                          |
+| GET                 | `/api/specialties`                                | Especialidades ativas                                                                                                                                                   |
+| GET                 | `/api/units`                                      | Unidades ativas com horários (filtro `examTypeId`)                                                                                                                      |
+| GET                 | `/api/exam-types`                                 | Tipos de exame ativos                                                                                                                                                   |
+| GET                 | `/api/doctors`                                    | Médicos com especialidade e unidade (filtros `specialtyId`, `search`; paciente)                                                                                         |
+| GET                 | `/api/doctors/{id}/availability`                  | Vagas livres de um médico entre `from` e `to`, até 31 dias; `rescheduling` libera a vaga da própria consulta na tela de reagendar (paciente)                            |
+| POST                | `/api/appointments`                               | Pede uma consulta em uma vaga livre; nasce pendente e avisa o médico (paciente)                                                                                         |
+| GET                 | `/api/appointments/{id}`                          | Detalhe e histórico da consulta (paciente dela ou médico que a atende)                                                                                                  |
+| POST                | `/api/appointments/{id}/confirm`                  | Confirma um pedido pendente e avisa o paciente (médico que a atende)                                                                                                    |
+| POST                | `/api/appointments/{id}/complete`, `/no-show`     | Conclui ou registra falta em uma consulta confirmada que já começou (médico que a atende)                                                                               |
+| POST                | `/api/appointments/{id}/cancel`                   | Cancela a consulta e avisa a outra parte; motivo obrigatório para o médico (paciente dela ou médico que a atende)                                                       |
+| POST                | `/api/appointments/{id}/reschedule`               | Troca o horário dentro da política de reagendamento; volta a pendente e avisa o médico (paciente dela)                                                                  |
+| GET                 | `/api/exam-availability`                          | Vagas de um exame na unidade entre `from` e `to`, até 31 dias, com os lugares restantes; `rescheduling` libera o lugar do próprio exame na tela de reagendar (paciente) |
+| POST                | `/api/exam-bookings`                              | Agenda um exame em uma vaga com lugar; nasce confirmado, com código público (paciente)                                                                                  |
+| GET                 | `/api/exam-bookings/{id}`                         | Detalhe, preparo e histórico do exame (paciente dele)                                                                                                                   |
+| POST                | `/api/exam-bookings/{id}/cancel`                  | Cancela o exame e libera o lugar (paciente dele)                                                                                                                        |
+| POST                | `/api/exam-bookings/{id}/reschedule`              | Troca o horário dentro da política de reagendamento; continua confirmado, sujeito à capacidade (paciente dele)                                                          |
+| GET                 | `/api/patient/home`                               | Próximos agendamentos, totais das abas e último aviso (paciente)                                                                                                        |
+| GET                 | `/api/patient/bookings`                           | Agendamentos do paciente por aba `scope`, com filtros `kind` e `status` e ações permitidas (paciente)                                                                   |
+| GET, POST           | `/api/admin/specialties`                          | Lista e cria especialidades (admin)                                                                                                                                     |
+| PATCH               | `/api/admin/specialties/{id}`                     | Altera, ativa ou desativa uma especialidade (admin)                                                                                                                     |
+| GET, POST           | `/api/admin/units`                                | Lista e cria unidades com horários (admin)                                                                                                                              |
+| PATCH               | `/api/admin/units/{id}`                           | Altera, ativa ou desativa uma unidade (admin)                                                                                                                           |
+| GET, POST           | `/api/admin/exam-types`                           | Lista e cria tipos de exame (admin)                                                                                                                                     |
+| PATCH               | `/api/admin/exam-types/{id}`                      | Altera, ativa ou desativa um tipo de exame (admin)                                                                                                                      |
+| GET                 | `/api/admin/units/{id}/exam-offers`               | Exames oferecidos pela unidade (admin)                                                                                                                                  |
+| PUT                 | `/api/admin/units/{id}/exam-offers/{examTypeId}`  | Oferece um exame na unidade (admin)                                                                                                                                     |
+| GET, PUT            | `/api/admin/policy`                               | Política de agendamento (admin)                                                                                                                                         |
+| GET                 | `/api/admin/home`                                 | Números do painel do administrador, com as consultas de hoje                                                                                                            |
+| GET                 | `/api/admin/users`                                | Lista e busca usuários (admin)                                                                                                                                          |
+| GET, PATCH          | `/api/admin/users/{id}`                           | Vê e altera nome e telefone (admin)                                                                                                                                     |
+| GET                 | `/api/admin/users/{id}/deactivation-impact`       | Agendamentos afetados por desativar (admin)                                                                                                                             |
+| POST                | `/api/admin/users/{id}/deactivate`, `/reactivate` | Desativa e reativa a conta (admin)                                                                                                                                      |
+| POST                | `/api/admin/users/{id}/password-reset`            | Envia link de redefinição de senha (admin)                                                                                                                              |
+| POST, DELETE        | `/api/admin/users/{id}/roles/admin`               | Concede e remove o perfil de administrador (admin)                                                                                                                      |
+| POST, PATCH, DELETE | `/api/admin/users/{id}/doctor-profile`            | Cria, altera e remove o perfil médico (admin)                                                                                                                           |
+| GET, PUT            | `/api/doctor/schedule`                            | Agenda semanal do médico, em minutos desde 00:00 (médico)                                                                                                               |
+| GET                 | `/api/doctor/home`                                | Resumo de hoje, próximos pedidos a confirmar, totais das abas e último aviso (médico)                                                                                   |
+| GET                 | `/api/doctor/appointments`                        | Consultas do médico por aba `tab`, a partir do dia `from`, com o paciente e as ações permitidas (médico)                                                                |
+| GET                 | `/api/notifications`                              | Avisos da conta no perfil `role`, do mais novo para o mais antigo                                                                                                       |
+| GET                 | `/api/notifications/unread-count`                 | Total de avisos não lidos no perfil `role`, servido da memória                                                                                                          |
+| POST                | `/api/notifications/{id}/read`                    | Marca um aviso como lido                                                                                                                                                |
+| POST                | `/api/notifications/read-all`                     | Marca como lidos todos os avisos do perfil `role`                                                                                                                       |
+| GET                 | `/api/me`                                         | Dados da própria conta                                                                                                                                                  |
+| PATCH               | `/api/me`                                         | Altera nome ou telefone                                                                                                                                                 |
+| POST                | `/api/me/password`                                | Troca a senha e encerra as outras sessões                                                                                                                               |
+| GET                 | `/api/me/sessions`                                | Lista as sessões ativas                                                                                                                                                 |
+| DELETE              | `/api/me/sessions`                                | Sai de todas as sessões                                                                                                                                                 |
+| GET                 | `/docs`                                           | Documentação interativa                                                                                                                                                 |
+| GET                 | `/docs/openapi.json`                              | Documento OpenAPI 3.1                                                                                                                                                   |
 
 ## Contribuindo
 
