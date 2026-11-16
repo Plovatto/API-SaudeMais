@@ -4,7 +4,7 @@ import { bookings } from '../../database/schema/bookings.js';
 import { examTypes } from '../../database/schema/catalog.js';
 import { examResults, examResultVersions } from '../../database/schema/exam-results.js';
 import { integrationClients } from '../../database/schema/integration-clients.js';
-import { recordAudit, type Actor } from '../../lib/audit.js';
+import { recordAudit, type Actor, type AuditActor } from '../../lib/audit.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import type { DayRange } from '../../lib/time.js';
 import { hasResult } from '../bookings/bookings.repository.js';
@@ -60,7 +60,7 @@ export class LabIntegrationRepository {
     return { ...page, items: page.items.map(viewOf) };
   }
 
-  createClient({ createdAt, ...client }: NewClient, actor: Actor): Promise<IntegrationClient> {
+  createClient({ createdAt, ...client }: NewClient, actor: AuditActor): Promise<IntegrationClient> {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .insert(integrationClients)
@@ -166,7 +166,7 @@ export class LabIntegrationRepository {
     await tx.insert(examResultVersions).values(version);
   }
 
-  private audit(tx: Transaction, action: string, { id, keyPrefix }: ClientRow, actor: Actor) {
+  private audit(tx: Transaction, action: string, { id, keyPrefix }: ClientRow, actor: AuditActor) {
     return recordAudit(tx, {
       ...actor,
       action: `integration_client.${action}`,
