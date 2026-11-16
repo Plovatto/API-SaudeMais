@@ -8,7 +8,7 @@
 
 API do Saúde+, um sistema de agendamento de consultas e exames para pacientes, médicos e administradores, desenvolvida com Node.js, TypeScript, Express e PostgreSQL.
 
-**Documentação interativa no ar:** https://p01--saudemais--pgj2h2jjxzb4.code.run/docs/ · **App:** https://plovatto.github.io/SaudeMais/
+**Documentação interativa no ar:** https://saudemais-api.plovatto.dev/docs/ · **App:** https://saudemais.plovatto.dev/
 
 ## Funcionalidades
 
@@ -142,7 +142,7 @@ http://localhost:3001/docs/openapi.json (OpenAPI 3.1)
 
 A API roda em Docker na [Northflank](https://northflank.com/), com o banco no [Neon](https://neon.tech/) (PostgreSQL 18, conexão direta).
 
-O `Dockerfile` tem dois estágios e usuário sem privilégios. A imagem já define `NODE_ENV=production` e escuta na porta `8080`. Em produção, `TRUST_PROXY_HOPS`, `CORS_ORIGIN` (só a origem do front, ex.: `https://plovatto.github.io`), `APP_PUBLIC_URL` (com o caminho), `DATABASE_URL` e `MAIL_DRIVER=smtp` com `SMTP_USER`, `SMTP_PASS` e `MAIL_FROM` são obrigatórias. `SMTP_HOST` e `SMTP_PORT` têm padrão `smtp.gmail.com` e `465`.
+O `Dockerfile` tem dois estágios e usuário sem privilégios. A imagem já define `NODE_ENV=production` e escuta na porta `8080`. Em produção, `TRUST_PROXY_HOPS`, `CORS_ORIGIN` (só a origem do front, ex.: `https://saudemais.plovatto.dev`), `APP_PUBLIC_URL` (endereço do front usado nos links dos e-mails), `DATABASE_URL` e `MAIL_DRIVER=smtp` com `SMTP_USER`, `SMTP_PASS` e `MAIL_FROM` são obrigatórias. `SMTP_HOST` e `SMTP_PORT` têm padrão `smtp.gmail.com` e `465`.
 
 A manutenção (pedidos expirados, conclusões automáticas, limpeza e restauração das contas de demonstração) roda dentro da própria API. O simulador do laboratório é um job agendado com a mesma imagem, comando `node dist/scripts/lab-simulator.js`, frequência `0 9 * * *` (UTC, 06:00 em São Paulo) e as variáveis `LAB_API_URL` e `LAB_API_KEY`. Para rodar a manutenção como job em vez de dentro da API, use o comando `node dist/jobs/run.js maintenance` e defina `MAINTENANCE_SCHEDULER=false` no serviço.
 
