@@ -75,9 +75,12 @@ describe('lab results on PostgreSQL', () => {
     expect(await count('exam_result_versions')).toBe(1);
   });
 
-  it('never lets a stored version change', async () => {
+  it('never lets a stored result or version change, but lets results be deleted with their versions', async () => {
     await publish(13.8).expect(201);
 
     await expect(pool.query("update exam_result_versions set status = 'amended'")).rejects.toThrow(/immutable/);
+    await expect(pool.query("update exam_results set external_id = 'LAB-2'")).rejects.toThrow(/immutable/);
+    await pool.query('delete from exam_results');
+    expect([await count('exam_results'), await count('exam_result_versions')]).toEqual([0, 0]);
   });
 });
