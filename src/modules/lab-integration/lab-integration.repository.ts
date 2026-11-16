@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, exists, gte, isNull, lt, not, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lt, not, sql } from 'drizzle-orm';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes } from '../../database/schema/catalog.js';
-import { examResults, examResultVersions } from '../../database/schema/exam-results.js';
+import { examResults, examResultVersions, hasResult } from '../../database/schema/exam-results.js';
 import { integrationClients } from '../../database/schema/integration-clients.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
@@ -99,10 +99,6 @@ export class LabIntegrationRepository {
   }
 
   async worklist({ start, end }: DayRange, now: Date): Promise<Worklist> {
-    const resulted = this.db
-      .select({ id: examResults.id })
-      .from(examResults)
-      .where(eq(examResults.bookingId, bookings.id));
     const rows = await this.db
       .select({
         examCode: sql<string>`${bookings.publicCode}`,
@@ -117,7 +113,7 @@ export class LabIntegrationRepository {
           gte(bookings.startsAt, start),
           lt(bookings.startsAt, end),
           eligibleAt(now),
-          not(exists(resulted)),
+          not(hasResult),
         ),
       )
       .orderBy(asc(bookings.startsAt), asc(bookings.publicCode));
