@@ -6,6 +6,7 @@ import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { examResults } from '../../database/schema/exam-results.js';
 import { healthMetrics } from '../../database/schema/health-metrics.js';
+import { integrationClients } from '../../database/schema/integration-clients.js';
 import { notifications } from '../../database/schema/notifications.js';
 import { userRoles, users } from '../../database/schema/users.js';
 import { MAINTENANCE_LOCK } from '../../jobs/maintenance.js';
@@ -13,7 +14,7 @@ import type { HealthMetricsInput } from '../appointments/appointments.model.js';
 import { insertMetrics } from '../appointments/appointments.repository.js';
 import { freeLanes, lanesInUse } from '../exam-bookings/exam-bookings.repository.js';
 import type { Recipient } from '../notifications/notifications.service.js';
-import type { ExamTypeSeed, SpecialtySeed, UnitSeed } from './demo.data.js';
+import type { DemoResultSeed, ExamTypeSeed, SpecialtySeed, UnitSeed } from './demo.data.js';
 
 export interface SpecialtyRef {
   id: string;
@@ -40,6 +41,7 @@ export interface DemoBooking {
   exam?: { examTypeId: string; capacity: number };
   events: Omit<typeof bookingEvents.$inferInsert, 'bookingId'>[];
   metrics?: HealthMetricsInput | undefined;
+  results: readonly DemoResultSeed[];
 }
 
 export interface RestoredDemo {
@@ -50,6 +52,7 @@ export interface RestoredDemo {
 interface Restoration {
   restored: RestoredDemo;
   recipients: Recipient[];
+  examCodes: string[];
 }
 
 const RESTORE_ACTION = 'demo.restored';
@@ -92,6 +95,18 @@ export class DemoRepository {
   async userIdByEmail(email: string): Promise<string | undefined> {
     const [row] = await this.db.select({ id: users.id }).from(users).where(eq(users.email, email));
     return row?.id;
+  }
+
+  async integrationClient(name: string) {
+    const [row] = await this.db
+      .select({
+        id: integrationClients.id,
+        revokedAt: integrationClients.revokedAt,
+        createdBy: integrationClients.createdBy,
+      })
+      .from(integrationClients)
+      .where(eq(integrationClients.name, name));
+    return row;
   }
 
   async hasDoctorProfile(userId: string): Promise<boolean> {
@@ -159,6 +174,7 @@ export class DemoRepository {
         .returning({ userId: notifications.userId, audienceRole: notifications.audienceRole });
       const deleted = await tx.delete(bookings).where(demoScope).returning({ id: bookings.id });
       let created = 0;
+      const examCodes: string[] = [];
       for (const { booking, exam, events, metrics } of demoBookings) {
         const { startsAt, endsAt } = booking;
         const offer = exam && { unitId: booking.unitId, examTypeId: exam.examTypeId };
@@ -172,6 +188,7 @@ export class DemoRepository {
           .onConflictDoNothing()
           .returning({ id: bookings.id });
         if (!inserted) continue;
+        if (booking.publicCode) examCodes.push(booking.publicCode);
         created += 1;
         await tx.insert(bookingEvents).values(events.map((event) => ({ ...event, bookingId: inserted.id })));
         if (metrics) await insertMetrics(tx, inserted.id, metrics, endsAt);
@@ -180,7 +197,7 @@ export class DemoRepository {
       await tx
         .insert(auditLogs)
         .values({ actorType: 'system', action: RESTORE_ACTION, metadata: restored, createdAt: now });
-      return { restored, recipients };
+      return { restored, recipients, examCodes };
     });
   }
 }

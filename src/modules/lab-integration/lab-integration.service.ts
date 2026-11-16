@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
 import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
-import { recordAudit, type Actor } from '../../lib/audit.js';
+import { recordAudit, type Actor, type AuditActor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import type { Pagination } from '../../lib/pagination.js';
@@ -66,7 +66,7 @@ export class LabIntegrationService {
     return this.repository.clientPage(pagination);
   }
 
-  async createClient({ name }: CreateClientInput, actor: Actor): Promise<CreatedClient> {
+  async createClient({ name }: CreateClientInput, actor: AuditActor): Promise<CreatedClient> {
     const { apiKey, ...key } = newApiKey();
     const client = await withConstraintConflicts(
       () => this.repository.createClient({ name, ...key, createdAt: this.clock.now() }, actor),

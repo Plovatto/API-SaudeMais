@@ -14,6 +14,7 @@ import { createDoctorScheduleModule } from './doctor-schedule/index.js';
 import { createDoctorsModule } from './doctors/index.js';
 import { createDemoModule } from './demo/index.js';
 import { createExamBookingsModule } from './exam-bookings/index.js';
+import { createExamResultsModule } from './exam-results/index.js';
 import { createLabIntegrationModule } from './lab-integration/index.js';
 import { createNotificationsModule } from './notifications/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
@@ -45,12 +46,19 @@ export function createModules(deps: ModulesDeps) {
     bookings: bookings.service,
   });
   const doctorSchedule = createDoctorScheduleModule({ db: deps.db, requireAuth: users.requireAuth });
+  const labIntegration = createLabIntegrationModule({
+    db: deps.db,
+    clock: deps.clock,
+    requireAuth: users.requireAuth,
+    notifications: notifications.service,
+  });
   const demo = createDemoModule({
     db: deps.db,
     users: users.service,
     schedules: doctorSchedule.service,
     clock: deps.clock,
     notifications: notifications.service,
+    lab: labIntegration.service,
   });
   const doctors = createDoctorsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const appointments = createAppointmentsModule({
@@ -78,12 +86,7 @@ export function createModules(deps: ModulesDeps) {
     requireAuth: users.requireAuth,
     notifications: notifications.service,
   });
-  const labIntegration = createLabIntegrationModule({
-    db: deps.db,
-    clock: deps.clock,
-    requireAuth: users.requireAuth,
-    notifications: notifications.service,
-  });
+  const examResults = createExamResultsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminReports = createAdminReportsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const maintenance = createMaintenance({
@@ -119,6 +122,7 @@ export function createModules(deps: ModulesDeps) {
       patientBookings.router,
       doctorAgenda.router,
       labIntegration.router,
+      examResults.router,
       notifications.routerFor(users.requireAuth),
     ],
   };

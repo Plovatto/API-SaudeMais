@@ -80,6 +80,9 @@ export const examBookingSchema = registry.register(
     notes: z.string().nullable().openapi({ description: 'Observações do paciente.' }),
     examType: examTypeSchema.pick({ id: true, name: true, kind: true, preparationNotes: true }),
     unit: doctorSchema.shape.unit,
+    hasResult: z
+      .boolean()
+      .openapi({ description: 'Se o exame já tem resultado, aberto em `GET /api/patient/exam-results/{bookingId}`.' }),
     cancellation: cancellationSchema,
     createdAt: z.iso.datetime(),
     actions: bookingActionsSchema,

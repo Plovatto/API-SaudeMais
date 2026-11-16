@@ -12,7 +12,7 @@ export const integrationClients = pgTable(
     apiKeyHash: text('api_key_hash').notNull(),
     lastUsedAt: timestamptz('last_used_at'),
     revokedAt: timestamptz('revoked_at'),
-    createdBy: uuid('created_by').notNull(),
+    createdBy: uuid('created_by'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
   },
   (table) => [

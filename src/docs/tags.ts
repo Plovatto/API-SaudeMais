@@ -19,11 +19,12 @@ export const tags = {
   },
   patient: {
     name: 'Paciente',
-    description: 'Início e agendamentos do paciente logado. Exige o perfil de paciente.',
+    description: 'Início, agendamentos e resultados de exame do paciente logado. Exige o perfil de paciente.',
   },
   doctor: {
     name: 'Médico',
-    description: 'Agenda e rotina do médico logado. Exige o perfil de médico.',
+    description:
+      'Agenda e rotina do médico logado e resultados de exame dos pacientes em avaliação de exames. Exige o perfil de médico.',
   },
   notifications: {
     name: 'Notificações',

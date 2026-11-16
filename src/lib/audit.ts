@@ -3,7 +3,7 @@ import { auditLogs, type ActorType } from '../database/schema/audit-logs.js';
 
 export interface AuditEntry {
   actorType?: ActorType;
-  actorId: string;
+  actorId: string | null;
   action: string;
   entityType: string;
   entityId: string;
@@ -11,7 +11,14 @@ export interface AuditEntry {
   ip: string | null;
 }
 
-export type Actor = Pick<AuditEntry, 'actorId' | 'ip'>;
+export interface Actor {
+  actorId: string;
+  ip: string | null;
+}
+
+export const systemActor = { actorType: 'system', actorId: null, ip: null } as const;
+
+export type AuditActor = Actor | typeof systemActor;
 
 export async function recordAudit(
   db: Pick<Database, 'insert'>,

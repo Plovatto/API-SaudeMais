@@ -1,12 +1,13 @@
-import { and, asc, desc, eq, exists, gte, isNull, lt, not, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lt, not, sql } from 'drizzle-orm';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes } from '../../database/schema/catalog.js';
 import { examResults, examResultVersions } from '../../database/schema/exam-results.js';
 import { integrationClients } from '../../database/schema/integration-clients.js';
-import { recordAudit, type Actor } from '../../lib/audit.js';
+import { recordAudit, type Actor, type AuditActor } from '../../lib/audit.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import type { DayRange } from '../../lib/time.js';
+import { hasResult } from '../bookings/bookings.repository.js';
 import type { IntegrationClient, Worklist } from './lab-integration.model.js';
 
 interface NewClient {
@@ -59,7 +60,7 @@ export class LabIntegrationRepository {
     return { ...page, items: page.items.map(viewOf) };
   }
 
-  createClient({ createdAt, ...client }: NewClient, actor: Actor): Promise<IntegrationClient> {
+  createClient({ createdAt, ...client }: NewClient, actor: AuditActor): Promise<IntegrationClient> {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .insert(integrationClients)
@@ -99,10 +100,6 @@ export class LabIntegrationRepository {
   }
 
   async worklist({ start, end }: DayRange, now: Date): Promise<Worklist> {
-    const resulted = this.db
-      .select({ id: examResults.id })
-      .from(examResults)
-      .where(eq(examResults.bookingId, bookings.id));
     const rows = await this.db
       .select({
         examCode: sql<string>`${bookings.publicCode}`,
@@ -117,7 +114,7 @@ export class LabIntegrationRepository {
           gte(bookings.startsAt, start),
           lt(bookings.startsAt, end),
           eligibleAt(now),
-          not(exists(resulted)),
+          not(hasResult),
         ),
       )
       .orderBy(asc(bookings.startsAt), asc(bookings.publicCode));
@@ -169,7 +166,7 @@ export class LabIntegrationRepository {
     await tx.insert(examResultVersions).values(version);
   }
 
-  private audit(tx: Transaction, action: string, { id, keyPrefix }: ClientRow, actor: Actor) {
+  private audit(tx: Transaction, action: string, { id, keyPrefix }: ClientRow, actor: AuditActor) {
     return recordAudit(tx, {
       ...actor,
       action: `integration_client.${action}`,

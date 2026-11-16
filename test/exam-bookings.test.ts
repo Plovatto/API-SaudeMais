@@ -262,6 +262,7 @@ describe('POST /api/exam-bookings', () => {
       notes: 'Levo o pedido\nimpresso.',
       examType: { id: hemograma.examTypeId, name: 'Hemograma', kind: 'lab', preparationNotes: null },
       unit: centralUnit,
+      hasResult: false,
       cancellation: null,
       createdAt: START.toISOString(),
       actions: {

@@ -12,6 +12,7 @@ import {
   type CancellerRole,
 } from '../../database/schema/bookings.js';
 import { settings, specialties, units } from '../../database/schema/catalog.js';
+import { examResults } from '../../database/schema/exam-results.js';
 import { users } from '../../database/schema/users.js';
 import { HOUR, type DayRange } from '../../lib/time.js';
 import { bookingActions, type BookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
@@ -99,6 +100,8 @@ export function viewOf<T extends { startsAt: Date; endsAt: Date; cancellation: C
     cancellation: cancellationOf(cancellation),
   };
 }
+
+export const hasResult = sql<boolean>`exists (select 1 from ${examResults} where ${examResults.bookingId} = ${bookings.id})`;
 
 export const countWhere = (where: SQL | undefined) => sql<number>`count(*) filter (where ${where})`.mapWith(Number);
 

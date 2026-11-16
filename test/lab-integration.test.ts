@@ -6,25 +6,19 @@ import { hashToken } from '@/modules/users/user.token.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { insertExam, offerOf, type Offer } from './support/exams.js';
+import {
+  createIntegrationClient,
+  ISSUED_AT,
+  postIntegrationClient,
+  publishResult,
+  rowsOf,
+  valueOf,
+  type ClientBody,
+  type Exam,
+} from './support/lab.js';
 import { as, createAdmin, createPatient, START } from './support/users.js';
 
-interface Client {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-  revokedAt: string | null;
-  apiKey?: string;
-}
-
-interface Exam {
-  id: string;
-  code: string;
-}
-
 const API_KEY = /^slab_([0-9a-f]{8})_[A-Za-z0-9_-]{43}$/;
-const ISSUED_AT = '2026-11-20T11:30:00.000Z';
 const ITEMS = [
   { name: 'Hemoglobina', value: 13.8, unit: 'g/dL', referenceRange: '12,0 a 16,0', flag: 'normal' },
   { name: 'Leucócitos', value: 'Ausentes', flag: 'low' },
@@ -37,7 +31,6 @@ let patientId: string;
 let lab: string;
 let hemograma: Offer;
 let ultrassom: Offer;
-let names = 0;
 
 beforeAll(async () => {
   context = await setupClinic();
@@ -46,34 +39,21 @@ beforeAll(async () => {
   patientId = await one<string>(sql`select id as value from users where email = 'paciente.lab@email.com'`);
   hemograma = await offerOf(context, 'Unidade Central', 'hemograma');
   ultrassom = await offerOf(context, 'Unidade Central', 'ultrassom');
-  lab = (await newClient()).apiKey ?? '';
+  lab = (await createIntegrationClient(context.app, admin)).apiKey ?? '';
 }, 60_000);
 
-async function rows<T>(query: ReturnType<typeof sql>): Promise<T[]> {
-  return (await context.db.execute(query)).rows as T[];
-}
+const rows = <T>(query: ReturnType<typeof sql>) => rowsOf<T>(context.db, query);
 
-async function one<T>(query: ReturnType<typeof sql>): Promise<T> {
-  const [row] = await rows<{ value: T }>(query);
-  if (!row) throw new Error('No row');
-  return row.value;
-}
+const one = <T>(query: ReturnType<typeof sql>) => valueOf<T>(context.db, query);
 
-const createClient = (name: string, token = admin) =>
-  request(context.app).post('/api/admin/integration-clients').set(as(token)).send({ name });
-
-async function newClient(): Promise<Client> {
-  names += 1;
-  return (await createClient(`Laboratório ${names}`).expect(201)).body as Client;
-}
+const createClient = (name: string, token = admin) => postIntegrationClient(context.app, token, name);
 
 const revoke = (id: string) => request(context.app).post(`/api/admin/integration-clients/${id}/revoke`).set(as(admin));
 
 const worklist = (date: string, key = lab) =>
   request(context.app).get('/api/integrations/lab/worklist').query({ date }).set('X-Api-Key', key);
 
-const publish = (body: Record<string, unknown>, key = lab) =>
-  request(context.app).post('/api/integrations/lab/results').set('X-Api-Key', key).send(body);
+const publish = (body: Record<string, unknown>, key = lab) => publishResult(context.app, key, body);
 
 const labResult = (exam: Exam, overrides: Record<string, unknown> = {}) => ({
   externalId: `LAB-${exam.code}`,
@@ -115,7 +95,7 @@ const statusOf = (exam: Exam) => one<string>(sql`select status as value from boo
 describe('integration clients', () => {
   it('shows the key once, stores only its hash and audits the creation', async () => {
     const response = await createClient('Laboratório Central').expect(201);
-    const client = response.body as Client;
+    const client = response.body as ClientBody;
 
     const match = API_KEY.exec(client.apiKey ?? '');
     expect(match?.[1]).toBe(client.keyPrefix);
@@ -125,7 +105,7 @@ describe('integration clients', () => {
     );
     expect(stored).toEqual({ api_key_hash: hashToken(client.apiKey ?? ''), key_prefix: client.keyPrefix });
     const page = await request(context.app).get('/api/admin/integration-clients').set(as(admin)).expect(200);
-    const listed = (page.body as { items: Client[] }).items.find((item) => item.id === client.id);
+    const listed = (page.body as { items: ClientBody[] }).items.find((item) => item.id === client.id);
     expect(listed).toEqual({ ...client, apiKey: undefined });
     expect(JSON.stringify(page.body)).not.toMatch(/apiKey|Hash|slab_/);
     const [audit] = await rows<{ action: string; metadata: Record<string, unknown> }>(
@@ -142,10 +122,10 @@ describe('integration clients', () => {
   });
 
   it('revokes a key right away, once, and audits it', async () => {
-    const client = await newClient();
+    const client = await createIntegrationClient(context.app, admin);
     await worklist('2026-11-20', client.apiKey).expect(200);
 
-    const revoked = (await revoke(client.id).expect(200)).body as Client;
+    const revoked = (await revoke(client.id).expect(200)).body as ClientBody;
 
     expect(revoked.revokedAt).toBe(START.toISOString());
     expect((await worklist('2026-11-20', client.apiKey).expect(401)).body).toMatchObject({ code: 'INVALID_API_KEY' });
@@ -172,7 +152,7 @@ describe('api key authentication', () => {
   });
 
   it('records the last use at most every 5 minutes', async () => {
-    const client = await newClient();
+    const client = await createIntegrationClient(context.app, admin);
     const lastUsed = async () =>
       (
         await context.db
@@ -195,7 +175,7 @@ describe('api key authentication', () => {
   });
 
   it('limits each key to 60 requests per minute without affecting other keys', async () => {
-    const client = await newClient();
+    const client = await createIntegrationClient(context.app, admin);
     for (let attempt = 0; attempt < 60; attempt += 1) await worklist('2026-11-21', client.apiKey).expect(200);
 
     expect((await worklist('2026-11-21', client.apiKey).expect(429)).body).toMatchObject({ code: 'TOO_MANY_REQUESTS' });
@@ -312,7 +292,7 @@ describe('POST /api/integrations/lab/results', () => {
   it('refuses different content as final, another externalId and another client for the same exam', async () => {
     const exam = await examAt(hemograma, '2026-11-19T14:00:00.000Z');
     await publish(labResult(exam)).expect(201);
-    const other = (await newClient()).apiKey ?? '';
+    const other = (await createIntegrationClient(context.app, admin)).apiKey ?? '';
 
     const final = await publish(labResult(exam, { items: [ITEMS[0]] })).expect(409);
     const otherId = await publish(labResult(exam, { externalId: 'LAB-OUTRO' })).expect(409);
@@ -397,21 +377,23 @@ describe('POST /api/integrations/lab/results', () => {
     expect(JSON.stringify([audit, notices])).not.toMatch(/SIGILOSO|sigiloso/);
   });
 
-  it('lets the demo restoration remove the results of demo exams', async () => {
+  it('lets the demo restoration replace the results of demo exams', async () => {
     const restore = async () => {
       await context.db.execute(sql`delete from audit_logs where action = 'demo.restored'`);
       return context.modules.demo.service.restore();
     };
+    const demoResults = () =>
+      rows<{ booking_id: string }>(sql`
+        select r.booking_id from exam_results r join bookings b on b.id = r.booking_id
+        join users u on u.id = b.patient_id where u.is_protected
+      `);
     await restore();
-    const demoExam = await rows<{ id: string; code: string }>(sql`
-      select b.id, b.public_code as code from bookings b join users u on u.id = b.patient_id
-      where u.is_protected and b.kind = 'exam' and b.status = 'completed'
-    `);
-    const exam = demoExam[0] as Exam;
-    await publish(labResult(exam)).expect(201);
+    const before = await demoResults();
 
     await expect(restore()).resolves.toBeDefined();
 
-    expect(await rows(sql`select id from exam_results where booking_id = ${exam.id}`)).toEqual([]);
+    const after = await demoResults();
+    expect([before.length, after.length]).toEqual([1, 1]);
+    expect(after).not.toEqual(before);
   });
 });
