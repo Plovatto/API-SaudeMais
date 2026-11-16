@@ -1,10 +1,10 @@
-import { and, asc, count, desc, eq, gt, gte, lt, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql, type SQL } from 'drizzle-orm';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import {
   bookings,
   effectiveStatus,
+  isAwaitingRecord,
   notActiveFuture,
-  type BookingStatus,
   type VisitType,
 } from '../../database/schema/bookings.js';
 import { specialties, units } from '../../database/schema/catalog.js';
@@ -12,22 +12,24 @@ import { users } from '../../database/schema/users.js';
 import { pageOf, type Pagination } from '../../lib/pagination.js';
 import { CLINIC_TIME_ZONE, instantOfWallClock, type DayRange } from '../../lib/time.js';
 import { doctorActions } from '../bookings/booking-policy.js';
-import { cancellationColumns, countWhere, placeColumns, viewOf } from '../bookings/bookings.repository.js';
+import {
+  cancellationColumns,
+  countWhere,
+  futureWith,
+  noStatusTotals,
+  placeColumns,
+  startsWithin,
+  statusTotals,
+  viewOf,
+} from '../bookings/bookings.repository.js';
 import type { AgendaTab, DoctorAppointmentPage, DoctorAppointmentsQuery } from './doctor-agenda.model.js';
 
 const HOME_ITEMS = 3;
 
-const futureWith = (status: BookingStatus, now: Date) => and(eq(bookings.status, status), gt(bookings.startsAt, now));
-
-const withStatus = (status: BookingStatus, now: Date) => countWhere(eq(effectiveStatus(now), status));
-
 const tabs: Record<AgendaTab, (now: Date) => { where: SQL | undefined; order: SQL }> = {
   pending: (now) => ({ where: futureWith('pending', now), order: asc(bookings.startsAt) }),
   confirmed: (now) => ({ where: futureWith('confirmed', now), order: asc(bookings.startsAt) }),
-  awaiting: (now) => ({
-    where: and(eq(bookings.status, 'confirmed'), lte(bookings.startsAt, now)),
-    order: asc(bookings.startsAt),
-  }),
+  awaiting: (now) => ({ where: isAwaitingRecord(now), order: asc(bookings.startsAt) }),
   history: (now) => ({ where: notActiveFuture(now), order: desc(bookings.startsAt) }),
 };
 
@@ -91,23 +93,12 @@ async function countsOf(tx: Transaction, doctorId: string, now: Date) {
   return row ?? { pending: 0, confirmed: 0, awaiting: 0, history: 0 };
 }
 
-async function todayOf(tx: Transaction, doctorId: string, { start, end }: DayRange, now: Date) {
+async function todayOf(tx: Transaction, doctorId: string, day: DayRange, now: Date) {
   const [row] = await tx
-    .select({
-      total: count(),
-      pending: countWhere(tabs.pending(now).where),
-      confirmed: countWhere(tabs.confirmed(now).where),
-      awaitingRecord: countWhere(tabs.awaiting(now).where),
-      completed: withStatus('completed', now),
-      noShow: withStatus('no_show', now),
-      cancelled: withStatus('cancelled', now),
-      expired: withStatus('expired', now),
-    })
+    .select(statusTotals(now))
     .from(bookings)
-    .where(and(ofDoctor(doctorId), gte(bookings.startsAt, start), lt(bookings.startsAt, end)));
-  return (
-    row ?? { total: 0, pending: 0, confirmed: 0, awaitingRecord: 0, completed: 0, noShow: 0, cancelled: 0, expired: 0 }
-  );
+    .where(and(ofDoctor(doctorId), startsWithin(day)));
+  return row ?? noStatusTotals;
 }
 
 export class DoctorAgendaRepository {

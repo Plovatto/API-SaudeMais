@@ -46,3 +46,10 @@ export function dayRangeIn(timeZone: string, date: Date): DayRange {
   const start = startOfDayIn(timeZone, date);
   return { start, end: startOfDayIn(timeZone, new Date(start.getTime() + DAY + 2 * HOUR)) };
 }
+
+export function civilPeriodIn(timeZone: string, { from, to }: { from: string; to: string }): DayRange {
+  return {
+    start: instantOfWallClock(timeZone, Date.parse(from)),
+    end: instantOfWallClock(timeZone, Date.parse(to) + DAY),
+  };
+}
