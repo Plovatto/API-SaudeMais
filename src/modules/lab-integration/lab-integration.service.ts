@@ -6,7 +6,7 @@ import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import type { Pagination } from '../../lib/pagination.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
-import { CLINIC_TIME_ZONE, dayRangeIn, instantOfWallClock } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, dayRangeIn, instantOfWallClock, MINUTE } from '../../lib/time.js';
 import { recordResult } from '../bookings/bookings.repository.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import { TOUCH_INTERVAL } from '../users/user.service.js';
@@ -15,6 +15,7 @@ import {
   clientConflicts,
   clientNotFound,
   examNotFound,
+  issuedInFuture,
   notEligible,
   resultConflicts,
   wrongFormat,
@@ -29,6 +30,7 @@ import type {
 } from './lab-integration.model.js';
 import type { LabIntegrationRepository } from './lab-integration.repository.js';
 
+const ISSUED_AT_SKEW = 5 * MINUTE;
 const API_KEY_PATTERN = /^slab_[0-9a-f]{8}_(.+)$/;
 
 interface Publication {
@@ -111,6 +113,7 @@ export class LabIntegrationService {
     { clientId, ip }: Publisher,
   ): Promise<Publication> {
     const now = this.clock.now();
+    if (Date.parse(issuedAt) > now.getTime() + ISSUED_AT_SKEW) throw unprocessableField(issuedInFuture);
     const exam = await this.repository.lockExam(tx, examCode, now);
     if (!exam) throw new AppError(404, 'NOT_FOUND', examNotFound);
     if (!exam.eligible) throw unprocessableField(notEligible);

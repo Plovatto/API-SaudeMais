@@ -15,6 +15,7 @@ import {
   clientConflicts,
   clientNotFound,
   examNotFound,
+  issuedInFuture,
   notEligible,
   resultConflicts,
 } from './lab-integration.messages.js';
@@ -98,7 +99,7 @@ documentOperation({
   tag: tags.integrations.name,
   auth: labKeySecurity,
   summary: 'Publicar o resultado de um exame',
-  description: `Publica o resultado do exame \`examCode\`, que precisa estar confirmado com o horário já iniciado ou concluído (\`NOT_ELIGIBLE\`). Exame laboratorial recebe \`items\`; exame de imagem recebe \`report\` (\`WRONG_RESULT_FORMAT\`). A primeira publicação cria a versão 1 (201). Reenviar com o mesmo \`externalId\` e o mesmo conteúdo da versão atual não muda nada (200, \`unchanged\`). Conteúdo diferente com \`status\` \`amended\` cria uma nova versão (200, \`amended\`); com \`final\`, é recusado (\`RESULT_FINAL\`). Outro \`externalId\` para o mesmo exame é recusado (\`RESULT_EXISTS\`), assim como reaproveitar um \`externalId\` em outro exame (\`EXTERNAL_ID_TAKEN\`). As versões são imutáveis. Cada versão nova conclui o exame, registra o evento \`result_received\`, avisa o paciente com a notificação \`exam_result_available\` e fica na auditoria, sem o conteúdo do resultado. Publicações simultâneas do mesmo exame são feitas uma de cada vez. ${labLimitNote}`,
+  description: `Publica o resultado do exame \`examCode\`, que precisa estar confirmado com o horário já iniciado ou concluído (\`NOT_ELIGIBLE\`). \`issuedAt\` aceita no máximo 5 minutos à frente do relógio da API (\`ISSUED_IN_FUTURE\`). Exame laboratorial recebe \`items\`; exame de imagem recebe \`report\` (\`WRONG_RESULT_FORMAT\`). A primeira publicação cria a versão 1 (201). Reenviar com o mesmo \`externalId\` e o mesmo conteúdo da versão atual não muda nada (200, \`unchanged\`). Conteúdo diferente com \`status\` \`amended\` cria uma nova versão (200, \`amended\`); com \`final\`, é recusado (\`RESULT_FINAL\`). Outro \`externalId\` para o mesmo exame é recusado (\`RESULT_EXISTS\`), assim como reaproveitar um \`externalId\` em outro exame (\`EXTERNAL_ID_TAKEN\`). As versões são imutáveis. Cada versão nova conclui o exame, registra o evento \`result_received\`, avisa o paciente com a notificação \`exam_result_available\` e fica na auditoria, sem o conteúdo do resultado. Publicações simultâneas do mesmo exame são feitas uma de cada vez. ${labLimitNote}`,
   body: resultInputSchema,
   success: [
     { status: 201, description: 'Resultado criado.', schema: resultReceiptSchema },
@@ -113,7 +114,7 @@ documentOperation({
       resultConflicts.exam_results_client_external_id_key,
     ),
     422: errorResponse(
-      'Exame cancelado ou futuro (`NOT_ELIGIBLE`) ou formato errado para o tipo de exame (`WRONG_RESULT_FORMAT`).',
+      `Exame cancelado ou futuro (\`${notEligible.code}\`), formato errado para o tipo de exame (\`WRONG_RESULT_FORMAT\`) ou emissão no futuro (\`${issuedInFuture.code}\`).`,
       {
         message: notEligible.message,
         code: notEligible.code,

@@ -31,6 +31,12 @@ export const resultConflicts = {
   },
 } satisfies Record<string, FieldConflict>;
 
+export const issuedInFuture: FieldConflict = {
+  code: 'ISSUED_IN_FUTURE',
+  field: 'issuedAt',
+  message: 'A data de emissão não pode estar no futuro.',
+};
+
 export const notEligible: FieldConflict = {
   code: 'NOT_ELIGIBLE',
   field: 'examCode',

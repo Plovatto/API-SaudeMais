@@ -82,6 +82,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`SELF_BOOKING\` | 422 | O médico tentou marcar consulta consigo mesmo |
 | \`REASON_REQUIRED\` | 422 | O médico precisa informar o motivo ao cancelar uma consulta |
 | \`NOT_ELIGIBLE\` | 422 | O exame foi cancelado ou ainda não começou, então não recebe resultado |
+| \`ISSUED_IN_FUTURE\` | 422 | A data de emissão do resultado passa de 5 minutos à frente do relógio da API |
 | \`WRONG_RESULT_FORMAT\` | 422 | Exame laboratorial recebe \`items\`; exame de imagem, \`report\` |
 | \`ROUTE_NOT_FOUND\` | 404 | A rota ou o método não existe |
 | \`PAYLOAD_TOO_LARGE\` | 413 | O corpo passou de 100 KB |

@@ -223,6 +223,7 @@ A publicação trava o exame (`FOR NO KEY UPDATE`) e compara o conteúdo com a v
 | Código inexistente | `404` `NOT_FOUND` |
 | Exame cancelado ou que ainda não começou | `422` `NOT_ELIGIBLE` |
 | `items` em exame de imagem ou `report` em exame laboratorial | `422` `WRONG_RESULT_FORMAT` |
+| `issuedAt` mais de 5 min à frente do relógio da API | `422` `ISSUED_IN_FUTURE` |
 
 Cada versão nova conclui o exame, grava o evento `result_received`, avisa o paciente com `exam_result_available` e fica na auditoria com a versão e o status, nunca com o conteúdo, que também não vai para os logs nem para as notificações. As versões não podem ser alteradas: um trigger recusa `UPDATE` em `exam_result_versions`. Cada chave tem um limite próprio de 60 requisições por minuto.
 

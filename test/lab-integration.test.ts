@@ -372,6 +372,15 @@ describe('POST /api/integrations/lab/results', () => {
     ]);
   });
 
+  it('refuses an issuedAt more than 5 minutes ahead of the clock', async () => {
+    const exam = await examAt(hemograma, '2026-11-19T16:40:00.000Z');
+
+    const ahead = await publish(labResult(exam, { issuedAt: '2026-11-20T12:05:01.000Z' })).expect(422);
+    await publish(labResult(exam, { issuedAt: '2026-11-20T12:05:00.000Z' })).expect(201);
+
+    expect(ahead.body).toMatchObject({ code: 'ISSUED_IN_FUTURE', fields: { issuedAt: expect.any(String) as unknown } });
+  });
+
   it('answers 404 for an unknown code and NOT_ELIGIBLE for future or cancelled exams', async () => {
     const future = await examAt(hemograma, '2026-11-20T16:00:00.000Z');
     const cancelled = await examAt(hemograma, '2026-11-19T16:00:00.000Z', 'cancelled');
