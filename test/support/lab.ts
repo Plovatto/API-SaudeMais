@@ -15,7 +15,19 @@ export interface Exam {
   code: string;
 }
 
+export interface ClientBody {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  apiKey?: string;
+}
+
 export const ISSUED_AT = '2026-11-20T11:30:00.000Z';
+
+let clientNames = 0;
 
 export async function rowsOf<T>(db: Db, query: SQL): Promise<T[]> {
   return (await db.execute(query)).rows as T[];
@@ -36,9 +48,19 @@ export async function createAdmin(context: Clinic, email: string): Promise<strin
   return token;
 }
 
-export async function createLabKey(app: Express, admin: string, name: string): Promise<string> {
-  const response = await request(app).post('/api/admin/integration-clients').set(as(admin)).send({ name }).expect(201);
-  return (response.body as { apiKey: string }).apiKey;
+export const postIntegrationClient = (app: Express, token: string, name: string) =>
+  request(app).post('/api/admin/integration-clients').set(as(token)).send({ name });
+
+export async function createIntegrationClient(
+  app: Express,
+  admin: string,
+  name = `Laboratório ${(clientNames += 1)}`,
+): Promise<ClientBody> {
+  return (await postIntegrationClient(app, admin, name).expect(201)).body as ClientBody;
+}
+
+export async function createLabKey(app: Express, admin: string): Promise<string> {
+  return (await createIntegrationClient(app, admin)).apiKey ?? '';
 }
 
 export const publishResult = (app: Express, key: string, body: Record<string, unknown>) =>

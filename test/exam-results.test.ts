@@ -77,7 +77,7 @@ async function doctorAccount(email: string, fullName: string, registry: string) 
 beforeAll(async () => {
   context = await setupClinic();
   admin = await createAdmin(context, 'admin.resultados@email.com');
-  const lab = await createLabKey(context.app, admin, 'Laboratório Resultados');
+  const lab = await createLabKey(context.app, admin);
   patient = await createPatient(context, 'paciente.resultados@email.com');
   patientId = await userId('paciente.resultados@email.com');
   stranger = await createPatient(context, 'outro.resultados@email.com');
