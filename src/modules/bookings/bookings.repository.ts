@@ -293,7 +293,11 @@ function completeConfirmed(tx: Transaction, where: SQL | undefined, now: Date): 
 }
 
 export function completeEndedExams(tx: Transaction, now: Date): Promise<ChangedBooking[]> {
-  return completeConfirmed(tx, and(eq(bookings.kind, 'exam'), lte(bookings.endsAt, now)), now);
+  return completeConfirmed(
+    tx,
+    and(eq(bookings.kind, 'exam'), lte(bookings.startsAt, now), lte(bookings.endsAt, now)),
+    now,
+  );
 }
 
 export function completeStaleAppointments(tx: Transaction, now: Date): Promise<ChangedBooking[]> {

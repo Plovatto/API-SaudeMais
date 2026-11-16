@@ -12,7 +12,7 @@ import {
 } from '@/database/schema/index.js';
 import { DEMO_BOOKINGS } from '@/modules/demo/demo.data.js';
 import { newPublicCode } from '@/modules/exam-bookings/exam-bookings.code.js';
-import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
+import { DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { doctorNamed, setupClinic, type Clinic } from './support/doctors.js';
 import { offerOf } from './support/exams.js';
 import { as, HOUR, registration, START } from './support/users.js';
@@ -212,9 +212,23 @@ describe('maintenance', () => {
   });
 
   it('restores the demo bookings once per São Paulo day and keeps everyone else’s', async () => {
-    const demoPatient = await userId(DEMO_ACCOUNTS[0]?.email ?? '');
-    const visitor = await appointment(await userId(registration().email), 'pending', later(2 * DAY));
+    const demoPatient = await userId(DEMO_PATIENT.email);
+    const visitorId = await userId(registration().email);
+    const visitor = await appointment(visitorId, 'pending', later(2 * DAY));
+    const visitorExam = await exam(visitorId, new Date('2026-11-23T11:00:00.000Z'));
     const demoVisit = await appointment(demoPatient, 'pending', later(3 * DAY));
+    await context.db
+      .insert(notifications)
+      .values({ userId: demoPatient, audienceRole: 'patient', type: 'appointment_confirmed', bookingId: demoVisit });
+    const unread = async () =>
+      (
+        await request(context.app)
+          .get('/api/notifications/unread-count')
+          .query({ role: 'patient' })
+          .set(as(context.demoPatient))
+          .expect(200)
+      ).body as { count: number };
+    expect(await unread()).toEqual({ count: 1 });
     const demoBookings = async () =>
       (
         await context.db
@@ -227,7 +241,17 @@ describe('maintenance', () => {
 
     expect((await run(true)).demoRestored).toEqual({ deleted: 1, created: DEMO_BOOKINGS.length });
 
-    expect([await statusOf(visitor), await statusOf(demoVisit)]).toEqual(['pending', undefined]);
+    expect([await statusOf(visitor), await statusOf(visitorExam), await statusOf(demoVisit)]).toEqual([
+      'pending',
+      'confirmed',
+      undefined,
+    ]);
+    expect(await unread()).toEqual({ count: 0 });
+    const lanes = await context.db
+      .select({ lane: bookings.lane })
+      .from(bookings)
+      .where(eq(bookings.startsAt, new Date('2026-11-23T11:00:00.000Z')));
+    expect(lanes.map(({ lane }) => lane).sort()).toEqual([1, 2]);
     expect(await demoBookings()).toEqual([
       'appointment:completed',
       'appointment:confirmed',

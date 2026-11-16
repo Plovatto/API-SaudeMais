@@ -8,15 +8,15 @@ export interface SeedAccount {
   isProtected: boolean;
 }
 
-export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
-  {
-    fullName: 'Ana Maria Silva',
-    email: 'paciente@saudemais.test',
-    password: 'paciente-demo-123',
-    roles: ['patient'],
-    isProtected: true,
-  },
-];
+export const DEMO_PATIENT: SeedAccount = {
+  fullName: 'Ana Maria Silva',
+  email: 'paciente@saudemais.test',
+  password: 'paciente-demo-123',
+  roles: ['patient'],
+  isProtected: true,
+};
+
+export const DEMO_ACCOUNTS: readonly SeedAccount[] = [DEMO_PATIENT];
 
 export const DEMO_DOCTOR: SeedAccount = {
   fullName: 'Dr. João Silveira',

@@ -4,6 +4,7 @@ import type pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
+import { DEMO_BOOKINGS } from '@/modules/demo/demo.data.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { START } from '../test/support/users.js';
@@ -67,6 +68,16 @@ describe('maintenance on PostgreSQL', () => {
 
     expect(reports.reduce((total, report) => total + (report?.expired ?? 0), 0)).toBe(1);
     expect(await expiredNotices()).toBe(1);
+  });
+
+  it('restores the demo bookings only once when two restorations race', async () => {
+    const results = await Promise.all([context.modules.demo.service.restore(), context.modules.demo.service.restore()]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    const demo = await pool.query<{ total: number }>(
+      'select count(*)::int as total from bookings b join users u on u.id = b.patient_id where u.is_protected',
+    );
+    expect(demo.rows[0]?.total).toBe(DEMO_BOOKINGS.length);
   });
 
   it('runs from the command line and exits with 0', async () => {

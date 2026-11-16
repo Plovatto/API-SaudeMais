@@ -48,6 +48,7 @@ export function createModules(deps: ModulesDeps) {
     users: users.service,
     schedules: doctorSchedule.service,
     clock: deps.clock,
+    notifications: notifications.service,
   });
   const doctors = createDoctorsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const appointments = createAppointmentsModule({
@@ -81,6 +82,7 @@ export function createModules(deps: ModulesDeps) {
     clock: deps.clock,
     bookings: bookings.service,
     demo: demo.service,
+    notifications: notifications.service,
   });
   return {
     users,
