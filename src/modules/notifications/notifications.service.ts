@@ -9,7 +9,7 @@ import type { Area, NotificationView } from './notifications.model.js';
 import type { NewNotification, NotificationsRepository } from './notifications.repository.js';
 
 type Notice = Pick<NewNotification, 'type' | 'params' | 'bookingId'>;
-type Delivery = Notice & Pick<NewNotification, 'userId' | 'audienceRole'>;
+export type Delivery = Notice & Pick<NewNotification, 'userId' | 'audienceRole'>;
 
 const keyOf = (userId: string, role: Role) => `${userId}:${role}`;
 

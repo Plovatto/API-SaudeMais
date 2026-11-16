@@ -6,7 +6,7 @@ import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import { unauthenticated } from '../../middleware/auth.js';
-import type { NotificationsService } from '../notifications/notifications.service.js';
+import type { Delivery, NotificationsService } from '../notifications/notifications.service.js';
 import type { BookingActions } from './booking-policy.js';
 import { ACTIVE_LIMIT, activeLimit, notStarted, rescheduleConflicts, sameSlot } from './bookings.messages.js';
 import {
@@ -14,7 +14,10 @@ import {
   activeFutureCount,
   asPatient,
   cancelActiveFuture,
+  completeEndedExams,
+  completeStaleAppointments,
   confirmPending,
+  expirePending,
   hasActiveFuture,
   lockSeen,
   moveBooking,
@@ -32,6 +35,8 @@ import {
 } from './bookings.repository.js';
 
 type Placement = Omit<Move, 'startsAt'>;
+
+type SystemUpdate = (tx: Transaction, now: Date) => Promise<ChangedBooking[]>;
 
 interface Reschedule extends SeenBooking {
   patientId: string;
@@ -192,6 +197,39 @@ export class BookingsService {
     if ((await recordStarted(tx, scope, outcome, doctorId, now)).length > 0) return nothingAfterCommit;
     if (await hasActiveFuture(tx, and(eq(bookings.status, 'confirmed'), scope), now)) throw conflictError(notStarted);
     return undefined;
+  }
+
+  expireOverdue(): Promise<number> {
+    return this.updateAsSystem(expirePending, (booking) => ({
+      userId: booking.patientId,
+      audienceRole: 'patient',
+      type: 'appointment_expired',
+      bookingId: booking.id,
+      params: { startsAt: booking.startsAt.toISOString() },
+    }));
+  }
+
+  completeEndedExams(): Promise<number> {
+    return this.updateAsSystem(completeEndedExams);
+  }
+
+  completeStaleAppointments(): Promise<number> {
+    return this.updateAsSystem(completeStaleAppointments);
+  }
+
+  private async updateAsSystem(update: SystemUpdate, notice?: (booking: ChangedBooking) => Delivery): Promise<number> {
+    const now = this.clock.now();
+    const { changed, afterCommit } = await retryOnDeadlock(() =>
+      this.db.transaction(async (tx) => {
+        const rows = await update(tx, now);
+        return {
+          changed: rows.length,
+          afterCommit: await this.notifications.notify(tx, notice ? rows.map(notice) : []),
+        };
+      }),
+    );
+    runAfterCommit(afterCommit);
+    return changed;
   }
 
   private async cancel(tx: Transaction, scope: SQL, userId: string, canceller: Canceller) {
