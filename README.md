@@ -46,7 +46,7 @@ Antes de começar, tenha instalado:
 
 - [Node.js](https://nodejs.org/) 22.22.2+, 24.15+ ou 26+
 - npm
-- [PostgreSQL](https://www.postgresql.org/) 18+ ou [Docker](https://www.docker.com/)
+- [PostgreSQL](https://www.postgresql.org/) 18+ com as extensões `citext`, `btree_gist` e `unaccent`, ou [Docker](https://www.docker.com/)
 
 ### Instalação
 
@@ -127,7 +127,7 @@ LAB_API_KEY=
 
 `DEMO_ACCOUNTS_ENABLED` mantém as contas públicas de paciente e médico e restaura os dados delas uma vez por dia.
 
-`LAB_API_URL` e `LAB_API_KEY` são usadas só pelo simulador do laboratório. A chave é criada em Configurações → Integrações, na área do administrador.
+`LAB_API_URL` e `LAB_API_KEY` são usadas só pelo simulador do laboratório. A chave é criada em Configurações → Integrações, na área do administrador, e aparece uma única vez.
 
 ## Documentação da API
 
@@ -142,33 +142,33 @@ http://localhost:3001/docs/openapi.json (OpenAPI 3.1)
 
 A API roda em Docker na [Northflank](https://northflank.com/), com o banco no [Neon](https://neon.tech/) (PostgreSQL 18, conexão direta).
 
-O `Dockerfile` tem dois estágios e usuário sem privilégios. A imagem escuta na porta `8080`, e as variáveis acima precisam estar definidas no serviço, com `MAIL_DRIVER=smtp`.
+O `Dockerfile` tem dois estágios e usuário sem privilégios. A imagem já define `NODE_ENV=production` e escuta na porta `8080`. Em produção, `TRUST_PROXY_HOPS`, `CORS_ORIGIN` (só a origem do front, ex.: `https://plovatto.github.io`), `APP_PUBLIC_URL` (com o caminho), `DATABASE_URL` e `MAIL_DRIVER=smtp` com `SMTP_USER`, `SMTP_PASS` e `MAIL_FROM` são obrigatórias. `SMTP_HOST` e `SMTP_PORT` têm padrão `smtp.gmail.com` e `465`.
 
-A manutenção (pedidos expirados, conclusões automáticas, limpeza e restauração das contas de demonstração) roda dentro da própria API. O simulador do laboratório é um job agendado com a mesma imagem, comando `node dist/scripts/lab-simulator.js`, frequência `0 9 * * *` e as variáveis `LAB_API_URL` e `LAB_API_KEY`.
+A manutenção (pedidos expirados, conclusões automáticas, limpeza e restauração das contas de demonstração) roda dentro da própria API. O simulador do laboratório é um job agendado com a mesma imagem, comando `node dist/scripts/lab-simulator.js`, frequência `0 9 * * *` (UTC, 06:00 em São Paulo) e as variáveis `LAB_API_URL` e `LAB_API_KEY`. Para rodar a manutenção como job em vez de dentro da API, use o comando `node dist/jobs/run.js maintenance` e defina `MAINTENANCE_SCHEDULER=false` no serviço.
 
 ## Testes
 
 Os testes ficam em `test/`, usando **Vitest** + **Supertest** contra o app Express real, com um PostgreSQL em memória ([PGlite](https://pglite.dev/)), relógio fixo e e-mail em memória.
 
-A suíte em `test-pg/` (`npm run test:pg`) roda em PostgreSQL real e cobre exclusion constraints, pedidos simultâneos e travas. Ela apaga o banco apontado por `TEST_DATABASE_URL`, então use um banco descartável.
+A suíte em `test-pg/` (`npm run test:pg`) roda em PostgreSQL real e cobre exclusion constraints, pedidos simultâneos e travas. Ela apaga o banco apontado por `TEST_DATABASE_URL` (padrão `postgres://postgres:postgres@localhost:5432/saudemais_test`), então use um banco descartável.
 
 ## Scripts
 
-| Comando                        | Descrição                                             |
-| ------------------------------ | ----------------------------------------------------- |
-| `npm run dev`                  | Inicia o servidor em modo de desenvolvimento          |
-| `npm run build`                | Compila o TypeScript para a pasta `dist`              |
-| `npm start`                    | Executa a versão compilada da API                     |
-| `npm run typecheck`            | Executa a checagem de tipos sem gerar arquivos        |
-| `npm run lint`                 | Executa a análise do código com ESLint                |
-| `npm run lint:fix`             | Corrige problemas de lint automaticamente             |
-| `npm test`                     | Executa a suíte de testes em PGlite                   |
-| `npm run test:watch`           | Executa os testes em modo de observação               |
-| `npm run test:coverage`        | Executa os testes com relatório de cobertura          |
-| `npm run test:pg`              | Executa a suíte em PostgreSQL real                    |
-| `npm run db:generate`          | Gera uma migration a partir do schema                 |
-| `npm run db:seed`              | Cria os dados de demonstração                         |
-| `npm run jobs:run maintenance` | Executa a manutenção uma vez (usa `dist`)             |
+| Comando                        | Descrição                                                |
+| ------------------------------ | -------------------------------------------------------- |
+| `npm run dev`                  | Inicia o servidor em modo de desenvolvimento             |
+| `npm run build`                | Compila o TypeScript para a pasta `dist`                 |
+| `npm start`                    | Executa a versão compilada da API                        |
+| `npm run typecheck`            | Executa a checagem de tipos sem gerar arquivos           |
+| `npm run lint`                 | Executa a análise do código com ESLint                   |
+| `npm run lint:fix`             | Corrige problemas de lint automaticamente                |
+| `npm test`                     | Executa a suíte de testes em PGlite                      |
+| `npm run test:watch`           | Executa os testes em modo de observação                  |
+| `npm run test:coverage`        | Executa os testes com relatório de cobertura             |
+| `npm run test:pg`              | Executa a suíte em PostgreSQL real                       |
+| `npm run db:generate`          | Gera uma migration a partir do schema                    |
+| `npm run db:seed`              | Cria os dados de demonstração                            |
+| `npm run jobs:run maintenance` | Executa a manutenção uma vez (usa `dist`)                |
 | `npm run lab:simulate`         | Publica resultados simulados do laboratório (usa `dist`) |
 
 ## Estrutura do Projeto
