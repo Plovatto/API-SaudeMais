@@ -36,6 +36,12 @@ interface Report {
   topExamTypes: { id: string; name: string; total: number }[];
 }
 
+const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+
+const statuses = ['pending', 'confirmed', 'awaitingRecord', 'completed', 'noShow', 'cancelled', 'expired'] as const;
+
+const bucketSum = (totals: Totals) => sum(statuses.map((status) => totals[status]));
+
 const zero = {
   total: 0,
   pending: 0,
@@ -105,6 +111,7 @@ beforeAll(async () => {
   await appointment('2026-11-12T13:00:00Z', 'no_show');
   await appointment('2026-11-12T14:00:00Z', 'completed', { doctor: 'Dra. Ana Ferreira' });
   await appointment('2026-11-15T13:00:00Z', 'pending', { doctor: 'Dra. Ana Ferreira' });
+  await appointment('2026-11-16T13:00:00Z', 'expired', { doctor: 'Dra. Ana Ferreira' });
   await appointment('2026-11-18T13:00:00Z', 'cancelled', { role: 'doctor' });
   await appointment('2026-11-18T14:00:00Z', 'cancelled', { role: 'admin', doctor: 'Dra. Ana Ferreira' });
   await appointment('2026-11-18T15:00:00Z', 'cancelled', { role: 'system', doctor: 'Dra. Ana Ferreira' });
@@ -130,14 +137,14 @@ describe('GET /api/admin/reports', () => {
     expect(response.headers['cache-control']).toBe('no-store');
     expect(report.period).toEqual({ from: '2026-11-10', to: '2026-11-20', granularity: 'day' });
     expect(report.appointments).toEqual({
-      total: 12,
+      total: 13,
       pending: 1,
       confirmed: 1,
       awaitingRecord: 1,
       completed: 2,
       noShow: 1,
       cancelled: 5,
-      expired: 1,
+      expired: 2,
       lateCancellations: 1,
       cancelledBy: { patient: 2, doctor: 1, admin: 1, system: 1 },
       noShowRate: 0.333,
@@ -151,6 +158,10 @@ describe('GET /api/admin/reports', () => {
       lateCancellations: 0,
       cancelledBy: { patient: 1, doctor: 0, admin: 0, system: 0 },
     });
+    for (const totals of [report.appointments, report.exams]) {
+      expect(sum(Object.values(totals.cancelledBy))).toBe(totals.cancelled);
+      expect(bucketSum(totals)).toBe(totals.total);
+    }
   });
 
   it('ranks specialties and exam types by volume, breaking ties by name', async () => {
@@ -158,7 +169,7 @@ describe('GET /api/admin/reports', () => {
 
     expect(report.topSpecialties.map(({ name, total }) => ({ name, total }))).toEqual([
       { name: 'Cardiologia', total: 7 },
-      { name: 'Nutrição', total: 4 },
+      { name: 'Nutrição', total: 5 },
       { name: 'Dermatologia', total: 1 },
     ]);
     expect(report.topExamTypes.map(({ name, total }) => ({ name, total }))).toEqual([
@@ -179,6 +190,7 @@ describe('GET /api/admin/reports', () => {
     const report = await reportOf({ from: '2026-11-10', to: '2026-11-20' });
 
     expect(report.series).toHaveLength(11);
+    for (const totals of report.series) expect(bucketSum(totals)).toBe(totals.total);
     expect(report.series[0]).toEqual({ ...zero, start: '2026-11-10', total: 1, completed: 1 });
     expect(report.series[1]).toEqual({ ...zero, start: '2026-11-11', total: 1, completed: 1 });
     expect(report.series[2]).toEqual({ ...zero, start: '2026-11-12', total: 2, completed: 1, noShow: 1 });
@@ -200,7 +212,7 @@ describe('GET /api/admin/reports', () => {
     expect(report.period.granularity).toBe('week');
     expect(report.series).toHaveLength(12);
     expect(report.series.map(({ start }) => start).slice(-3)).toEqual(['2026-11-03', '2026-11-10', '2026-11-17']);
-    expect(report.series.slice(-3).map(({ total }) => total)).toEqual([1, 7, 9]);
+    expect(report.series.slice(-3).map(({ total }) => total)).toEqual([1, 8, 9]);
     expect(report.series.slice(0, 9).every(({ total }) => total === 0)).toBe(true);
     expect((await reportOf({ from: '2026-09-20', to: '2026-11-20' })).period.granularity).toBe('day');
   });
@@ -210,7 +222,7 @@ describe('GET /api/admin/reports', () => {
 
     expect(report.period).toEqual({ from: '2026-10-22', to: '2026-11-20', granularity: 'day' });
     expect(report.series).toHaveLength(30);
-    expect(report.appointments.total).toBe(13);
+    expect(report.appointments.total).toBe(14);
     expect((await reportOf({ to: '2026-11-15' })).period).toEqual({
       from: '2026-10-17',
       to: '2026-11-15',
