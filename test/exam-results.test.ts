@@ -5,14 +5,7 @@ import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
 import { insertExam, offerOf, type Offer } from './support/exams.js';
-import {
-  createLabKey,
-  ISSUED_AT,
-  publishResult,
-  rowsOf,
-  valueOf,
-  type Exam,
-} from './support/lab.js';
+import { createLabKey, ISSUED_AT, publishResult, rowsOf, valueOf, type Exam } from './support/lab.js';
 import { as, createAdmin, createPatient, HOUR, login, START } from './support/users.js';
 
 interface Version {
