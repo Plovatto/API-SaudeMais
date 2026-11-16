@@ -22,7 +22,8 @@
     "test:pg": "vitest run --config vitest.pg.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx src/database/seed.ts",
-    "jobs:run": "node dist/jobs/run.js"
+    "jobs:run": "node dist/jobs/run.js",
+    "lab:simulate": "node dist/scripts/lab-simulator.js"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
