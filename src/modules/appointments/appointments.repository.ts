@@ -1,9 +1,10 @@
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { alias, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import { bookings, effectiveStatus, type VisitType } from '../../database/schema/bookings.js';
 import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
+import { healthMetrics } from '../../database/schema/health-metrics.js';
 import { users, type Role } from '../../database/schema/users.js';
 import { doctorActions } from '../bookings/booking-policy.js';
 import {
@@ -18,7 +19,7 @@ import {
   type BookingSide,
 } from '../bookings/bookings.repository.js';
 import { slotContext, type SlotContext } from '../doctors/doctors.repository.js';
-import type { Appointment } from './appointments.model.js';
+import type { Appointment, HealthMetricsInput } from './appointments.model.js';
 
 interface NewAppointment {
   patientId: string;
@@ -54,6 +55,33 @@ const visibleTo = ({ userId, roles }: Viewer) =>
     userId,
     roles.filter((role): role is BookingSide => role === 'patient' || role === 'doctor'),
   );
+
+const metricColumns = {
+  systolic: healthMetrics.systolic,
+  diastolic: healthMetrics.diastolic,
+  weightKg: sql`${healthMetrics.weightKg}`.mapWith((value: string): number | null => Number(value)),
+  recordedAt: healthMetrics.recordedAt,
+};
+
+export async function latestMetrics(db: Pick<Database, 'select'>, where: SQL | undefined) {
+  const [row] = await db
+    .select(metricColumns)
+    .from(healthMetrics)
+    .innerJoin(bookings, eq(bookings.id, healthMetrics.bookingId))
+    .where(where)
+    .orderBy(desc(healthMetrics.recordedAt), desc(healthMetrics.bookingId))
+    .limit(1);
+  return row ? { ...row, recordedAt: row.recordedAt.toISOString() } : null;
+}
+
+export function insertMetrics(
+  tx: Transaction,
+  bookingId: string,
+  { weightKg: kg, ...pressure }: HealthMetricsInput,
+  recordedAt: Date,
+) {
+  return tx.insert(healthMetrics).values({ bookingId, ...pressure, weightKg: kg?.toFixed(2), recordedAt });
+}
 
 const appointmentWith = (id: string) => and(eq(bookings.id, id), eq(bookings.kind, 'appointment'));
 
@@ -147,6 +175,7 @@ export class AppointmentsRepository {
         createdAt: row.createdAt.toISOString(),
         patientActions: actions,
         doctorActions: isPatient ? null : doctorActions(row, now),
+        metrics: await latestMetrics(tx, eq(healthMetrics.bookingId, id)),
         events: await eventsOf(tx, id),
       };
     }, readSnapshot);

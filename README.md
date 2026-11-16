@@ -20,6 +20,7 @@ API do Saúde+, sistema de agendamento de consultas e exames com três perfis: p
 - Agendamento de exames nas vagas geradas pelo horário da unidade, com os lugares restantes de cada vaga, capacidade garantida por raias e exclusion constraint mesmo com pedidos simultâneos, código público para apresentar na unidade e cancelamento pelo paciente
 - Início e agendamentos do paciente nas abas agendados e realizados, com filtros, totais e as ações permitidas calculadas pela política; cancelamento pelo paciente ou pelo médico, condicionado ao horário que a tela mostrava, com aviso à outra parte e marcação de cancelamento tardio
 - Início e agenda do médico nas abas a confirmar, confirmadas e histórico, com o resumo de hoje no fuso de São Paulo, totais e as ações permitidas; confirmação pelo médico condicionada ao horário que a tela mostrava, com aviso ao paciente, e conclusão ou registro de falta das consultas que já começaram e aguardam registro
+- Pressão e peso registrados pelo médico ao concluir a consulta, na mesma transação, com faixas e combinações validadas pela API e por checks nomeados no banco; aparecem no detalhe da consulta para as duas partes e nos cartões do início do paciente com a medida mais recente de cada uma, e nunca vão para logs, auditoria ou notificações
 - Reagendamento de consultas e exames pelo paciente, na mesma linha e em uma transação, até o limite de reagendamentos e, se confirmado, fora da janela da política: a consulta volta a pendente e avisa o médico, o exame continua confirmado e mantém o lugar quando livre, e a vaga antiga só é liberada se a nova for garantida
 - Desativar uma conta ou remover o perfil médico cancela os agendamentos ativos futuros e avisa a outra parte; especialidade, unidade, tipo de exame ou oferta com agendamento futuro não podem ser desativados, e a capacidade da oferta não fica abaixo de um lugar ocupado por exame que ainda não terminou
 - Integração com o laboratório por chave de API (guardada só como hash, exibida uma vez e revogável pelo administrador): lista de exames do dia que aguardam resultado, sem dados pessoais, e publicação de resultados idempotente, com versões imutáveis, retificação, conclusão do exame e aviso ao paciente
@@ -198,7 +199,7 @@ Os testes de `npm test` usam um PostgreSQL em memória (PGlite) com as mesmas mi
 2. Exames confirmados cujo horário terminou passam a `completed`.
 3. Consultas confirmadas que começaram há 72 h ou mais sem registro do médico passam a `completed`, com o sistema como autor.
 4. Retenção: apaga sessões vencidas, links de redefinição de senha com mais de 48 h, notificações com mais de 90 dias e registros de auditoria com mais de 180 dias. Agendamentos não têm prazo de exclusão.
-5. Uma vez por dia (no fuso de São Paulo) e só com `DEMO_ACCOUNTS_ENABLED=true`, restaura as contas de demonstração: apaga os agendamentos em que o paciente ou o médico é uma conta protegida (eventos e notificações vão junto) e recria os agendamentos de exemplo da paciente de demonstração com o médico de demonstração: um pedido pendente, uma consulta confirmada, uma do dia (que fica aguardando registro depois do horário), uma concluída, um exame confirmado e um exame concluído, com datas em dias úteis relativas ao dia. Os exames ocupam a menor raia livre, e um horário que um visitante ocupou é pulado. A execução fica registrada na auditoria como `demo.restored`, e é esse registro que impede uma segunda restauração no mesmo dia.
+5. Uma vez por dia (no fuso de São Paulo) e só com `DEMO_ACCOUNTS_ENABLED=true`, restaura as contas de demonstração: apaga as medidas de saúde e depois os agendamentos em que o paciente ou o médico é uma conta protegida (eventos e notificações vão junto) e recria os agendamentos de exemplo da paciente de demonstração com o médico de demonstração: um pedido pendente, uma consulta confirmada, uma do dia (que fica aguardando registro depois do horário), uma concluída com pressão e peso, um exame confirmado e um exame concluído, com datas em dias úteis relativas ao dia. Os exames ocupam a menor raia livre, e um horário que um visitante ocupou é pulado. A execução fica registrada na auditoria como `demo.restored`, e é esse registro que impede uma segunda restauração no mesmo dia.
 
 Todos os passos podem rodar de novo sem efeito duplicado, e uma execução segura uma trava consultiva do PostgreSQL (`pg_try_advisory_xact_lock`): se outra execução estiver em andamento, a nova só registra um aviso de que pulou. Os contadores de não lidas das pessoas afetadas são atualizados na hora quando a manutenção roda dentro da API.
 
@@ -292,7 +293,7 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | POST | `/api/appointments` | Pede uma consulta em uma vaga livre; nasce pendente e avisa o médico (paciente) |
 | GET | `/api/appointments/{id}` | Detalhe e histórico da consulta (paciente dela ou médico que a atende) |
 | POST | `/api/appointments/{id}/confirm` | Confirma um pedido pendente e avisa o paciente (médico que a atende) |
-| POST | `/api/appointments/{id}/complete`, `/no-show` | Conclui ou registra falta em uma consulta confirmada que já começou (médico que a atende) |
+| POST | `/api/appointments/{id}/complete`, `/no-show` | Conclui, com pressão e peso opcionais em `metrics`, ou registra falta em uma consulta confirmada que já começou (médico que a atende) |
 | POST | `/api/appointments/{id}/cancel` | Cancela a consulta e avisa a outra parte; motivo obrigatório para o médico (paciente dela ou médico que a atende) |
 | POST | `/api/appointments/{id}/reschedule` | Troca o horário dentro da política de reagendamento; volta a pendente e avisa o médico (paciente dela) |
 | GET | `/api/exam-availability` | Vagas de um exame na unidade entre `from` e `to`, até 31 dias, com os lugares restantes; `rescheduling` libera o lugar do próprio exame na tela de reagendar (paciente) |
@@ -300,7 +301,7 @@ O documento OpenAPI 3.1, usado pelo front para gerar os tipos, fica em `/docs/op
 | GET | `/api/exam-bookings/{id}` | Detalhe, preparo e histórico do exame (paciente dele) |
 | POST | `/api/exam-bookings/{id}/cancel` | Cancela o exame e libera o lugar (paciente dele) |
 | POST | `/api/exam-bookings/{id}/reschedule` | Troca o horário dentro da política de reagendamento; continua confirmado, sujeito à capacidade (paciente dele) |
-| GET | `/api/patient/home` | Próximos agendamentos, totais das abas e último aviso (paciente) |
+| GET | `/api/patient/home` | Próximos agendamentos, totais das abas, último aviso e a pressão e o peso mais recentes (paciente) |
 | GET | `/api/patient/bookings` | Agendamentos do paciente por aba `scope`, com filtros `kind` e `status` e ações permitidas (paciente) |
 | GET, POST | `/api/admin/specialties` | Lista e cria especialidades (admin) |
 | PATCH | `/api/admin/specialties/{id}` | Altera, ativa ou desativa uma especialidade (admin) |

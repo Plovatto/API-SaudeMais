@@ -19,7 +19,7 @@ documentOperation({
   tag: tags.patient.name,
   summary: 'Ver o início do paciente',
   description:
-    'Os 3 próximos agendamentos, os totais das abas agendados e realizados e o aviso mais recente do perfil de paciente. Cada agendamento traz as ações permitidas, como na lista. Limite: 120 requisições por minuto por IP.',
+    'Os 3 próximos agendamentos, os totais das abas agendados e realizados, o aviso mais recente do perfil de paciente e os cartões de pressão e peso, cada um com a medida mais recente registrada pelo médico ao concluir uma consulta (nulo enquanto não houver). Cada agendamento traz as ações permitidas, como na lista. Limite: 120 requisições por minuto por IP.',
   success: { status: 200, description: 'Início do paciente.', schema: patientHomeSchema },
   errors,
 });
