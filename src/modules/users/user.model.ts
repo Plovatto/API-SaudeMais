@@ -77,6 +77,10 @@ export const registerSchema = registry.register(
     .refine(...passwordConfirmationMatches),
 );
 
+export const EARLIEST_BIRTH_DATE = '1900-01-01';
+
+const birthDateMessage = 'Informe uma data de nascimento válida.';
+
 export const updateProfileSchema = registry.register(
   'UpdateProfileRequest',
   z
@@ -86,12 +90,25 @@ export const updateProfileSchema = registry.register(
         .union([z.null(), z.literal('').transform(() => null), phoneNumber])
         .optional()
         .openapi({ ...phoneDescription, description: `${phoneDescription.description} Envie \`null\` para remover.` }),
+      birthDate: z
+        .union([
+          z.null(),
+          z.literal('').transform(() => null),
+          z.iso.date(birthDateMessage).refine((value) => value >= EARLIEST_BIRTH_DATE, birthDateMessage),
+        ])
+        .optional()
+        .openapi({
+          description: `Data de nascimento (AAAA-MM-DD), de ${EARLIEST_BIRTH_DATE} até hoje no fuso de São Paulo. Envie \`null\` para remover.`,
+          example: '1986-03-12',
+        }),
     })
-    .refine((data) => data.fullName !== undefined || data.phone !== undefined, {
+    .refine((data) => data.fullName !== undefined || data.phone !== undefined || data.birthDate !== undefined, {
       path: ['_root'],
-      message: 'Envie o nome ou o telefone.',
+      message: 'Envie o nome, o telefone ou a data de nascimento.',
     }),
 );
+
+export const birthDateInFuture = { birthDate: 'A data de nascimento não pode ser no futuro.' };
 
 export const changePasswordSchema = registry.register(
   'ChangePasswordRequest',
@@ -141,6 +158,17 @@ export const publicUserSchema = registry.register(
   }),
 );
 
+export const profileSchema = registry.register(
+  'Profile',
+  publicUserSchema.extend({
+    birthDate: z.iso.date().nullable().openapi({ description: 'Data de nascimento, se informada.', example: '1986-03-12' }),
+    passwordChangedAt: z.iso
+      .datetime()
+      .nullable()
+      .openapi({ description: 'Última troca de senha; nula se a senha nunca foi trocada.' }),
+  }),
+);
+
 export const loginResponseSchema = registry.register(
   'LoginResponse',
   z.object({
@@ -161,3 +189,4 @@ export type LoginResponse = z.infer<typeof loginResponseSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type SessionView = z.infer<typeof sessionSchema>;
+export type Profile = z.infer<typeof profileSchema>;
