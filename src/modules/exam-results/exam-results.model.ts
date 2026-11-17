@@ -12,6 +12,20 @@ export const bookingParams = z.strictObject({ bookingId: uuidParam });
 
 export const patientParams = z.strictObject({ patientId: uuidParam });
 
+const itemViewSchema = resultItemSchema.extend({
+  range: z
+    .object({ low: z.number(), high: z.number() })
+    .nullable()
+    .openapi({
+      description: 'Faixa numérica lida de `referenceRange`; nula quando a referência não é um intervalo "mínimo a máximo".',
+      example: { low: 12, high: 16 },
+    }),
+  about: z.string().nullable().openapi({
+    description: 'Explicação em linguagem simples do que o item mede; nula quando o item não está no glossário.',
+    example: 'Proteína dentro dos glóbulos vermelhos que carrega o oxigênio. Quando está baixa, pode indicar anemia.',
+  }),
+});
+
 const versionSchema = z.object({
   version: z.int().positive().openapi({ example: 2 }),
   status: z
@@ -20,7 +34,7 @@ const versionSchema = z.object({
   issuedAt: z.iso.datetime().openapi({ description: 'Emissão no laboratório.' }),
   receivedAt: z.iso.datetime().openapi({ description: 'Recebimento pela API.' }),
   items: z
-    .array(resultItemSchema)
+    .array(itemViewSchema)
     .nullable()
     .openapi({ description: 'Itens do exame laboratorial, com o indicador de cada valor; nulo em exame de imagem.' }),
   report: z
@@ -48,5 +62,33 @@ export const examResultSchema = registry.register(
 
 export const examResultPageSchema = registry.register('ExamResultPage', paginatedSchema(examResultSchema));
 
+export const examResultSummarySchema = registry.register(
+  'ExamResultSummary',
+  z.object({
+    bookingId: z.uuid(),
+    examType: examTypeSchema.pick({ id: true, name: true, kind: true }),
+    startsAt: z.iso.datetime().openapi({ description: 'Início do exame.', example: '2026-11-04T11:00:00.000Z' }),
+    issuedAt: z.iso.datetime().openapi({ description: 'Emissão da versão atual no laboratório.' }),
+    amended: z.boolean().openapi({ description: 'Se a versão atual é uma retificação.' }),
+    summary: z
+      .object({
+        items: z.int().nonnegative().openapi({ example: 8 }),
+        outOfRange: z.int().nonnegative().openapi({ description: 'Itens com indicador diferente de `normal`.', example: 2 }),
+        flagged: z
+          .array(z.string())
+          .openapi({ description: 'Nomes dos itens fora da referência, na ordem do laudo.', example: ['Hematócrito', 'Leucócitos'] }),
+      })
+      .nullable()
+      .openapi({ description: 'Contagem dos itens da versão atual; nula em exame de imagem.' }),
+  }),
+);
+
+export const examResultSummaryPageSchema = registry.register(
+  'ExamResultSummaryPage',
+  paginatedSchema(examResultSummarySchema),
+);
+
 export type ExamResult = z.infer<typeof examResultSchema>;
 export type ExamResultVersion = z.infer<typeof versionSchema>;
+export type ExamResultSummary = z.infer<typeof examResultSummarySchema>;
+export type ResultItemView = z.infer<typeof itemViewSchema>;
