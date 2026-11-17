@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
 import { createSessionToken } from '@/modules/users/user.token.js';
-import { buildUsersApp, login, registerAndLogin, START } from './support/users.js';
+import { buildUsersApp, HOUR, login, registerAndLogin, START } from './support/users.js';
 
 type App = Parameters<typeof request>[0];
 type Session = { id: string; current: boolean };
@@ -80,6 +80,18 @@ describe('GET and PATCH /api/me', () => {
       code: 'VALIDATION_ERROR',
       fields: { birthDate: 'A data de nascimento não pode ser no futuro.' },
     });
+  });
+
+  it('uses the São Paulo day, not the UTC day, to tell the future', async () => {
+    const { app, clock } = await buildUsersApp();
+    clock.advance(13 * HOUR);
+    const token = await registerAndLogin(app);
+
+    const utcToday = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-21' });
+    const saoPauloToday = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-20' });
+
+    expect(utcToday.status).toBe(400);
+    expect(saoPauloToday.status).toBe(200);
   });
 
   it.each([

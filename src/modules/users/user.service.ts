@@ -1,4 +1,4 @@
-import { AppError, conflictError } from '../../lib/app-error.js';
+import { AppError, conflictError, invalidData } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -6,18 +6,17 @@ import { definedFields } from '../../lib/defined.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDate, wallClockIn } from '../../lib/time.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
-import {
-  birthDateInFuture,
-  type ChangePasswordInput,
-  type LoginInput,
-  type LoginResponse,
-  type Profile,
-  type PublicUser,
-  type RegisterInput,
-  type SessionView,
-  type UpdateProfileInput,
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  LoginResponse,
+  Profile,
+  PublicUser,
+  RegisterInput,
+  SessionView,
+  UpdateProfileInput,
 } from './user.model.js';
-import { currentSession, sessionNotFound } from './user.messages.js';
+import { birthDateInFuture, currentSession, sessionNotFound } from './user.messages.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
 import { isDemoEmail, type SeedAccount } from './user.demo.js';
 import type { UserRepository } from './user.repository.js';
@@ -174,7 +173,7 @@ export class UserService {
 
   async updateProfile(userId: string, { fullName, phone, birthDate }: UpdateProfileInput): Promise<Profile> {
     if (birthDate && birthDate > civilDate(wallClockIn(CLINIC_TIME_ZONE, this.clock.now()))) {
-      throw new AppError(400, 'VALIDATION_ERROR', 'Dados inválidos.', birthDateInFuture);
+      throw invalidData(birthDateInFuture);
     }
     await this.repository.updateProfile(userId, definedFields({ fullName, phone, birthDate }));
     this.sessions.invalidateUser(userId);

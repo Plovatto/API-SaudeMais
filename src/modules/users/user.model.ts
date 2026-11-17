@@ -1,8 +1,9 @@
 import '../../docs/zod-extend.js';
 import { z } from 'zod';
-import { roles } from '../../database/schema/users.js';
+import { EARLIEST_BIRTH_DATE, roles } from '../../database/schema/users.js';
 import { registry } from '../../docs/registry.js';
 import { boundedText } from '../../lib/text.js';
+import { invalidBirthDate } from './user.messages.js';
 
 const E164 = /^\+[1-9][0-9]{9,14}$/;
 
@@ -77,10 +78,6 @@ export const registerSchema = registry.register(
     .refine(...passwordConfirmationMatches),
 );
 
-export const EARLIEST_BIRTH_DATE = '1900-01-01';
-
-const birthDateMessage = 'Informe uma data de nascimento válida.';
-
 export const updateProfileSchema = registry.register(
   'UpdateProfileRequest',
   z
@@ -94,7 +91,7 @@ export const updateProfileSchema = registry.register(
         .union([
           z.null(),
           z.literal('').transform(() => null),
-          z.iso.date(birthDateMessage).refine((value) => value >= EARLIEST_BIRTH_DATE, birthDateMessage),
+          z.iso.date(invalidBirthDate).refine((value) => value >= EARLIEST_BIRTH_DATE, invalidBirthDate),
         ])
         .optional()
         .openapi({
@@ -108,7 +105,6 @@ export const updateProfileSchema = registry.register(
     }),
 );
 
-export const birthDateInFuture = { birthDate: 'A data de nascimento não pode ser no futuro.' };
 
 export const changePasswordSchema = registry.register(
   'ChangePasswordRequest',

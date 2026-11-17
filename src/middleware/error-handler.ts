@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { logger } from '../config/logger.js';
-import { AppError, type FieldErrors } from '../lib/app-error.js';
+import { AppError, INVALID_DATA_MESSAGE, type FieldErrors } from '../lib/app-error.js';
 
 interface ErrorBody {
   message: string;
@@ -43,7 +43,7 @@ function toResponse(err: unknown): { status: number; body: ErrorBody } {
   if (err instanceof ZodError) {
     return {
       status: 400,
-      body: { message: 'Dados inválidos.', code: 'VALIDATION_ERROR', fields: zodFieldErrors(err) },
+      body: { message: INVALID_DATA_MESSAGE, code: 'VALIDATION_ERROR', fields: zodFieldErrors(err) },
     };
   }
 
