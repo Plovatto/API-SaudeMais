@@ -25,7 +25,7 @@ export class PasswordResetService {
 
   async request({ email }: ResetRequestInput): Promise<void> {
     const user = await this.users.findLoginCandidate(email);
-    if (!user || user.isProtected || user.deactivatedAt) return;
+    if (!user || user.deactivatedAt) return;
     await this.sendLink(user, null);
   }
 

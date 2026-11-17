@@ -7,7 +7,6 @@ import {
   serverBusyResponse,
   jsonResponse,
   notFoundResponse,
-  protectedAccountResponse,
   tooManyRequestsResponse,
   unauthenticatedResponse,
   validationErrorResponse,
@@ -137,7 +136,6 @@ registry.registerPath({
     200: jsonResponse('Dados atualizados.', profileSchema),
     400: validationErrorResponse,
     401: unauthenticatedResponse,
-    403: protectedAccountResponse(),
     429: tooManyRequestsResponse,
     500: internalErrorResponse,
   },
@@ -157,7 +155,6 @@ registry.registerPath({
     204: { description: 'Senha trocada.' },
     400: validationErrorResponse,
     401: unauthenticatedResponse,
-    403: protectedAccountResponse(),
     422: errorResponse('Senha atual incorreta (`INVALID_CURRENT_PASSWORD`).', {
       message: 'A senha atual está incorreta.',
       code: 'INVALID_CURRENT_PASSWORD',
@@ -227,14 +224,13 @@ registry.registerPath({
   tags: [tags.profile.name],
   summary: 'Encerrar uma sessão',
   description:
-    'Encerra uma sessão da própria conta, como a de um aparelho que a pessoa não reconhece. A sessão atual não pode ser encerrada por aqui: use o logout. Sessão de outra conta responde 404, sem revelar se existe. Na conta de demonstração a rota é bloqueada. Limite: 60 requisições de sessão por minuto por IP.',
+    'Encerra uma sessão da própria conta, como a de um aparelho que a pessoa não reconhece. A sessão atual não pode ser encerrada por aqui: use o logout. Sessão de outra conta responde 404, sem revelar se existe. Limite: 60 requisições de sessão por minuto por IP.',
   ...sessionSecurity,
   request: { params: idParams },
   responses: {
     204: { description: 'Sessão encerrada.' },
     400: validationErrorResponse,
     401: unauthenticatedResponse,
-    403: protectedAccountResponse(),
     404: notFoundResponse(sessionNotFound),
     422: errorResponse(`É a sessão em uso (\`${currentSession.code}\`).`, currentSession),
     429: tooManyRequestsResponse,
@@ -245,10 +241,9 @@ registry.registerPath({
 export interface UserRouterDeps {
   controller: UserController;
   requireAuth: RequestHandler;
-  requireWritable: RequestHandler;
 }
 
-export function createUserRouter({ controller, requireAuth, requireWritable }: UserRouterDeps): Router {
+export function createUserRouter({ controller, requireAuth }: UserRouterDeps): Router {
   const registerLimit = rateLimit({ ...rateLimitDefaults, windowMs: 60 * MINUTE, limit: 10 });
   const loginLimitByIp = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 30 });
   const loginLimitByEmailAndIp = rateLimit({
@@ -282,18 +277,11 @@ export function createUserRouter({ controller, requireAuth, requireWritable }: U
   router.post('/api/users/login', noStore, loginLimitByIp, loginLimitByEmailAndIp, loginLimitByEmail, controller.login);
   router.post('/api/users/logout', sessionLimit, requireAuth, controller.logout);
   router.get('/api/me', noStore, profileLimit, requireAuth, controller.profile);
-  router.patch('/api/me', noStore, profileLimit, requireAuth, requireWritable, controller.updateProfile);
-  router.post(
-    '/api/me/password',
-    passwordLimit,
-    requireAuth,
-    passwordLimitByAccount,
-    requireWritable,
-    controller.changePassword,
-  );
+  router.patch('/api/me', noStore, profileLimit, requireAuth, controller.updateProfile);
+  router.post('/api/me/password', passwordLimit, requireAuth, passwordLimitByAccount, controller.changePassword);
   router.get('/api/me/sessions', noStore, profileLimit, requireAuth, controller.sessions);
   router.delete('/api/me/sessions', sessionLimit, requireAuth, controller.logoutEverywhere);
   router.delete('/api/me/sessions/others', sessionLimit, requireAuth, controller.endOtherSessions);
-  router.delete('/api/me/sessions/:id', sessionLimit, requireAuth, requireWritable, controller.endSession);
+  router.delete('/api/me/sessions/:id', sessionLimit, requireAuth, controller.endSession);
   return router;
 }

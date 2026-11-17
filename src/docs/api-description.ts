@@ -23,7 +23,7 @@ Toda resposta de erro tem o mesmo formato:
 |---|---|
 | \`400\` | Corpo, parâmetros ou JSON inválidos |
 | \`401\` | Sem sessão, sessão expirada, credenciais incorretas ou chave de API inválida |
-| \`403\` | Conta desativada, sem o perfil exigido ou de demonstração |
+| \`403\` | Conta desativada ou sem o perfil exigido |
 | \`404\` | Rota, método ou registro inexistente |
 | \`409\` | Conflito com o estado atual, como e-mail já cadastrado |
 | \`422\` | Regra de negócio não atendida, como senha atual incorreta |
@@ -49,7 +49,6 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`INVALID_API_KEY\` | 401 | Rota do laboratório sem a chave \`X-Api-Key\` ou com chave inválida ou revogada |
 | \`INVALID_RESET_TOKEN\` | 400 | Link de redefinição de senha inválido, usado ou vencido |
 | \`INVALID_CURRENT_PASSWORD\` | 422 | A senha atual informada na troca de senha está errada |
-| \`PROTECTED_ACCOUNT\` | 403 | Contas de demonstração não podem ser alteradas |
 | \`NOT_FOUND\` | 404 | O registro pedido não existe |
 | \`NAME_TAKEN\` | 409 | Já existe um cadastro com esse nome, sem distinguir maiúsculas |
 | \`CODE_TAKEN\` | 409 | Já existe um tipo de exame com esse código |

@@ -4,7 +4,6 @@ import {
   errorResponse,
   forbiddenResponse,
   notFoundResponse,
-  protectedAccountResponse,
 } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
@@ -37,11 +36,10 @@ documentOperation({
   tag: tags.doctor.name,
   summary: 'Salvar a agenda semanal',
   description:
-    'Substitui a agenda inteira de uma vez: envie os 7 dias, cada um com `isActive` e as faixas em minutos desde 00:00 (de 0 a 1440, início antes do fim). Dia inativo guarda as faixas e não gera vagas. As faixas de um dia não podem se sobrepor, mas podem se encostar, e precisam caber no horário da unidade do médico. Nenhuma consulta é cancelada: `warnings` lista as consultas futuras que ficaram fora das novas faixas. A conta de demonstração só lê. Limite: 30 requisições por minuto por IP.',
+    'Substitui a agenda inteira de uma vez: envie os 7 dias, cada um com `isActive` e as faixas em minutos desde 00:00 (de 0 a 1440, início antes do fim). Dia inativo guarda as faixas e não gera vagas. As faixas de um dia não podem se sobrepor, mas podem se encostar, e precisam caber no horário da unidade do médico. Nenhuma consulta é cancelada: `warnings` lista as consultas futuras que ficaram fora das novas faixas. Limite: 30 requisições por minuto por IP.',
   body: saveScheduleSchema,
   success: { status: 200, description: 'Agenda salva.', schema: savedScheduleSchema },
   errors: {
-    403: protectedAccountResponse('médico'),
     404: profileMissing,
     422: errorResponse('Faixas sobrepostas (`OVERLAP`) ou fora do horário da unidade (`OUTSIDE_UNIT_HOURS`).', {
       message: scheduleMessages.overlap.message,
@@ -55,19 +53,13 @@ export interface DoctorScheduleRouterDeps {
   controller: DoctorScheduleController;
   requireAuth: RequestHandler;
   requireDoctor: RequestHandler;
-  requireWritable: RequestHandler;
 }
 
-export function createDoctorScheduleRouter({
-  controller,
-  requireAuth,
-  requireDoctor,
-  requireWritable,
-}: DoctorScheduleRouterDeps): Router {
+export function createDoctorScheduleRouter({ controller, requireAuth, requireDoctor }: DoctorScheduleRouterDeps): Router {
   const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
   const saveLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 30 });
   const router = Router();
   router.get(path, readLimit, noStore, requireAuth, requireDoctor, controller.schedule);
-  router.put(path, saveLimit, noStore, requireAuth, requireDoctor, requireWritable, controller.save);
+  router.put(path, saveLimit, noStore, requireAuth, requireDoctor, controller.save);
   return router;
 }

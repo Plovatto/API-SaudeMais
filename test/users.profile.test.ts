@@ -272,15 +272,18 @@ describe('protected demo account', () => {
     return { ...context, first, second };
   }
 
-  it('cannot change its data or password', async () => {
+  it('can change its data and password', async () => {
     const { app, first } = await demoApp();
 
-    const patch = await request(app).patch('/api/me').set(auth(first)).send({ fullName: 'Outro Nome' });
+    const patch = await request(app)
+      .patch('/api/me')
+      .set(auth(first))
+      .send({ fullName: 'Outro Nome', birthDate: '1990-01-01' });
     const password = await changePassword(app, first, { currentPassword: demo.password });
 
-    expect(patch.status).toBe(403);
-    expect(password.status).toBe(403);
-    expect(password.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
+    expect(patch.status).toBe(200);
+    expect(patch.body).toMatchObject({ fullName: 'Outro Nome', birthDate: '1990-01-01' });
+    expect(password.status).not.toBe(403);
   });
 
   it('signs out only the visitor who asked', async () => {
@@ -292,17 +295,11 @@ describe('protected demo account', () => {
     expect(await service.authenticate(second)).not.toBeNull();
   });
 
-  it("cannot end other visitors' sessions or change the birth date", async () => {
+  it("keeps other visitors' sessions when asked to end the others", async () => {
     const { app, auth: service, first, second } = await demoApp();
-    const sessions = (await request(app).get('/api/me/sessions').set(auth(first))).body as Session[];
-    const visitor = sessions.find((session) => !session.current);
 
     await request(app).delete('/api/me/sessions/others').set(auth(first)).expect(204);
-    const single = await request(app).delete(`/api/me/sessions/${visitor?.id}`).set(auth(first));
-    const birth = await request(app).patch('/api/me').set(auth(first)).send({ birthDate: '1990-01-01' });
 
-    expect(single.status).toBe(403);
-    expect(birth.status).toBe(403);
     expect(await service.authenticate(second)).not.toBeNull();
   });
 });

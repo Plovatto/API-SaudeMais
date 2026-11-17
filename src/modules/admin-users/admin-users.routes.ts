@@ -5,7 +5,6 @@ import {
   errorResponse,
   forbiddenResponse,
   notFoundResponse,
-  protectedAccountResponse,
 } from '../../docs/common-schemas.js';
 import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
@@ -26,7 +25,6 @@ import {
   usersQuery,
 } from './admin-users.model.js';
 
-const protectedResponse = protectedAccountResponse('administrador');
 const userMissing = notFoundResponse(userNotFound);
 const unavailableResponse = errorResponse(
   'Especialidade ou unidade inativa ou inexistente (`SPECIALTY_UNAVAILABLE`, `UNIT_UNAVAILABLE`).',
@@ -38,18 +36,17 @@ const unavailableResponse = errorResponse(
 );
 
 interface Operation extends Omit<OperationDoc, 'tag' | 'errors'> {
-  writes?: boolean;
   notFound?: string;
   conflict?: ReturnType<typeof conflictResponse>;
   unprocessable?: boolean;
 }
 
-function document({ writes = false, notFound, conflict, unprocessable, ...operation }: Operation) {
+function document({ notFound, conflict, unprocessable, ...operation }: Operation) {
   documentOperation({
     ...operation,
     tag: tags.administration.name,
     errors: {
-      403: writes ? protectedResponse : forbiddenResponse,
+      403: forbiddenResponse,
       ...(operation.params && { 404: notFound ? notFoundResponse(notFound) : userMissing }),
       ...(conflict && { 409: conflict }),
       ...(unprocessable && { 422: unavailableResponse }),
@@ -86,7 +83,6 @@ document({
   description: 'Altera só os campos enviados. O e-mail não muda, e o administrador nunca vê nem define senhas.',
   params: idParams,
   body: updateProfileSchema,
-  writes: true,
   success: { status: 200, description: 'Usuário atualizado.', ...detail },
 });
 document({
@@ -106,7 +102,6 @@ document({
   description:
     'Bloqueia o login e encerra todas as sessões; cancela os agendamentos ativos futuros da pessoa, como paciente e como médico, e avisa a outra parte (`appointment_cancelled`). Não é possível desativar a própria conta nem o último administrador. Repetir não tem efeito.',
   params: idParams,
-  writes: true,
   conflict: conflictResponse(adminConflicts.selfOrLastAdmin),
   success: { status: 200, description: 'Conta desativada.', ...detail },
 });
@@ -117,7 +112,6 @@ document({
   summary: 'Reativar conta',
   description: 'Libera o login de novo. Repetir não tem efeito.',
   params: idParams,
-  writes: true,
   success: { status: 200, description: 'Conta reativada.', ...detail },
 });
 document({
@@ -128,7 +122,6 @@ document({
   description:
     'Envia ao e-mail da conta um link para a própria pessoa criar a senha, com os mesmos limites do pedido feito por ela.',
   params: idParams,
-  writes: true,
   conflict: conflictResponse(adminConflicts.resetNotSent, adminConflicts.inactive),
   success: { status: 202, description: 'Link enviado.' },
 });
@@ -139,7 +132,6 @@ document({
   summary: 'Tornar administrador',
   description: 'Concede o perfil de administrador. Para médicos, use o perfil médico. Repetir não tem efeito.',
   params: roleParams,
-  writes: true,
   conflict: conflictResponse(adminConflicts.inactive),
   success: { status: 200, description: 'Perfil concedido.', ...detail },
 });
@@ -150,7 +142,6 @@ document({
   summary: 'Tirar o perfil de administrador',
   description: 'Não é possível tirar o perfil da própria conta nem do último administrador ativo.',
   params: roleParams,
-  writes: true,
   conflict: conflictResponse(adminConflicts.selfOrLastAdmin),
   success: { status: 200, description: 'Perfil removido.', ...detail },
 });
@@ -163,7 +154,6 @@ document({
     'Cria o perfil médico com especialidade, unidade e registro profissional, e concede o perfil de médico. O conselho vem da especialidade.',
   params: idParams,
   body: doctorProfileInputSchema,
-  writes: true,
   conflict: conflictResponse(adminConflicts.registryTaken, adminConflicts.profileExists, adminConflicts.inactive),
   unprocessable: true,
   success: { status: 201, description: 'Perfil médico criado.', ...detail },
@@ -177,7 +167,6 @@ document({
     'Altera só os campos enviados. Trocar especialidade ou unidade é recusado enquanto o médico tiver consultas futuras.',
   params: idParams,
   body: updateDoctorProfileSchema,
-  writes: true,
   notFound: doctorProfileNotFound,
   conflict: conflictResponse(adminConflicts.registryTaken, adminConflicts.futureAppointments),
   unprocessable: true,
@@ -191,7 +180,6 @@ document({
   description:
     'Tira o perfil de médico da conta; os dados do registro ficam guardados para o histórico e podem voltar a valer com um novo POST. As consultas ativas futuras que ele atende são canceladas e os pacientes recebem o aviso `appointment_cancelled`.',
   params: idParams,
-  writes: true,
   notFound: doctorProfileNotFound,
   success: { status: 200, description: 'Perfil médico removido.', ...detail },
 });

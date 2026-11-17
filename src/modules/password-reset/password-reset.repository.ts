@@ -75,7 +75,7 @@ export class PasswordResetRepository {
       const [user] = await tx
         .select({ id: users.id })
         .from(users)
-        .where(and(eq(users.id, token.userId), isNull(users.deactivatedAt), eq(users.isProtected, false)))
+        .where(and(eq(users.id, token.userId), isNull(users.deactivatedAt)))
         .for('no key update');
       if (!user) return undefined;
       await applyNewPassword(tx, user.id, passwordHash, null, now);

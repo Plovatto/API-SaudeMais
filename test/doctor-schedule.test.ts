@@ -67,7 +67,7 @@ describe('access', () => {
     expect((await read(context)).status).toBe(200);
   });
 
-  it('lets the demo doctor read the default schedule but never change it', async () => {
+  it('lets the demo doctor read the default schedule and save a new one', async () => {
     const context = await buildUsersApp();
     await context.modules.demo.service.ensure();
     const token = await demoDoctorToken(context);
@@ -77,8 +77,9 @@ describe('access', () => {
 
     expect(schedule.status).toBe(200);
     expect((schedule.body as { days: unknown }).days).toEqual(DEFAULT_SCHEDULE);
-    expect(attempt.status).toBe(403);
-    expect(attempt.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
+    expect(attempt.status).toBe(200);
+    const saved = await read({ app: context.app, token });
+    expect((saved.body as { days: { ranges: unknown[] }[] }).days[1]?.ranges).toHaveLength(1);
   });
 
   it('answers 404 to a doctor without a doctor profile', async () => {

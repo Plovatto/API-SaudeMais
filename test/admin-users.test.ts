@@ -221,22 +221,20 @@ describe('acting admin', () => {
   });
 });
 
-describe('protected demo account', () => {
-  it('cannot be edited, deactivated, promoted or sent a reset link', async () => {
+describe('demo account', () => {
+  it('can be edited and promoted like any account', async () => {
     const context = await withAdmin();
     const demo = await login(context.app, { email: DEMO_ACCOUNTS[0]?.email, password: DEMO_ACCOUNTS[0]?.password });
     const id = (demo.body as { user: { id: string } }).user.id;
 
-    for (const [method, path, body] of [
-      ['patch', `/api/admin/users/${id}`, { fullName: 'Outro Nome' }],
-      ['post', `/api/admin/users/${id}/deactivate`, undefined],
-      ['post', `/api/admin/users/${id}/roles/admin`, undefined],
-      ['post', `/api/admin/users/${id}/password-reset`, undefined],
-    ] as const) {
-      const response = await call(context, context.admin.token, method, path, body);
-      expect(response.status, `${method} ${path}`).toBe(403);
-      expect(response.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
-    }
+    const edited = await call(context, context.admin.token, 'patch', `/api/admin/users/${id}`, {
+      fullName: 'Outro Nome',
+    });
+    const promoted = await call(context, context.admin.token, 'post', `/api/admin/users/${id}/roles/admin`);
+
+    expect(edited.status).toBe(200);
+    expect(edited.body).toMatchObject({ fullName: 'Outro Nome', isProtected: true });
+    expect(promoted.status).toBe(200);
   });
 });
 
