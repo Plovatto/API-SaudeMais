@@ -43,6 +43,7 @@ export const bookings = pgTable(
     cancelledByRole: text('cancelled_by_role', { enum: cancellerRoles }),
     cancelledBy: uuid('cancelled_by'),
     cancelledAt: timestamptz('cancelled_at'),
+    remindedAt: timestamptz('reminded_at'),
     doctorId: uuid('doctor_id'),
     specialtyId: uuid('specialty_id'),
     visitType: text('visit_type', { enum: visitTypes }),

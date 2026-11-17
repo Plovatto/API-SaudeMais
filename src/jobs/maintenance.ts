@@ -9,6 +9,7 @@ import type { Clock } from '../lib/clock.js';
 import { DAY, HOUR } from '../lib/time.js';
 import type { BookingsService } from '../modules/bookings/bookings.service.js';
 import type { DemoService } from '../modules/demo/demo.service.js';
+import type { EmailNotifier } from '../modules/email-notifications/email-notifications.notifier.js';
 import type { NotificationsService } from '../modules/notifications/notifications.service.js';
 
 export const MAINTENANCE_LOCK = 727_004;
@@ -25,6 +26,7 @@ interface MaintenanceDeps {
   bookings: BookingsService;
   demo: DemoService;
   notifications: NotificationsService;
+  reminders: Pick<EmailNotifier, 'remindUpcoming'>;
 }
 
 type LockRow = { acquired: boolean };
@@ -33,7 +35,7 @@ interface MaintenanceOptions {
   restoreDemo: boolean;
 }
 
-export function createMaintenance({ db, clock, bookings, demo, notifications: notificationsService }: MaintenanceDeps) {
+export function createMaintenance({ db, clock, bookings, demo, notifications: notificationsService, reminders }: MaintenanceDeps) {
   const purge = async () => {
     const { purged, recipients } = await db.transaction(async (tx) => {
       const now = clock.now();
@@ -73,6 +75,7 @@ export function createMaintenance({ db, clock, bookings, demo, notifications: no
     expired: await bookings.expireOverdue(),
     examsCompleted: await bookings.completeEndedExams(),
     appointmentsCompleted: await bookings.completeStaleAppointments(),
+    remindersSent: await reminders.remindUpcoming(),
     purged: await purge(),
     demoRestored: (restoreDemo && (await demo.restore())) || null,
   });

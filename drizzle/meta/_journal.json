@@ -134,6 +134,13 @@
       "when": 1794926830048,
       "tag": "0018_users_birth_date",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794930376118,
+      "tag": "0019_email_preferences",
+      "breakpoints": true
     }
   ]
 }

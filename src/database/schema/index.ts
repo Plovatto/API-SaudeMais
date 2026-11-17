@@ -3,6 +3,7 @@ export * from './bookings.js';
 export * from './catalog.js';
 export * from './doctor-profiles.js';
 export * from './doctor-schedule.js';
+export * from './email-preferences.js';
 export * from './exam-results.js';
 export * from './health-metrics.js';
 export * from './integration-clients.js';
