@@ -8,11 +8,21 @@ import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import { DAY } from '../../lib/time.js';
 import { hasResult, placeColumns } from '../bookings/bookings.repository.js';
 import type { ResultInput } from '../lab-integration/lab-integration.model.js';
-import type { ExamResult, ExamResultVersion } from './exam-results.model.js';
+import { aboutItem } from './exam-results.glossary.js';
+import type { ExamResult, ExamResultVersion, ResultItemView } from './exam-results.model.js';
+import { parseReferenceRange } from './reference-range.js';
 
 const REVIEW_WINDOW = 30 * DAY;
 
 type Payload = Partial<Pick<ResultInput, 'items' | 'report'>>;
+
+type ResultItem = NonNullable<ResultInput['items']>[number];
+
+const describeItem = (item: ResultItem): ResultItemView => ({
+  ...item,
+  range: parseReferenceRange(item.referenceRange),
+  about: aboutItem(item.name),
+});
 
 const resultColumns = {
   resultId: examResults.id,
@@ -63,13 +73,13 @@ async function versionsOf(tx: Transaction, resultIds: string[]) {
     .orderBy(desc(examResultVersions.version));
   const byResult = new Map<string, ExamResultVersion[]>();
   for (const { resultId, issuedAt, receivedAt, payload, ...version } of rows) {
-    const { items = null, report = null } = payload as Payload;
+    const { items, report = null } = payload as Payload;
     const versions = byResult.get(resultId) ?? [];
     versions.push({
       ...version,
       issuedAt: issuedAt.toISOString(),
       receivedAt: receivedAt.toISOString(),
-      items,
+      items: items?.map(describeItem) ?? null,
       report,
     });
     byResult.set(resultId, versions);
@@ -99,6 +109,18 @@ async function readResults(tx: Transaction, rows: ResultRow[], actor: Actor): Pr
   return results;
 }
 
+async function resultsPage(
+  tx: Transaction,
+  ofPatient: SQL,
+  pagination: Pagination,
+  actor: Actor,
+): Promise<Page<ExamResult>> {
+  const page = await pageOf(resultsQuery(tx, ofPatient), pagination, () =>
+    tx.$count(bookings, and(ofPatient, hasResult)),
+  );
+  return { ...page, items: await readResults(tx, page.items, actor) };
+}
+
 export class ExamResultsRepository {
   constructor(private readonly db: Database) {}
 
@@ -110,6 +132,12 @@ export class ExamResultsRepository {
     });
   }
 
+  patientResults(pagination: Pagination, actor: Actor): Promise<Page<ExamResult>> {
+    return this.db.transaction(async (tx) => {
+      return resultsPage(tx, eq(bookings.patientId, actor.actorId), pagination, actor);
+    });
+  }
+
   doctorResults(
     patientId: string,
     pagination: Pagination,
@@ -118,11 +146,7 @@ export class ExamResultsRepository {
   ): Promise<Page<ExamResult> | undefined> {
     return this.db.transaction(async (tx) => {
       if ((await tx.$count(bookings, examReviewWith(actor.actorId, patientId, now))) === 0) return undefined;
-      const ofPatient = eq(bookings.patientId, patientId);
-      const page = await pageOf(resultsQuery(tx, ofPatient), pagination, () =>
-        tx.$count(bookings, and(ofPatient, hasResult)),
-      );
-      return { ...page, items: await readResults(tx, page.items, actor) };
+      return resultsPage(tx, eq(bookings.patientId, patientId), pagination, actor);
     });
   }
 }
