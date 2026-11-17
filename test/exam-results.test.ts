@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
+import type { Response } from 'superagent';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { aboutItem } from '@/modules/exam-results/exam-results.glossary.js';
 import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
@@ -42,6 +44,17 @@ const ITEMS = [
   { name: 'Leucócitos', value: 'Ausentes', unit: null, referenceRange: null, flag: 'low' },
 ];
 const AMENDED_ITEMS = [{ ...ITEMS[0], value: 11.2, flag: 'low' }, ITEMS[1]];
+const binary = (response: Response, done: (error: Error | null, body: Buffer) => void) => {
+  const stream = response as unknown as NodeJS.ReadableStream;
+  const chunks: Buffer[] = [];
+  stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+  stream.on('end', () => done(null, Buffer.concat(chunks)));
+};
+const detailed = (items: readonly (object | undefined)[]) =>
+  items.map((item) => {
+    const { name = '', referenceRange = null } = (item ?? {}) as { name?: string; referenceRange?: string | null };
+    return { ...item, range: referenceRange ? { low: 12, high: 16 } : null, about: aboutItem(name) };
+  });
 const SECRETS = /Hemoglobina|Leucócitos|Ausentes|Fígado|13\.8|11\.2/;
 
 let context: Clinic;
@@ -156,7 +169,7 @@ describe('patient exam results', () => {
         status: 'amended',
         issuedAt: AMENDED_AT,
         receivedAt: START.toISOString(),
-        items: AMENDED_ITEMS,
+        items: detailed(AMENDED_ITEMS),
         report: null,
       },
       previous: [
@@ -165,7 +178,7 @@ describe('patient exam results', () => {
           status: 'final',
           issuedAt: ISSUED_AT,
           receivedAt: START.toISOString(),
-          items: ITEMS,
+          items: detailed(ITEMS),
           report: null,
         },
       ],
@@ -174,6 +187,51 @@ describe('patient exam results', () => {
     const audits = await readAudits(patientId);
     expect(audits).toEqual([{ entity_type: 'exam_result', metadata: { bookingId: labExam.id, version: 2 } }]);
     expect(JSON.stringify(audits)).not.toMatch(SECRETS);
+  });
+
+  it('lists the results newest first with a summary of the current version', async () => {
+    const response = await request(context.app).get('/api/patient/exam-results').set(as(patient)).expect(200);
+
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toMatchObject({
+      total: 2,
+      items: [
+        {
+          bookingId: imagingExam.id,
+          examType: { id: ultrassom.examTypeId, kind: 'imaging' },
+          startsAt: '2026-11-19T12:00:00.000Z',
+          issuedAt: ISSUED_AT,
+          amended: false,
+          summary: null,
+        },
+        {
+          bookingId: labExam.id,
+          examType: { id: hemograma.examTypeId, name: 'Hemograma', kind: 'lab' },
+          issuedAt: AMENDED_AT,
+          amended: true,
+          summary: { items: 2, outOfRange: 2, flagged: ['Hemoglobina', 'Leucócitos'] },
+        },
+      ],
+    });
+    const empty = await request(context.app).get('/api/patient/exam-results').set(as(stranger)).expect(200);
+    expect(empty.body).toMatchObject({ total: 0, items: [] });
+  });
+
+  it('downloads the current version as a pdf attachment', async () => {
+    const download = (token: string, id: string) =>
+      request(context.app).get(`/api/patient/exam-results/${id}/pdf`).set(as(token)).buffer(true).parse(binary);
+
+    const lab = await download(patient, labExam.id).expect(200);
+    const imaging = await download(patient, imagingExam.id).expect(200);
+
+    expect(lab.headers['content-type']).toBe('application/pdf');
+    expect(lab.headers['content-disposition']).toBe(`attachment; filename=laudo-${labExam.code}.pdf`);
+    expect(lab.headers['cache-control']).toBe('no-store');
+    expect((lab.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+    expect((imaging.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+    await download(stranger, labExam.id).expect(404);
+    await download(patient, waitingExam.id).expect(404);
+    await download(admin, labExam.id).expect(403);
   });
 
   it('shows the report of an imaging exam', async () => {
