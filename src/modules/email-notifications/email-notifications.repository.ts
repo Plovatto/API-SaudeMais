@@ -2,7 +2,7 @@ import { and, eq, gt, inArray, isNull, lte, not, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Database } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
-import { examTypes, units } from '../../database/schema/catalog.js';
+import { units } from '../../database/schema/catalog.js';
 import { emailPreferences, type EmailTopic } from '../../database/schema/email-preferences.js';
 import { users } from '../../database/schema/users.js';
 
@@ -25,7 +25,6 @@ export interface Reminder extends Recipient {
   unitName: string;
   unitAddress: string;
   doctorName: string | null;
-  examName: string | null;
 }
 
 export class EmailNotificationsRepository {
@@ -80,13 +79,11 @@ export class EmailNotificationsRepository {
           unitName: units.name,
           unitAddress: units.address,
           doctorName: doctorUsers.fullName,
-          examName: examTypes.name,
         })
         .from(bookings)
         .innerJoin(users, eq(users.id, bookings.patientId))
         .innerJoin(units, eq(units.id, bookings.unitId))
         .leftJoin(doctorUsers, eq(doctorUsers.id, bookings.doctorId))
-        .leftJoin(examTypes, eq(examTypes.id, bookings.examTypeId))
         .where(and(inArray(bookings.id, due.map(({ id }) => id)), wantsEmail('booking_reminder')));
     });
   }

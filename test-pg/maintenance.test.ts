@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
 import { DEMO_BOOKINGS } from '@/modules/demo/demo.data.js';
+import { registerSchema } from '@/modules/users/user.model.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
-import { registerSchema } from '@/modules/users/user.model.js';
 import { registration, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
 

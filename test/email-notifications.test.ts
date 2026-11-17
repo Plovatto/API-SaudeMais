@@ -29,8 +29,13 @@ async function userId(email: string): Promise<string> {
   return row.id;
 }
 
-async function appointment(email: string, status: BookingStatus, startsAt: Date): Promise<string> {
-  const carlos = await doctorNamed(context, 'Dr. Carlos Mendes');
+async function appointment(
+  email: string,
+  status: BookingStatus,
+  startsAt: Date,
+  doctorName = 'Dr. Carlos Mendes',
+): Promise<string> {
+  const carlos = await doctorNamed(context, doctorName);
   const [row] = await context.db
     .insert(bookings)
     .values({
@@ -150,6 +155,31 @@ describe('notification e-mails', () => {
     expect(sentTo(PATIENT_EMAIL)[0]?.subject).toBe('Pedido de consulta não confirmado · Saúde+');
     expect(sentTo(PATIENT_EMAIL)[0]?.html).toContain('<a href="https://app.saudemais.test/paciente/consultas/nova">');
     expect(sentTo(other)).toEqual([]);
+  });
+});
+
+describe('doctor e-mails', () => {
+  it('e-mails the doctor when the patient cancels, unless the doctor turned it off', async () => {
+    const { token: doctor } = await createDoctor(context, 'rita.email@email.com', 'Dra. Rita Email', '77702');
+    const cancel = async (startsAt: Date) => {
+      const id = await appointment(PATIENT_EMAIL, 'confirmed', startsAt, 'Dra. Rita Email');
+      await request(context.app)
+        .post(`/api/appointments/${id}/cancel`)
+        .set(as(context.patient))
+        .send({ startsAt: startsAt.toISOString() })
+        .expect(200);
+    };
+
+    await cancel(later(72 * HOUR));
+    await vi.waitFor(() => expect(sentTo('rita.email@email.com')).toHaveLength(1));
+    await choose(doctor, { preferences: [{ topic: 'appointment_cancellation', enabled: false }] }).expect(200);
+    await cancel(later(96 * HOUR));
+    await context.mail.drain();
+
+    const [mail] = sentTo('rita.email@email.com');
+    expect(mail?.subject).toBe('Consulta cancelada pelo paciente · Saúde+');
+    expect(mail?.text).toContain('https://app.saudemais.test/medico/agenda');
+    expect(sentTo('rita.email@email.com')).toHaveLength(1);
   });
 });
 

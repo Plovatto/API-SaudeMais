@@ -32,8 +32,8 @@ const firstName = (fullName: string) => fullName.trim().split(/\s+/)[0] ?? '';
 
 interface Notice {
   subject: string;
-  body: (params: NotificationParams) => string;
-  path: (bookingId: string | null) => string;
+  body: (params: NotificationParams, role: Role) => string;
+  path: (bookingId: string | null, role: Role) => string;
   label: string;
 }
 
@@ -62,10 +62,11 @@ const NOTICES: Record<NotificationType, Notice> = {
     ...bookingsPage,
   },
   appointment_cancelled: {
-    subject: 'Consulta cancelada',
-    body: (params) =>
-      `A consulta${at(params)} foi cancelada${CANCELLERS[String(params.cancelledByRole)] ?? ''}. Você pode agendar outro horário quando quiser.`,
-    ...bookingsPage,
+    subject: 'Agendamento cancelado',
+    body: (params, role) =>
+      `O agendamento${at(params)} foi cancelado${CANCELLERS[String(params.cancelledByRole)] ?? ''}.${role === 'patient' ? ' Você pode agendar outro horário quando quiser.' : ''}`,
+    path: (_bookingId, role) => (role === 'patient' ? bookingsPage.path() : agenda.path()),
+    label: 'Ver os agendamentos',
   },
   appointment_expired: {
     subject: 'Pedido de consulta não confirmado',
@@ -102,15 +103,14 @@ export function noticeEmail(
   return composeMail({
     to: recipient.email,
     subject: `${notice.subject} · Saúde+`,
-    paragraphs: [`Olá, ${firstName(recipient.fullName)}.`, notice.body(params)],
-    link: { href: `${appUrl}${notice.path(bookingId)}`, label: notice.label },
+    paragraphs: [`Olá, ${firstName(recipient.fullName)}.`, notice.body(params, role)],
+    link: { href: `${appUrl}${notice.path(bookingId, role)}`, label: notice.label },
     footer: footerFor(appUrl, role),
   });
 }
 
 export function reminderEmail(reminder: Reminder, appUrl: string): MailMessage {
-  const what =
-    reminder.kind === 'exam' ? `seu exame ${reminder.examName ?? ''}`.trim() : `sua consulta com ${reminder.doctorName ?? 'o médico'}`;
+  const what = reminder.kind === 'exam' ? 'seu exame' : `sua consulta com ${reminder.doctorName ?? 'o médico'}`;
   return composeMail({
     to: reminder.email,
     subject: `Lembrete do seu ${reminder.kind === 'exam' ? 'exame' : 'agendamento'} · Saúde+`,

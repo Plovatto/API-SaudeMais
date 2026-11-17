@@ -4,7 +4,7 @@ import type { Clock } from '../../lib/clock.js';
 import { DAY } from '../../lib/time.js';
 import type { MailQueue } from '../../mail/index.js';
 import type { Delivery } from '../notifications/notifications.service.js';
-import { NOTIFICATION_TOPICS } from './email-notifications.model.js';
+import { topicOf } from './email-notifications.model.js';
 import type { EmailNotificationsRepository } from './email-notifications.repository.js';
 import { noticeEmail, reminderEmail } from './email-notifications.templates.js';
 
@@ -32,8 +32,8 @@ export class EmailNotifier {
   private async send(deliveries: Delivery[]): Promise<void> {
     const byTopic = new Map<EmailTopic, Delivery[]>();
     for (const delivery of deliveries) {
-      const topic = NOTIFICATION_TOPICS[delivery.type];
-      byTopic.set(topic, [...(byTopic.get(topic) ?? []), delivery]);
+      const topic = topicOf(delivery.type, delivery.audienceRole);
+      if (topic) byTopic.set(topic, [...(byTopic.get(topic) ?? []), delivery]);
     }
     for (const [topic, group] of byTopic) {
       const recipients = await this.repository.recipients(
