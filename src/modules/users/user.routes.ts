@@ -6,6 +6,7 @@ import {
   jsonBody,
   serverBusyResponse,
   jsonResponse,
+  notFoundResponse,
   protectedAccountResponse,
   tooManyRequestsResponse,
   unauthenticatedResponse,
@@ -13,17 +14,20 @@ import {
 } from '../../docs/common-schemas.js';
 import { registry, sessionSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
+import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { authOf, noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { UserController } from './user.controller.js';
 import { isDemoEmail } from './user.demo.js';
+import { currentSession, sessionNotFound } from './user.messages.js';
 import { z } from 'zod';
 import {
   changePasswordSchema,
   loginResponseSchema,
   loginSchema,
   normalizeEmail,
+  profileSchema,
   publicUserSchema,
   registerSchema,
   sessionSchema,
@@ -108,10 +112,11 @@ registry.registerPath({
   operationId: 'getProfile',
   tags: [tags.profile.name],
   summary: 'Ver os próprios dados',
-  description: 'Devolve os dados e os perfis da conta dona do token. Limite: 120 leituras de perfil por minuto por IP.',
+  description:
+    'Devolve os dados e os perfis da conta dona do token, com a data de nascimento e a data da última troca de senha. Limite: 120 leituras de perfil por minuto por IP.',
   ...sessionSecurity,
   responses: {
-    200: jsonResponse('Dados da conta.', publicUserSchema),
+    200: jsonResponse('Dados da conta.', profileSchema),
     401: unauthenticatedResponse,
     429: tooManyRequestsResponse,
     500: internalErrorResponse,
@@ -123,13 +128,13 @@ registry.registerPath({
   path: '/api/me',
   operationId: 'updateProfile',
   tags: [tags.profile.name],
-  summary: 'Alterar nome ou telefone',
+  summary: 'Alterar nome, telefone ou nascimento',
   description:
-    'Altera só os campos enviados. O e-mail não pode ser alterado nesta versão. Limite: 120 requisições de perfil por minuto por IP.',
+    'Altera só os campos enviados. A data de nascimento não pode ser no futuro (fuso de São Paulo) nem antes de 1900. O e-mail não pode ser alterado nesta versão. Limite: 120 requisições de perfil por minuto por IP.',
   ...sessionSecurity,
   request: { body: jsonBody(updateProfileSchema) },
   responses: {
-    200: jsonResponse('Dados atualizados.', publicUserSchema),
+    200: jsonResponse('Dados atualizados.', profileSchema),
     400: validationErrorResponse,
     401: unauthenticatedResponse,
     403: protectedAccountResponse(),
@@ -198,6 +203,45 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'delete',
+  path: '/api/me/sessions/others',
+  operationId: 'endOtherSessions',
+  tags: [tags.profile.name],
+  summary: 'Encerrar as outras sessões',
+  description:
+    'Encerra todas as sessões da conta menos a atual. Na conta de demonstração, compartilhada entre visitantes, não encerra nada. Limite: 60 requisições de sessão por minuto por IP.',
+  ...sessionSecurity,
+  responses: {
+    204: { description: 'Outras sessões encerradas.' },
+    401: unauthenticatedResponse,
+    429: tooManyRequestsResponse,
+    500: internalErrorResponse,
+  },
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/api/me/sessions/{id}',
+  operationId: 'endSession',
+  tags: [tags.profile.name],
+  summary: 'Encerrar uma sessão',
+  description:
+    'Encerra uma sessão da própria conta, como a de um aparelho que a pessoa não reconhece. A sessão atual não pode ser encerrada por aqui: use o logout. Sessão de outra conta responde 404, sem revelar se existe. Na conta de demonstração a rota é bloqueada. Limite: 60 requisições de sessão por minuto por IP.',
+  ...sessionSecurity,
+  request: { params: idParams },
+  responses: {
+    204: { description: 'Sessão encerrada.' },
+    400: validationErrorResponse,
+    401: unauthenticatedResponse,
+    403: protectedAccountResponse(),
+    404: notFoundResponse(sessionNotFound),
+    422: errorResponse(`É a sessão em uso (\`${currentSession.code}\`).`, currentSession),
+    429: tooManyRequestsResponse,
+    500: internalErrorResponse,
+  },
+});
+
 export interface UserRouterDeps {
   controller: UserController;
   requireAuth: RequestHandler;
@@ -249,5 +293,7 @@ export function createUserRouter({ controller, requireAuth, requireWritable }: U
   );
   router.get('/api/me/sessions', noStore, profileLimit, requireAuth, controller.sessions);
   router.delete('/api/me/sessions', sessionLimit, requireAuth, controller.logoutEverywhere);
+  router.delete('/api/me/sessions/others', sessionLimit, requireAuth, controller.endOtherSessions);
+  router.delete('/api/me/sessions/:id', sessionLimit, requireAuth, requireWritable, controller.endSession);
   return router;
 }

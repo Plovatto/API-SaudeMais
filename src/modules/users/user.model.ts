@@ -1,8 +1,9 @@
 import '../../docs/zod-extend.js';
 import { z } from 'zod';
-import { roles } from '../../database/schema/users.js';
+import { EARLIEST_BIRTH_DATE, roles } from '../../database/schema/users.js';
 import { registry } from '../../docs/registry.js';
 import { boundedText } from '../../lib/text.js';
+import { invalidBirthDate } from './user.messages.js';
 
 const E164 = /^\+[1-9][0-9]{9,14}$/;
 
@@ -86,12 +87,24 @@ export const updateProfileSchema = registry.register(
         .union([z.null(), z.literal('').transform(() => null), phoneNumber])
         .optional()
         .openapi({ ...phoneDescription, description: `${phoneDescription.description} Envie \`null\` para remover.` }),
+      birthDate: z
+        .union([
+          z.null(),
+          z.literal('').transform(() => null),
+          z.iso.date(invalidBirthDate).refine((value) => value >= EARLIEST_BIRTH_DATE, invalidBirthDate),
+        ])
+        .optional()
+        .openapi({
+          description: `Data de nascimento (AAAA-MM-DD), de ${EARLIEST_BIRTH_DATE} até hoje no fuso de São Paulo. Envie \`null\` para remover.`,
+          example: '1986-03-12',
+        }),
     })
-    .refine((data) => data.fullName !== undefined || data.phone !== undefined, {
+    .refine((data) => data.fullName !== undefined || data.phone !== undefined || data.birthDate !== undefined, {
       path: ['_root'],
-      message: 'Envie o nome ou o telefone.',
+      message: 'Envie o nome, o telefone ou a data de nascimento.',
     }),
 );
+
 
 export const changePasswordSchema = registry.register(
   'ChangePasswordRequest',
@@ -141,6 +154,17 @@ export const publicUserSchema = registry.register(
   }),
 );
 
+export const profileSchema = registry.register(
+  'Profile',
+  publicUserSchema.extend({
+    birthDate: z.iso.date().nullable().openapi({ description: 'Data de nascimento, se informada.', example: '1986-03-12' }),
+    passwordChangedAt: z.iso
+      .datetime()
+      .nullable()
+      .openapi({ description: 'Última troca de senha; nula se a senha nunca foi trocada.' }),
+  }),
+);
+
 export const loginResponseSchema = registry.register(
   'LoginResponse',
   z.object({
@@ -161,3 +185,4 @@ export type LoginResponse = z.infer<typeof loginResponseSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type SessionView = z.infer<typeof sessionSchema>;
+export type Profile = z.infer<typeof profileSchema>;

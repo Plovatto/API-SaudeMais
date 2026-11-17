@@ -1,9 +1,11 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, foreignKey, pgTable, primaryKey, text, unique, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, date, foreignKey, pgTable, primaryKey, text, unique, uuid } from 'drizzle-orm/pg-core';
 import { citext, isE164, isOneOf, timestamptz, uuidv7Id } from './columns.js';
 
 export const roles = ['patient', 'doctor', 'admin'] as const;
 export type Role = (typeof roles)[number];
+
+export const EARLIEST_BIRTH_DATE = '1900-01-01';
 
 export const users = pgTable(
   'users',
@@ -12,6 +14,7 @@ export const users = pgTable(
     fullName: text('full_name').notNull(),
     email: citext('email').notNull(),
     phone: text('phone'),
+    birthDate: date('birth_date', { mode: 'string' }),
     passwordHash: text('password_hash').notNull(),
     passwordChangedAt: timestamptz('password_changed_at'),
     isProtected: boolean('is_protected').notNull().default(false),
@@ -24,6 +27,7 @@ export const users = pgTable(
     check('users_full_name_check', sql`char_length(full_name) between 2 and 120`),
     check('users_email_check', sql`char_length(email) between 3 and 254`),
     check('users_phone_check', isE164('phone')),
+    check('users_birth_date_check', sql.raw(`birth_date >= '${EARLIEST_BIRTH_DATE}'`)),
     check('users_password_hash_check', sql`char_length(password_hash) between 1 and 512`),
   ],
 );

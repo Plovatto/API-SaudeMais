@@ -1,20 +1,22 @@
-import { AppError, conflictError } from '../../lib/app-error.js';
+import { AppError, conflictError, invalidData } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
-import { DAY, HOUR, MINUTE } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDate, wallClockIn } from '../../lib/time.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import type {
   ChangePasswordInput,
   LoginInput,
   LoginResponse,
+  Profile,
   PublicUser,
   RegisterInput,
   SessionView,
   UpdateProfileInput,
 } from './user.model.js';
+import { birthDateInFuture, currentSession, sessionNotFound } from './user.messages.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
 import { isDemoEmail, type SeedAccount } from './user.demo.js';
 import type { UserRepository } from './user.repository.js';
@@ -163,14 +165,17 @@ export class UserService {
     }
   }
 
-  async profile(userId: string): Promise<PublicUser> {
-    const user = await this.repository.findPublicUser(userId);
+  async profile(userId: string): Promise<Profile> {
+    const user = await this.repository.findProfile(userId);
     if (!user) throw unauthenticated();
     return user;
   }
 
-  async updateProfile(userId: string, { fullName, phone }: UpdateProfileInput): Promise<PublicUser> {
-    await this.repository.updateProfile(userId, definedFields({ fullName, phone }));
+  async updateProfile(userId: string, { fullName, phone, birthDate }: UpdateProfileInput): Promise<Profile> {
+    if (birthDate && birthDate > civilDate(wallClockIn(CLINIC_TIME_ZONE, this.clock.now()))) {
+      throw invalidData(birthDateInFuture);
+    }
+    await this.repository.updateProfile(userId, definedFields({ fullName, phone, birthDate }));
     this.sessions.invalidateUser(userId);
     return this.profile(userId);
   }
@@ -201,6 +206,20 @@ export class UserService {
   async logoutEverywhere({ sessionId, isProtected, user }: AuthContext): Promise<void> {
     if (isProtected) return this.logout(sessionId);
     await this.repository.deleteSessionsOf(user.id, null);
+    this.sessions.invalidateUser(user.id);
+  }
+
+  async endSession({ sessionId, user }: AuthContext, id: string): Promise<void> {
+    if (id === sessionId) throw new AppError(422, currentSession.code, currentSession.message);
+    if (!(await this.repository.deleteOwnSession(user.id, id))) {
+      throw new AppError(404, 'NOT_FOUND', sessionNotFound);
+    }
+    this.sessions.invalidateSessions([id]);
+  }
+
+  async endOtherSessions({ sessionId, isProtected, user }: AuthContext): Promise<void> {
+    if (isProtected) return;
+    await this.repository.deleteSessionsOf(user.id, sessionId);
     this.sessions.invalidateUser(user.id);
   }
 
