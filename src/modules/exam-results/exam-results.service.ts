@@ -8,15 +8,14 @@ import { renderResultPdf, resultFileName } from './exam-results.pdf.js';
 import type { ExamResultsRepository } from './exam-results.repository.js';
 
 function summaryOf({ booking, current }: ExamResult): ExamResultSummary {
-  const flagged = current.items?.filter((item) => item.flag !== 'normal').map((item) => item.name);
+  const flagged = current.items?.filter((item) => item.flag !== 'normal').map((item) => item.name) ?? [];
   return {
     bookingId: booking.id,
     examType: booking.examType,
     startsAt: booking.startsAt,
     issuedAt: current.issuedAt,
     amended: current.status === 'amended',
-    summary:
-      current.items && flagged ? { items: current.items.length, outOfRange: flagged.length, flagged } : null,
+    summary: current.items && { items: current.items.length, outOfRange: flagged.length, flagged },
   };
 }
 

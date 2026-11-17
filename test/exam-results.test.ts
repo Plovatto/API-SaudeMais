@@ -3,6 +3,7 @@ import type { Response } from 'superagent';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { aboutItem } from '@/modules/exam-results/exam-results.glossary.js';
+import { parseReferenceRange } from '@/modules/exam-results/reference-range.js';
 import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
@@ -53,7 +54,7 @@ const binary = (response: Response, done: (error: Error | null, body: Buffer) =>
 const detailed = (items: readonly (object | undefined)[]) =>
   items.map((item) => {
     const { name = '', referenceRange = null } = (item ?? {}) as { name?: string; referenceRange?: string | null };
-    return { ...item, range: referenceRange ? { low: 12, high: 16 } : null, about: aboutItem(name) };
+    return { ...item, range: parseReferenceRange(referenceRange), about: aboutItem(name) };
   });
 const SECRETS = /Hemoglobina|Leucócitos|Ausentes|Fígado|13\.8|11\.2/;
 

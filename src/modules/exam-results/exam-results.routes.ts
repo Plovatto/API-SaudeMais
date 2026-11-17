@@ -55,6 +55,12 @@ registry.registerPath({
   responses: {
     200: {
       description: 'Laudo em PDF.',
+      headers: {
+        'Content-Disposition': {
+          description: 'Sempre `attachment`, com o nome `laudo-<código do exame>.pdf`.',
+          schema: { type: 'string', example: 'attachment; filename=laudo-EX-7F3K2Q.pdf' },
+        },
+      },
       content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } },
     },
     400: validationErrorResponse,

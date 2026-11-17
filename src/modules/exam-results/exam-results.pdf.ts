@@ -24,6 +24,28 @@ const dateTime = new Intl.DateTimeFormat('pt-BR', {
 
 const numberFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 
+const REPLACEMENTS: Record<string, string> = {
+  '≤': '<=',
+  '≥': '>=',
+  '≠': '!=',
+  '−': '-',
+  'μ': 'µ',
+  ...Object.fromEntries([...'⁰⁴⁵⁶⁷⁸⁹'].map((char, index) => [char, `^${'0456789'[index]}`])),
+};
+
+const WIN_ANSI_EXTRA = new Set([
+  0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160, 0x2039, 0x0152, 0x017d, 0x2018,
+  0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
+]);
+
+const isWinAnsi = (char: string) => {
+  const code = char.codePointAt(0) ?? 0;
+  return [0x09, 0x0a, 0x0d].includes(code) || (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WIN_ANSI_EXTRA.has(code);
+};
+
+export const printable = (text: string) =>
+  [...text.normalize('NFC')].map((char) => REPLACEMENTS[char] ?? (isWinAnsi(char) ? char : '?')).join('');
+
 const formatValue = ({ value, unit }: ResultItemView) =>
   `${typeof value === 'number' ? numberFormat.format(value) : value}${unit ? ` ${unit}` : ''}`;
 
@@ -54,38 +76,51 @@ export function renderResultPdf(result: ExamResult, patientName: string, printed
   };
 
   doc.font('Helvetica-Bold').fontSize(16).fillColor(COLORS.brand).text('Saúde+');
-  doc.font('Helvetica').fontSize(9).fillColor(COLORS.mute).text(`${booking.unit.name} · ${booking.unit.address}`);
+  doc
+    .font('Helvetica')
+    .fontSize(9)
+    .fillColor(COLORS.mute)
+    .text(printable(`${booking.unit.name} · ${booking.unit.address}`));
   doc.moveDown(0.6);
   rule(COLORS.brand);
   doc.moveDown(0.8);
-  doc.font('Helvetica-Bold').fontSize(14).fillColor(COLORS.ink).text(booking.examType.name.toUpperCase());
+  doc.font('Helvetica-Bold').fontSize(14).fillColor(COLORS.ink).text(printable(booking.examType.name.toUpperCase()));
   doc.moveDown(0.4);
-  pair('Paciente', patientName);
+  pair('Paciente', printable(patientName));
   pair('Código do exame', booking.publicCode);
   pair('Realizado em', dateTime.format(new Date(booking.startsAt)));
   pair('Emitido em', dateTime.format(new Date(current.issuedAt)));
   if (current.status === 'amended') pair('Versão', `${current.version} (retificação)`);
   doc.moveDown(0.8);
 
-  if (current.items) {
-    const header = doc.y;
-    doc.rect(MARGIN, header - 3, width, 16).fill(COLORS.band);
+  const tableHeader = () => {
+    const top = doc.y;
+    doc.rect(MARGIN, top - 3, width, 16).fill(COLORS.band);
     doc.font('Helvetica-Bold').fontSize(8).fillColor(COLORS.mute);
-    doc.text('Exame', COLUMNS.name + 4, header, { lineBreak: false });
-    doc.text('Resultado', COLUMNS.value, header, { lineBreak: false });
-    doc.text('Referência', COLUMNS.reference, header, { lineBreak: false });
-    doc.text('Indicador', COLUMNS.flag, header, { lineBreak: false });
-    doc.y = header + 18;
+    doc.text('Exame', COLUMNS.name + 4, top, { lineBreak: false });
+    doc.text('Resultado', COLUMNS.value, top, { lineBreak: false });
+    doc.text('Referência', COLUMNS.reference, top, { lineBreak: false });
+    doc.text('Indicador', COLUMNS.flag, top, { lineBreak: false });
+    doc.y = top + 18;
+  };
+
+  if (current.items) {
+    tableHeader();
     for (const item of current.items) {
-      if (doc.y > doc.page.height - MARGIN - 40) doc.addPage();
+      if (doc.y > doc.page.height - MARGIN - 48) {
+        doc.addPage();
+        tableHeader();
+      }
       const top = doc.y;
       doc.font('Helvetica').fontSize(9).fillColor(COLORS.ink);
-      doc.text(item.name, COLUMNS.name + 4, top, { width: COLUMNS.value - COLUMNS.name - 12 });
+      doc.text(printable(item.name), COLUMNS.name + 4, top, { width: COLUMNS.value - COLUMNS.name - 12 });
       const bottom = doc.y;
       doc.font(item.flag === 'normal' ? 'Helvetica' : 'Helvetica-Bold').fillColor(flagColor(item.flag));
-      doc.text(formatValue(item), COLUMNS.value, top, { width: COLUMNS.reference - COLUMNS.value - 8 });
+      doc.text(printable(formatValue(item)), COLUMNS.value, top, { width: COLUMNS.reference - COLUMNS.value - 8 });
       doc.font('Helvetica').fillColor(COLORS.mute);
-      doc.text(item.referenceRange ?? '—', COLUMNS.reference, top, { width: COLUMNS.flag - COLUMNS.reference - 8 });
+      doc.text(printable(item.referenceRange ?? '—'), COLUMNS.reference, top, {
+        width: COLUMNS.flag - COLUMNS.reference - 8,
+      });
       doc.font('Helvetica-Bold').fillColor(flagColor(item.flag)).text(flagLabels[item.flag], COLUMNS.flag, top);
       doc.y = Math.max(bottom, doc.y) + 6;
       rule();
@@ -94,7 +129,11 @@ export function renderResultPdf(result: ExamResult, patientName: string, printed
   } else {
     doc.font('Helvetica-Bold').fontSize(10).fillColor(COLORS.ink).text('Laudo');
     doc.moveDown(0.4);
-    doc.font('Helvetica').fontSize(10).fillColor(COLORS.ink).text(current.report ?? '', { width, lineGap: 3 });
+    doc
+      .font('Helvetica')
+      .fontSize(10)
+      .fillColor(COLORS.ink)
+      .text(printable(current.report ?? ''), { width, lineGap: 3 });
   }
 
   doc.moveDown(1.5);
