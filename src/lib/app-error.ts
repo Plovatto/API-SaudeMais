@@ -23,6 +23,12 @@ export class AppError extends Error {
   }
 }
 
+export const INVALID_DATA_MESSAGE = 'Dados inválidos.';
+
+export function invalidData(fields: FieldErrors): AppError {
+  return new AppError(400, 'VALIDATION_ERROR', INVALID_DATA_MESSAGE, fields);
+}
+
 export function unprocessable(code: string, message: string, fields?: FieldErrors): AppError {
   return new AppError(422, code, message, fields);
 }

@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
 import { createSessionToken } from '@/modules/users/user.token.js';
-import { buildUsersApp, login, registerAndLogin, START } from './support/users.js';
+import { buildUsersApp, HOUR, login, registerAndLogin, START } from './support/users.js';
 
 type App = Parameters<typeof request>[0];
+type Session = { id: string; current: boolean };
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 const demo = (() => {
   const account = DEMO_ACCOUNTS[0];
@@ -47,10 +48,59 @@ describe('GET and PATCH /api/me', () => {
     expect(withoutPhone.body).toMatchObject({ fullName: 'Ana Souza', phone: null });
   });
 
+  it('starts without a birth date or a password change', async () => {
+    const { app } = await buildUsersApp();
+    const token = await registerAndLogin(app);
+
+    const response = await request(app).get('/api/me').set(auth(token));
+
+    expect(response.body).toMatchObject({ birthDate: null, passwordChangedAt: null });
+  });
+
+  it('saves the birth date up to today in São Paulo and removes it with null', async () => {
+    const { app } = await buildUsersApp();
+    const token = await registerAndLogin(app);
+
+    const saved = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-20' });
+    const removed = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: null });
+
+    expect(saved.status).toBe(200);
+    expect(saved.body).toMatchObject({ birthDate: '2026-11-20', phone: '+5511987654321' });
+    expect(removed.body).toMatchObject({ birthDate: null });
+  });
+
+  it('rejects a birth date after today in São Paulo', async () => {
+    const { app } = await buildUsersApp();
+    const token = await registerAndLogin(app);
+
+    const response = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-21' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      fields: { birthDate: 'A data de nascimento não pode ser no futuro.' },
+    });
+  });
+
+  it('uses the São Paulo day, not the UTC day, to tell the future', async () => {
+    const { app, clock } = await buildUsersApp();
+    clock.advance(13 * HOUR);
+    const token = await registerAndLogin(app);
+
+    const utcToday = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-21' });
+    const saoPauloToday = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-20' });
+
+    expect(utcToday.status).toBe(400);
+    expect(saoPauloToday.status).toBe(200);
+  });
+
   it.each([
     ['an empty body', {}],
     ['the e-mail', { email: 'outro@email.com' }],
     ['an invalid phone', { phone: '123' }],
+    ['a birth date before 1900', { birthDate: '1899-12-31' }],
+    ['an impossible birth date', { birthDate: '1990-02-30' }],
+    ['a birth date with time', { birthDate: '1990-02-10T00:00:00Z' }],
   ])('rejects %s', async (_case, body) => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
@@ -85,6 +135,9 @@ describe('POST /api/me/password', () => {
 
     expect(await service.authenticate(current)).not.toBeNull();
     expect(await service.authenticate(other)).toBeNull();
+    expect((await request(app).get('/api/me').set(auth(current))).body).toMatchObject({
+      passwordChangedAt: START.toISOString(),
+    });
     expect((await login(app)).status).toBe(401);
     expect((await login(app, { password: 'nova-senha-456' })).status).toBe(200);
   });
@@ -150,6 +203,61 @@ describe('sessions', () => {
     expect(await service.authenticate(current)).toBeNull();
     expect(await service.authenticate(other)).toBeNull();
   });
+
+  it('ends the other sessions and keeps the current one', async () => {
+    const { app, auth: service } = await buildUsersApp();
+    const current = await registerAndLogin(app);
+    const other = ((await login(app)).body as { token: string }).token;
+
+    expect((await request(app).delete('/api/me/sessions/others').set(auth(current))).status).toBe(204);
+
+    expect(await service.authenticate(current)).not.toBeNull();
+    expect(await service.authenticate(other)).toBeNull();
+  });
+
+  it('ends one session of the account', async () => {
+    const { app, auth: service } = await buildUsersApp();
+    const current = await registerAndLogin(app);
+    const other = ((await login(app)).body as { token: string }).token;
+    const sessions = (await request(app).get('/api/me/sessions').set(auth(current))).body as Session[];
+    const target = sessions.find((session) => !session.current);
+
+    expect((await request(app).delete(`/api/me/sessions/${target?.id}`).set(auth(current))).status).toBe(204);
+
+    expect(await service.authenticate(other)).toBeNull();
+    expect(await service.authenticate(current)).not.toBeNull();
+  });
+
+  it('refuses to end the current session through the single-session route', async () => {
+    const { app, auth: service } = await buildUsersApp();
+    const current = await registerAndLogin(app);
+    const sessions = (await request(app).get('/api/me/sessions').set(auth(current))).body as Session[];
+
+    const response = await request(app).delete(`/api/me/sessions/${sessions[0]?.id}`).set(auth(current));
+
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({ code: 'CURRENT_SESSION' });
+    expect(await service.authenticate(current)).not.toBeNull();
+  });
+
+  it('answers 404 for a session of another account and keeps it', async () => {
+    const { app, auth: service } = await buildUsersApp();
+    const mine = await registerAndLogin(app);
+    const theirs = await registerAndLogin(app, {}, { email: 'bruno@email.com' });
+    const [their] = (await request(app).get('/api/me/sessions').set(auth(theirs))).body as Session[];
+
+    const response = await request(app).delete(`/api/me/sessions/${their?.id}`).set(auth(mine));
+
+    expect(response.status).toBe(404);
+    expect(await service.authenticate(theirs)).not.toBeNull();
+  });
+
+  it('rejects a malformed session id', async () => {
+    const { app } = await buildUsersApp();
+    const token = await registerAndLogin(app);
+
+    expect((await request(app).delete('/api/me/sessions/abc').set(auth(token))).status).toBe(400);
+  });
 });
 
 describe('protected demo account', () => {
@@ -181,6 +289,20 @@ describe('protected demo account', () => {
     await request(app).delete('/api/me/sessions').set(auth(first)).expect(204);
 
     expect(await service.authenticate(first)).toBeNull();
+    expect(await service.authenticate(second)).not.toBeNull();
+  });
+
+  it("cannot end other visitors' sessions or change the birth date", async () => {
+    const { app, auth: service, first, second } = await demoApp();
+    const sessions = (await request(app).get('/api/me/sessions').set(auth(first))).body as Session[];
+    const visitor = sessions.find((session) => !session.current);
+
+    await request(app).delete('/api/me/sessions/others').set(auth(first)).expect(204);
+    const single = await request(app).delete(`/api/me/sessions/${visitor?.id}`).set(auth(first));
+    const birth = await request(app).patch('/api/me').set(auth(first)).send({ birthDate: '1990-01-01' });
+
+    expect(single.status).toBe(403);
+    expect(birth.status).toBe(403);
     expect(await service.authenticate(second)).not.toBeNull();
   });
 });

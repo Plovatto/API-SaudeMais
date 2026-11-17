@@ -2,7 +2,7 @@ import { and, eq, gt, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-or
 import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
-import type { PublicUser } from './user.model.js';
+import type { Profile, PublicUser } from './user.model.js';
 
 const userColumns = { id: users.id, fullName: users.fullName, email: users.email, phone: users.phone };
 
@@ -118,9 +118,12 @@ export class UserRepository {
     return candidate;
   }
 
-  async findPublicUser(id: string): Promise<PublicUser | undefined> {
-    const [user] = await this.db.select(publicUserColumns).from(users).where(eq(users.id, id));
-    return user;
+  async findProfile(id: string): Promise<Profile | undefined> {
+    const [row] = await this.db
+      .select({ ...publicUserColumns, birthDate: users.birthDate, passwordChangedAt: users.passwordChangedAt })
+      .from(users)
+      .where(eq(users.id, id));
+    return row && { ...row, passwordChangedAt: row.passwordChangedAt?.toISOString() ?? null };
   }
 
   async findPasswordHash(id: string): Promise<string | undefined> {
@@ -128,7 +131,10 @@ export class UserRepository {
     return user?.passwordHash;
   }
 
-  async updateProfile(id: string, changes: { fullName?: string; phone?: string | null }): Promise<void> {
+  async updateProfile(
+    id: string,
+    changes: { fullName?: string; phone?: string | null; birthDate?: string | null },
+  ): Promise<void> {
     await this.db.update(users).set(changes).where(eq(users.id, id));
   }
 
@@ -204,5 +210,13 @@ export class UserRepository {
 
   async deleteSession(id: string): Promise<void> {
     await this.db.delete(sessions).where(eq(sessions.id, id));
+  }
+
+  async deleteOwnSession(userId: string, id: string): Promise<boolean> {
+    const removed = await this.db
+      .delete(sessions)
+      .where(and(eq(sessions.id, id), eq(sessions.userId, userId)))
+      .returning({ id: sessions.id });
+    return removed.length > 0;
   }
 }

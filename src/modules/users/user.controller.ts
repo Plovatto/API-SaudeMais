@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import { clientIp } from '../../lib/client-ip.js';
+import { idParams } from '../../lib/params.js';
 import { authOf } from '../../middleware/auth.js';
 import { changePasswordSchema, loginSchema, registerSchema, updateProfileSchema } from './user.model.js';
 import type { UserService } from './user.service.js';
@@ -13,6 +14,8 @@ export interface UserController {
   changePassword: RequestHandler;
   sessions: RequestHandler;
   logoutEverywhere: RequestHandler;
+  endSession: RequestHandler;
+  endOtherSessions: RequestHandler;
 }
 
 export function createUserController(service: UserService): UserController {
@@ -47,6 +50,14 @@ export function createUserController(service: UserService): UserController {
     },
     logoutEverywhere: async (req, res) => {
       await service.logoutEverywhere(authOf(req));
+      res.status(204).end();
+    },
+    endSession: async (req, res) => {
+      await service.endSession(authOf(req), idParams.parse(req.params).id);
+      res.status(204).end();
+    },
+    endOtherSessions: async (req, res) => {
+      await service.endOtherSessions(authOf(req));
       res.status(204).end();
     },
   };
