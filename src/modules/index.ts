@@ -13,6 +13,7 @@ import { createDoctorAgendaModule } from './doctor-agenda/index.js';
 import { createDoctorScheduleModule } from './doctor-schedule/index.js';
 import { createDoctorsModule } from './doctors/index.js';
 import { createDemoModule } from './demo/index.js';
+import { createEmailNotificationsModule } from './email-notifications/index.js';
 import { createExamBookingsModule } from './exam-bookings/index.js';
 import { createExamResultsModule } from './exam-results/index.js';
 import { createLabIntegrationModule } from './lab-integration/index.js';
@@ -32,7 +33,11 @@ export interface ModulesDeps {
 
 export function createModules(deps: ModulesDeps) {
   const sessions = new SessionCache(deps.clock);
-  const notifications = createNotificationsModule(deps);
+  const email = createEmailNotificationsModule(deps);
+  const notifications = createNotificationsModule({
+    ...deps,
+    onDelivered: (deliveries) => email.notifier.deliver(deliveries),
+  });
   const users = createUsersModule({ ...deps, notifications: notifications.service, sessions });
   const passwordReset = createPasswordResetModule({ ...deps, sessions });
   const bookings = createBookingsModule({ db: deps.db, clock: deps.clock, notifications: notifications.service });
@@ -95,6 +100,7 @@ export function createModules(deps: ModulesDeps) {
     bookings: bookings.service,
     demo: demo.service,
     notifications: notifications.service,
+    reminders: email.notifier,
   });
   return {
     users,
@@ -107,6 +113,7 @@ export function createModules(deps: ModulesDeps) {
     doctors,
     appointments,
     notifications,
+    email,
     maintenance,
     routers: [
       users.router,
@@ -124,6 +131,7 @@ export function createModules(deps: ModulesDeps) {
       labIntegration.router,
       examResults.router,
       notifications.routerFor(users.requireAuth),
+      email.routerFor(users.requireAuth),
     ],
   };
 }

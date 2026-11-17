@@ -374,7 +374,7 @@ export async function moveBooking(
   now: Date,
 ): Promise<ChangedBooking | undefined> {
   const [moved] = await change(tx, {
-    set: { ...move, rescheduleCount: sql`${bookings.rescheduleCount} + 1` },
+    set: { ...move, remindedAt: null, rescheduleCount: sql`${bookings.rescheduleCount} + 1` },
     where: eq(bookings.id, booking.id),
     event: {
       eventType: 'rescheduled',

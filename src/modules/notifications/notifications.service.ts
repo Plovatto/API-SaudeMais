@@ -19,6 +19,7 @@ export class NotificationsService {
     private readonly repository: NotificationsRepository,
     private readonly counter: TtlCache<number>,
     private readonly clock: Clock,
+    private readonly onDelivered: (deliveries: Delivery[]) => void = () => undefined,
   ) {}
 
   async notify(tx: Transaction, deliveries: Delivery[]): Promise<AfterCommit> {
@@ -28,7 +29,10 @@ export class NotificationsService {
       tx,
       deliveries.map((delivery) => ({ ...delivery, createdAt })),
     );
-    return () => this.forget(deliveries);
+    return () => {
+      this.forget(deliveries);
+      this.onDelivered(deliveries);
+    };
   }
 
   forget(recipients: Recipient[]): void {
