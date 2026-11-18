@@ -2,7 +2,7 @@ import type { NotificationParams, NotificationType } from '../../database/schema
 import type { Role } from '../../database/schema/users.js';
 import { composeMail } from '../../mail/compose.js';
 import type { MailMessage } from '../../mail/index.js';
-import { CLINIC_TIME_ZONE } from '../../lib/time.js';
+import { clinicDateTime, CLINIC_TIME_ZONE } from '../../lib/time.js';
 import type { Recipient, Reminder } from './email-notifications.repository.js';
 
 const AREAS: Record<Role, string> = { patient: '/paciente', doctor: '/medico', admin: '/admin' };
@@ -14,8 +14,6 @@ const CANCELLERS: Record<string, string> = {
   system: ' pelo sistema',
 };
 
-const dateTime = new Intl.DateTimeFormat('pt-BR', { timeZone: CLINIC_TIME_ZONE, dateStyle: 'short', timeStyle: 'short' });
-
 const longDate = new Intl.DateTimeFormat('pt-BR', {
   timeZone: CLINIC_TIME_ZONE,
   weekday: 'long',
@@ -26,7 +24,7 @@ const longDate = new Intl.DateTimeFormat('pt-BR', {
 });
 
 const at = ({ startsAt }: NotificationParams) =>
-  typeof startsAt === 'string' && !Number.isNaN(Date.parse(startsAt)) ? ` de ${dateTime.format(new Date(startsAt))}` : '';
+  typeof startsAt === 'string' && !Number.isNaN(Date.parse(startsAt)) ? ` de ${clinicDateTime.format(new Date(startsAt))}` : '';
 
 const firstName = (fullName: string) => fullName.trim().split(/\s+/)[0] ?? '';
 
