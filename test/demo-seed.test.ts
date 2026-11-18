@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { DEMO_DOCTOR_PROFILE } from '@/modules/demo/demo.data.js';
 import { seedTarget } from '@/modules/demo/seed-guard.js';
 import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
-import { as, buildUsersApp, login } from './support/users.js';
+import { as, buildUsersApp, HOUR, login } from './support/users.js';
 
 const tables = [
   'users',
@@ -275,6 +275,30 @@ describe('demo account restore', () => {
       sql`select full_name from users where email = ${DEMO_PATIENT.email}`,
     );
     expect(name.rows[0]?.full_name).toBe('Outro Nome');
+  });
+
+  it('keeps exactly one future blocked date for the demo doctor, replacing the ones it added', async () => {
+    const context = await restored();
+    const blockedDates = async () =>
+      (
+        await context.db.execute<{ date: string; reason: string | null }>(sql`
+          select t.date::text as date, t.reason from doctor_time_off t join users u on u.id = t.doctor_id
+          where u.email = ${DEMO_DOCTOR.email}
+        `)
+      ).rows;
+    await context.modules.demo.service.restore();
+    await context.db.execute(sql`
+      insert into doctor_time_off (doctor_id, date) select id, '2026-12-31' from users where email = ${DEMO_DOCTOR.email}
+    `);
+    context.clock.advance(24 * HOUR);
+
+    await context.modules.demo.service.restore();
+
+    const dates = await blockedDates();
+    expect(dates).toHaveLength(1);
+    expect(dates[0]?.reason).toBe('Congresso médico');
+    expect(dates[0]?.date > '2026-11-21').toBe(true);
+    expect([0, 6]).not.toContain(new Date(`${dates[0]?.date ?? ''}T12:00:00Z`).getUTCDay());
   });
 
   it('ends the sessions that existed before the password was reset', async () => {
