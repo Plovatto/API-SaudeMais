@@ -34,6 +34,8 @@ export const saveScheduleSchema = registry.register(
   z.strictObject({
     days: weekList(daySchema).length(7).openapi({ description: 'Os 7 dias da semana, cada um uma vez.' }),
     appointmentDurationMin: durationChoice.nullable().optional().openapi({
+      type: ['integer', 'null'],
+      enum: [...APPOINTMENT_DURATIONS, null],
       description:
         'Duração de cada consulta do médico, em minutos: 15, 20, 30, 45 ou 60. `null` volta para a duração padrão da especialidade; sem o campo, a duração atual fica como está.',
       example: 30,
