@@ -22,7 +22,7 @@ registry.registerPath({
   tags: [tags.accounts.name],
   summary: 'Pedir link para redefinir a senha',
   description:
-    'Envia ao e-mail um link válido por 30 minutos. A resposta é sempre 204, exista ou não a conta. Cada conta recebe no máximo um link a cada 15 minutos e 3 por dia; contas de demonstração e desativadas não recebem. Pedir de novo invalida o link anterior. Limite: 10 pedidos por IP a cada 15 minutos.',
+    'Envia ao e-mail um link válido por 30 minutos. A resposta é sempre 204, exista ou não a conta. Cada conta recebe no máximo um link a cada 15 minutos e 3 por dia; contas desativadas não recebem. Pedir de novo invalida o link anterior. Limite: 10 pedidos por IP a cada 15 minutos.',
   request: { body: jsonBody(resetRequestSchema) },
   responses: {
     204: { description: 'Pedido recebido.' },

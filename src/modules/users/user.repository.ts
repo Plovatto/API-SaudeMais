@@ -38,6 +38,13 @@ export async function applyNewPassword(
     .where(and(eq(sessions.userId, userId), keepSessionId ? ne(sessions.id, keepSessionId) : undefined));
 }
 
+interface RestoredAccount {
+  fullName: string;
+  passwordHash?: string | undefined;
+  roles: Role[];
+  now: Date;
+}
+
 export interface NewUser {
   fullName: string;
   email: string;
@@ -136,6 +143,20 @@ export class UserRepository {
     changes: { fullName?: string; phone?: string | null; birthDate?: string | null },
   ): Promise<void> {
     await this.db.update(users).set(changes).where(eq(users.id, id));
+  }
+
+  restoreSeedAccount(
+    id: string,
+    { fullName, passwordHash, roles, now }: RestoredAccount,
+  ): Promise<void> {
+    return this.db.transaction(async (tx) => {
+      await tx.update(users).set({ fullName, deactivatedAt: null }).where(eq(users.id, id));
+      if (passwordHash) await applyNewPassword(tx, id, passwordHash, null, now);
+      await tx
+        .insert(userRoles)
+        .values(roles.map((role) => ({ userId: id, role, grantedAt: now })))
+        .onConflictDoNothing();
+    });
   }
 
   replacePassword(id: string, passwordHash: string, keepSessionId: string, now: Date): Promise<void> {

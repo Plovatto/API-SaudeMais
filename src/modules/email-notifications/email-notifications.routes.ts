@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
-import { errorResponse, protectedAccountResponse } from '../../docs/common-schemas.js';
+import { errorResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
@@ -36,7 +36,6 @@ documentOperation({
   body: updateEmailPreferencesSchema,
   success: { status: 200, description: 'Avisos por e-mail atualizados.', schema: preferencesSchema },
   errors: {
-    403: protectedAccountResponse(),
     422: errorResponse(`Aviso de um perfil que a conta não tem (\`${topicNotAvailable.code}\`).`, topicNotAvailable),
   },
 });
@@ -44,20 +43,15 @@ documentOperation({
 export interface EmailNotificationsRouterDeps {
   service: EmailNotificationsService;
   requireAuth: RequestHandler;
-  requireWritable: RequestHandler;
 }
 
-export function createEmailNotificationsRouter({
-  service,
-  requireAuth,
-  requireWritable,
-}: EmailNotificationsRouterDeps): Router {
+export function createEmailNotificationsRouter({ service, requireAuth }: EmailNotificationsRouterDeps): Router {
   const profileLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
   const router = Router();
   router.get(path, noStore, profileLimit, requireAuth, async (req, res) => {
     res.json(await service.preferences(authOf(req)));
   });
-  router.patch(path, noStore, profileLimit, requireAuth, requireWritable, async (req, res) => {
+  router.patch(path, noStore, profileLimit, requireAuth, async (req, res) => {
     res.json(await service.update(authOf(req), updateEmailPreferencesSchema.parse(req.body)));
   });
   return router;

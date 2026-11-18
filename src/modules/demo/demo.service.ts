@@ -10,7 +10,7 @@ import type { DoctorScheduleService } from '../doctor-schedule/doctor-schedule.s
 import { newPublicCode } from '../exam-bookings/exam-bookings.code.js';
 import type { LabIntegrationService } from '../lab-integration/lab-integration.service.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
-import { DEMO_DOCTOR, DEMO_PATIENT, type SeedAccount } from '../users/user.demo.js';
+import { DEMO_ACCOUNTS, DEMO_DOCTOR, DEMO_PATIENT, type SeedAccount } from '../users/user.demo.js';
 import { SeedAccountConflictError, type UserService } from '../users/user.service.js';
 import {
   DEMO_BOOKINGS,
@@ -60,9 +60,9 @@ export class DemoService {
     }
     const userId = await this.repository.userIdByEmail(DEMO_DOCTOR.email);
     if (!userId) return [];
-    const warnings = (await this.repository.hasDoctorProfile(userId))
-      ? []
-      : await this.grantProfile(userId, DEMO_DOCTOR.email, DEMO_DOCTOR_PROFILE);
+    let warnings: string[] = [];
+    if (await this.repository.hasDoctorProfile(userId)) await this.repository.grantDoctorRole(userId, this.clock.now());
+    else warnings = await this.grantProfile(userId, DEMO_DOCTOR.email, DEMO_DOCTOR_PROFILE);
     await this.schedules.ensureDefault(userId);
     return warnings;
   }
@@ -93,7 +93,10 @@ export class DemoService {
 
   async restore(): Promise<RestoredDemo | undefined> {
     const now = this.clock.now();
-    const patientId = await this.repository.userIdByEmail(DEMO_PATIENT.email);
+    if (await this.repository.restoredSince(startOfDayIn(CLINIC_TIME_ZONE, now))) return undefined;
+    for (const account of [...DEMO_ACCOUNTS, DEMO_DOCTOR]) await this.users.restoreAccount(account);
+    await this.ensure();
+    const patientId = await this.repository.demoUserId(DEMO_PATIENT.email);
     const doctor = await this.repository.demoDoctor(DEMO_DOCTOR.email);
     if (!patientId || !doctor) return undefined;
     const demoBookings: DemoBooking[] = [];

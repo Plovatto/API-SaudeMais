@@ -1,6 +1,6 @@
 import type { Database } from '../../database/pg-client.js';
 import type { Clock } from '../../lib/clock.js';
-import { createRequireAuth, createRequireWritable } from '../../middleware/auth.js';
+import { createRequireAuth } from '../../middleware/auth.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import { createUserController } from './user.controller.js';
 import { DEMO_ACCOUNTS } from './user.demo.js';
@@ -29,11 +29,7 @@ export function createUsersModule({ db, clock, policy, notifications, sessions }
   placeholderPasswordHash().catch(() => undefined);
   const service = new UserService(new UserRepository(db), clock, policy, notifications, sessions);
   const requireAuth = createRequireAuth(service);
-  const router = createUserRouter({
-    controller: createUserController(service),
-    requireAuth,
-    requireWritable: createRequireWritable(),
-  });
+  const router = createUserRouter({ controller: createUserController(service), requireAuth });
   const bootstrap = async (admin: InitialAdmin | undefined, { demoAccounts = true } = {}): Promise<string[]> => {
     if (admin) {
       await service.ensureAccount({

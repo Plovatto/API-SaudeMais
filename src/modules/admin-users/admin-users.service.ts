@@ -4,7 +4,7 @@ import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
-import { forbidden, protectedAccount } from '../../middleware/auth.js';
+import { forbidden } from '../../middleware/auth.js';
 import type { BookingSide } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { PasswordResetService } from '../password-reset/password-reset.service.js';
@@ -21,11 +21,6 @@ import type {
 import type { AdminUserRepository, LockedUser } from './admin-users.repository.js';
 
 const notFound = (message = userNotFound) => new AppError(404, 'NOT_FOUND', message);
-
-function editable(user: LockedUser): LockedUser {
-  if (user.isProtected) throw protectedAccount();
-  return user;
-}
 
 function active(user: LockedUser): LockedUser {
   if (user.deactivatedAt) throw conflictError(adminConflicts.inactive);
@@ -55,8 +50,7 @@ export class AdminUserService {
   }
 
   update(actor: Actor, id: string, { fullName, phone }: UpdateProfileInput) {
-    return this.change(actor, id, 'user.updated', async (tx, user) => {
-      editable(user);
+    return this.change(actor, id, 'user.updated', async (tx) => {
       const changes = definedFields({ fullName, phone });
       await this.repository.updateUser(tx, id, changes);
       return { fields: Object.keys(changes) };
@@ -70,7 +64,6 @@ export class AdminUserService {
       'user.deactivated',
       async (tx, user, defer) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
-        editable(user);
         if (user.deactivatedAt) return undefined;
         await this.ensureAnotherAdmin(tx, user);
         defer(await this.cancelBookings(tx, user, ['patient', 'doctor'], actor));
@@ -83,7 +76,6 @@ export class AdminUserService {
 
   reactivate(actor: Actor, id: string) {
     return this.change(actor, id, 'user.reactivated', async (tx, user) => {
-      editable(user);
       if (!user.deactivatedAt) return undefined;
       await this.repository.setDeactivated(tx, id, null);
       return {};
@@ -92,7 +84,6 @@ export class AdminUserService {
 
   async sendPasswordReset(actor: Actor, id: string): Promise<void> {
     const user = await this.detail(id);
-    if (user.isProtected) throw protectedAccount();
     if (user.deactivatedAt) throw conflictError(adminConflicts.inactive);
     if (!(await this.repository.isActiveAdmin(this.repository.reader, actor.actorId))) throw forbidden();
     const audit = { ...actor, action: 'user.password_reset_sent', entityType: 'user', entityId: id };
@@ -102,7 +93,7 @@ export class AdminUserService {
 
   grantAdmin(actor: Actor, id: string) {
     return this.change(actor, id, 'user.role_granted', async (tx, user) => {
-      active(editable(user));
+      active(user);
       if (user.roles.includes('admin')) return undefined;
       await this.repository.grantRole(tx, id, 'admin', actor.actorId, this.clock.now());
       return { role: 'admin' };
@@ -116,7 +107,6 @@ export class AdminUserService {
       'user.role_revoked',
       async (tx, user) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
-        editable(user);
         if (!user.roles.includes('admin')) return undefined;
         await this.ensureAnotherAdmin(tx, user);
         await this.repository.revokeRole(tx, id, 'admin');
@@ -128,7 +118,7 @@ export class AdminUserService {
 
   createDoctorProfile(actor: Actor, id: string, input: DoctorProfileInput) {
     return this.change(actor, id, 'doctor_profile.created', async (tx, user) => {
-      active(editable(user));
+      active(user);
       if (user.roles.includes('doctor')) throw conflictError(adminConflicts.profileExists);
       const council = await this.availableCouncil(tx, input.specialtyId);
       await this.ensureUnitAvailable(tx, input.unitId);
@@ -140,7 +130,6 @@ export class AdminUserService {
 
   updateDoctorProfile(actor: Actor, id: string, input: UpdateDoctorProfileInput) {
     return this.change(actor, id, 'doctor_profile.updated', async (tx, user) => {
-      editable(user);
       if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
       const changes = definedFields(input);
       const council = changes.specialtyId ? await this.availableCouncil(tx, changes.specialtyId) : undefined;
@@ -164,7 +153,6 @@ export class AdminUserService {
 
   deleteDoctorProfile(actor: Actor, id: string) {
     return this.change(actor, id, 'doctor_profile.deleted', async (tx, user, defer) => {
-      editable(user);
       if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
       defer(await this.cancelBookings(tx, user, ['doctor'], actor));
       await this.repository.revokeRole(tx, id, 'doctor');

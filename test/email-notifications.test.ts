@@ -115,13 +115,12 @@ describe('e-mail preferences', () => {
     expect((await choose(context.patient, body)).status).toBe(400);
   });
 
-  it('lets the demo account read but not change its choices', async () => {
+  it('lets the demo account change its choices', async () => {
     await preferences(context.demoPatient).expect(200);
 
     const response = await choose(context.demoPatient, { preferences: [{ topic: 'exam_result', enabled: false }] });
 
-    expect(response.status).toBe(403);
-    expect(response.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
+    expect(response.status).toBe(200);
   });
 });
 

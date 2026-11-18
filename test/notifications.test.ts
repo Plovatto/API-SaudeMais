@@ -145,7 +145,7 @@ describe('access', () => {
     expect((await request(context.app).post(`${PATH}/not-a-uuid/read`).set(as(patient.token))).status).toBe(400);
   });
 
-  it('lets the demo account read notifications but never mark them read', async () => {
+  it('lets the demo account mark notifications read', async () => {
     const context = await withAdmin();
     await context.modules.users.bootstrap(undefined);
     const [demo] = DEMO_ACCOUNTS;
@@ -156,11 +156,9 @@ describe('access', () => {
     const one = await request(context.app).post(`${PATH}/${item?.id}/read`).set(as(visitor.token));
     const all = await request(context.app).post(`${PATH}/read-all?role=patient`).set(as(visitor.token));
 
-    expect(one.status).toBe(403);
-    expect(one.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
-    expect(all.status).toBe(403);
-    expect(all.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
-    expect(await unread(context, visitor.token, 'patient')).toBe(1);
+    expect(one.status).toBe(204);
+    expect(all.status).toBe(204);
+    expect(await unread(context, visitor.token, 'patient')).toBe(0);
   });
 });
 

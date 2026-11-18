@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '@/app.js';
 import { createLogger } from '@/config/create-logger.js';
 import { rateLimit } from 'express-rate-limit';
-import { createRequireRole, createRequireWritable } from '@/middleware/auth.js';
+import { createRequireRole } from '@/middleware/auth.js';
 import { rateLimitDefaults } from '@/middleware/rate-limit.js';
 import { MailQueue } from '@/mail/index.js';
 import { createModules } from '@/modules/index.js';
@@ -35,9 +35,6 @@ async function buildRolesApp() {
   const probe = Router();
   const probeLimit = rateLimit({ ...rateLimitDefaults, windowMs: 60_000, limit: 100 });
   probe.get('/probe/admin', probeLimit, modules.users.requireAuth, createRequireRole('admin'), (_req, res) => {
-    res.json({ ok: true });
-  });
-  probe.post('/probe/write', probeLimit, modules.users.requireAuth, createRequireWritable(), (_req, res) => {
     res.json({ ok: true });
   });
   const app = createApp({
@@ -169,24 +166,5 @@ describe('protected demo account', () => {
 
     expect(total.rows[0]?.total).toBe(11);
     expect(expiresAt).toBe(new Date(START.getTime() + 12 * 3_600_000).toISOString());
-  });
-
-  it('cannot change anything', async () => {
-    const { app, users } = await buildRolesApp();
-    await users.bootstrap(undefined);
-    const token = await tokenOf(app, demo.email, demo.password);
-
-    const response = await request(app).post('/probe/write').set('Authorization', `Bearer ${token}`);
-
-    expect(response.status).toBe(403);
-    expect(response.body).toMatchObject({ code: 'PROTECTED_ACCOUNT' });
-  });
-
-  it('lets regular accounts change their data', async () => {
-    const { app } = await buildRolesApp();
-    await request(app).post('/api/users/register').send(registration()).expect(201);
-    const token = await tokenOf(app, 'ana.silva@email.com', 'senha-segura-123');
-
-    expect((await request(app).post('/probe/write').set('Authorization', `Bearer ${token}`)).status).toBe(200);
   });
 });

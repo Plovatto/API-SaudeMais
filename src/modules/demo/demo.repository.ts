@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { auditLogs } from '../../database/schema/audit-logs.js';
 import { bookingEvents, bookings } from '../../database/schema/bookings.js';
@@ -57,6 +57,10 @@ interface Restoration {
 
 const RESTORE_ACTION = 'demo.restored';
 
+async function restoredSince(db: Pick<Database, '$count'>, since: Date): Promise<boolean> {
+  return (await db.$count(auditLogs, and(eq(auditLogs.action, RESTORE_ACTION), gte(auditLogs.createdAt, since)))) > 0;
+}
+
 export class DemoRepository {
   constructor(private readonly db: Database) {}
 
@@ -97,6 +101,18 @@ export class DemoRepository {
     return row?.id;
   }
 
+  async demoUserId(email: string): Promise<string | undefined> {
+    const [row] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.email, email), eq(users.isProtected, true), isNull(users.deactivatedAt)));
+    return row?.id;
+  }
+
+  restoredSince(since: Date): Promise<boolean> {
+    return restoredSince(this.db, since);
+  }
+
   async integrationClient(name: string) {
     const [row] = await this.db
       .select({
@@ -115,6 +131,10 @@ export class DemoRepository {
       .from(doctorProfiles)
       .where(eq(doctorProfiles.userId, userId));
     return Boolean(row);
+  }
+
+  async grantDoctorRole(userId: string, now: Date): Promise<void> {
+    await this.db.insert(userRoles).values({ userId, role: 'doctor', grantedAt: now }).onConflictDoNothing();
   }
 
   grantDoctorProfile({ userId, specialty, unitId, registryNumber, registryUf, now }: DoctorProfileSeed): Promise<void> {
@@ -138,7 +158,7 @@ export class DemoRepository {
       .from(users)
       .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
       .innerJoin(specialties, eq(specialties.id, doctorProfiles.specialtyId))
-      .where(eq(users.email, email));
+      .where(and(eq(users.email, email), eq(users.isProtected, true), isNull(users.deactivatedAt)));
     return row;
   }
 
@@ -158,11 +178,7 @@ export class DemoRepository {
   restoreBookings(since: Date, now: Date, demoBookings: DemoBooking[]): Promise<Restoration | undefined> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${MAINTENANCE_LOCK}, 1)`);
-      if (
-        (await tx.$count(auditLogs, and(eq(auditLogs.action, RESTORE_ACTION), gte(auditLogs.createdAt, since)))) > 0
-      ) {
-        return undefined;
-      }
+      if (await restoredSince(tx, since)) return undefined;
       const protectedIds = tx.select({ id: users.id }).from(users).where(eq(users.isProtected, true));
       const demoScope = or(inArray(bookings.patientId, protectedIds), inArray(bookings.doctorId, protectedIds));
       const demoBookingIds = tx.select({ id: bookings.id }).from(bookings).where(demoScope);

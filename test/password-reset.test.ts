@@ -53,14 +53,14 @@ describe('POST /api/password-reset/request', () => {
     expect(context.mailer.sent).toHaveLength(0);
   });
 
-  it('never sends a link to the protected demo account', async () => {
+  it('sends a link to the demo account like any other', async () => {
     const context = await buildUsersApp();
     await context.modules.users.bootstrap(undefined);
 
     await requestReset(context.app, DEMO_ACCOUNTS[0]?.email).expect(204);
     await context.mail.drain();
 
-    expect(context.mailer.sent).toHaveLength(0);
+    expect(context.mailer.sent).toHaveLength(1);
   });
 
   it('waits 15 minutes between links and sends at most 3 per day', async () => {

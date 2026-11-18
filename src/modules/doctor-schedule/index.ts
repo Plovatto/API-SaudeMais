@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import type { Database } from '../../database/pg-client.js';
-import { createRequireRole, createRequireWritable } from '../../middleware/auth.js';
+import { createRequireRole } from '../../middleware/auth.js';
 import { createDoctorScheduleController } from './doctor-schedule.controller.js';
 import { DoctorScheduleRepository } from './doctor-schedule.repository.js';
 import { createDoctorScheduleRouter } from './doctor-schedule.routes.js';
@@ -17,7 +17,6 @@ export function createDoctorScheduleModule({ db, requireAuth }: DoctorScheduleMo
     controller: createDoctorScheduleController(service),
     requireAuth,
     requireDoctor: createRequireRole('doctor'),
-    requireWritable: createRequireWritable(),
   });
   return { router, service };
 }

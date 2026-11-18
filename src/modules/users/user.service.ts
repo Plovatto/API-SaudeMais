@@ -165,6 +165,14 @@ export class UserService {
     }
   }
 
+  async restoreAccount({ fullName, email, password, roles }: SeedAccount): Promise<void> {
+    const existing = await this.repository.findLoginCandidate(email);
+    if (!existing?.isProtected) return;
+    const passwordHash = (await verifyPassword(password, existing.passwordHash)) ? undefined : await hashPassword(password);
+    await this.repository.restoreSeedAccount(existing.id, { fullName, passwordHash, roles, now: this.clock.now() });
+    this.sessions.invalidateUser(existing.id);
+  }
+
   async profile(userId: string): Promise<Profile> {
     const user = await this.repository.findProfile(userId);
     if (!user) throw unauthenticated();
