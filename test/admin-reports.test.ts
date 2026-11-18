@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
+import { strFromU8, unzipSync } from 'fflate';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { binary } from './support/binary.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { as, login } from './support/users.js';
 
@@ -95,6 +97,9 @@ function exam(code: string, publicCode: string, startsAt: string, status: string
 
 const reports = (query: Record<string, string> = {}, token = admin) =>
   request(context.app).get('/api/admin/reports').query(query).set(as(token));
+
+const exportOf = (query: Record<string, string>, token = admin) =>
+  request(context.app).get('/api/admin/reports/export').query(query).set(as(token)).buffer(true).parse(binary);
 
 async function reportOf(query: Record<string, string> = {}) {
   const response = await reports(query).expect(200);
@@ -262,5 +267,72 @@ describe('GET /api/admin/reports', () => {
   it('is only for admins', async () => {
     expect((await request(context.app).get('/api/admin/reports')).status).toBe(401);
     expect((await reports({}, context.patient)).status).toBe(403);
+  });
+});
+
+describe('GET /api/admin/reports/export', () => {
+  const period = { from: '2026-11-10', to: '2026-11-20' };
+
+  it('downloads the report of the period as a pdf attachment', async () => {
+    const response = await exportOf({ ...period, format: 'pdf' }).expect(200);
+
+    expect(response.headers['content-type']).toBe('application/pdf');
+    expect(response.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-11-10_a_2026-11-20.pdf');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect((response.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('prints a pdf for a period without bookings', async () => {
+    const response = await exportOf({ from: '2026-01-01', to: '2026-01-07', format: 'pdf' }).expect(200);
+
+    expect((response.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('downloads a spreadsheet with the summary, series and rankings as numbers', async () => {
+    const response = await exportOf({ ...period, format: 'xlsx' }).expect(200);
+    const files = unzipSync(new Uint8Array(response.body as Buffer));
+    const workbook = strFromU8(files['xl/workbook.xml'] ?? new Uint8Array());
+    const strings = strFromU8(files['xl/sharedStrings.xml'] ?? new Uint8Array());
+    const summary = strFromU8(files['xl/worksheets/sheet1.xml'] ?? new Uint8Array());
+    const series = strFromU8(files['xl/worksheets/sheet2.xml'] ?? new Uint8Array());
+
+    expect(response.headers['content-type']).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(response.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-11-10_a_2026-11-20.xlsx');
+    expect([...workbook.matchAll(/<sheet [^>]*name="([^"]+)"/g)].map(([, name]) => name)).toEqual([
+      'Resumo',
+      'Série',
+      'Especialidades',
+      'Exames',
+    ]);
+    for (const text of ['Comparecimento', 'Cardiologia', 'Glicemia', '10/11/2026 a 20/11/2026']) {
+      expect(strings).toContain(text);
+    }
+    expect(summary).toContain('<v>13</v>');
+    expect(summary).toContain('<v>0.667</v>');
+    expect(series.match(/<row /g)).toHaveLength(12);
+    expect(strings).not.toContain(PATIENT);
+  });
+
+  it('refuses the same periods as the report and a missing or unknown format', async () => {
+    const refused = [
+      await exportOf({ from: '2025-11-19', to: '2026-11-20', format: 'pdf' }),
+      await exportOf(period),
+      await exportOf({ ...period, format: 'csv' }),
+    ];
+
+    expect(refused.map(({ status }) => status)).toEqual([400, 400, 400]);
+    const [longer, missing, unknown] = refused.map(
+      ({ body }) => JSON.parse((body as Buffer).toString()) as { code: string; fields: Record<string, string> },
+    );
+    expect(longer?.fields).toEqual({ to: 'Consulte no máximo 366 dias por vez.' });
+    expect(Object.keys(missing?.fields ?? {})).toEqual(['format']);
+    expect(unknown?.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('is only for admins', async () => {
+    expect((await request(context.app).get('/api/admin/reports/export').query({ format: 'pdf' })).status).toBe(401);
+    expect((await exportOf({ format: 'pdf' }, context.patient)).status).toBe(403);
   });
 });
