@@ -28,7 +28,18 @@ function week(ranges: Partial<Record<number, Range[]>>, inactive: number[] = [])
 
 async function withDoctor(): Promise<Context & { token: string; doctorId: string }> {
   const context = await buildUsersApp();
-  await context.modules.seed.service.seed();
+  await context.db.execute(sql`
+    insert into specialties (name, council, appointment_duration_min) values ('Clínica Geral', 'CRM', 30)
+  `);
+  await context.db.execute(sql`
+    with central as (
+      insert into units (name, address, phone) values ('Unidade Central', 'Rua das Flores, 123', '+551133334444')
+      returning id
+    )
+    insert into unit_hours (unit_id, weekday, open_min, close_min)
+    select id, weekday, case when weekday = 6 then 480 else 420 end, case when weekday = 6 then 720 else 1140 end
+    from central, generate_series(1, 6) as weekday
+  `);
   await registerAndLogin(context.app);
   await context.db.execute(sql`
     insert into doctor_profiles (user_id, specialty_id, council, unit_id, registry_number, registry_uf)
