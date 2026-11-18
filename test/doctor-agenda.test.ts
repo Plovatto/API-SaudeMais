@@ -118,11 +118,20 @@ describe('GET /api/doctor/appointments', () => {
       startsAt: '2026-11-23T11:30:00.000Z',
       endsAt: '2026-11-23T12:00:00.000Z',
       notes: 'Dor de cabeça.',
-      patient: { id: patientId, fullName: 'Ana Maria Silva', phone: '+5511987654321' },
+      patient: {
+        id: patientId,
+        fullName: 'Ana Maria Silva',
+        phone: '+5511987654321',
+      },
       specialty: owner.specialty,
       unit: owner.unit,
       cancellation: null,
-      actions: { canConfirm: true, canCancel: true, canComplete: false, canNoShow: false },
+      actions: {
+        canConfirm: true,
+        canCancel: true,
+        canComplete: false,
+        canNoShow: false,
+      },
     });
   });
 
@@ -131,7 +140,10 @@ describe('GET /api/doctor/appointments', () => {
 
     expect(ids(page.items)).toEqual([confirmedSoon.id, confirmedLater.id]);
     for (const item of page.items) {
-      expect(item).toMatchObject({ status: 'confirmed', actions: { ...NO_ACTIONS, canCancel: true } });
+      expect(item).toMatchObject({
+        status: 'confirmed',
+        actions: { ...NO_ACTIONS, canCancel: true },
+      });
     }
   });
 
@@ -156,8 +168,15 @@ describe('GET /api/doctor/appointments', () => {
   it('lists started confirmed appointments awaiting record oldest first', async () => {
     const page = (await list(doctor, { tab: 'awaiting' }).expect(200)).body as AgendaPage;
 
-    expect(page).toMatchObject({ total: 1, counts: { awaiting: 1, history: 4 } });
-    expect(page.items[0]).toMatchObject({ id: awaiting.id, status: 'confirmed', actions: RECORDABLE });
+    expect(page).toMatchObject({
+      total: 1,
+      counts: { awaiting: 1, history: 4 },
+    });
+    expect(page.items[0]).toMatchObject({
+      id: awaiting.id,
+      status: 'confirmed',
+      actions: RECORDABLE,
+    });
   });
 
   it('shows the phone only while the patient may still need to be reached or was seen', async () => {
@@ -184,7 +203,12 @@ describe('GET /api/doctor/appointments', () => {
     await moveTo(pendingLater.id, slot('2026-11-24', '11:00'));
 
     expect(ids(pending.items)).toEqual([pendingLater.id]);
-    expect(pending.counts).toEqual({ pending: 2, confirmed: 2, awaiting: 1, history: 4 });
+    expect(pending.counts).toEqual({
+      pending: 2,
+      confirmed: 2,
+      awaiting: 1,
+      history: 4,
+    });
     expect(ids(history.items)).toEqual([cancelled.id, completed.id]);
     expect(beforeMidnight.items).toEqual([]);
     expect(ids(atMidnight.items)).toEqual([pendingLater.id]);
@@ -202,16 +226,132 @@ describe('GET /api/doctor/appointments', () => {
 
     const page = (await list(idleDoctor, { tab: 'history' }).expect(200)).body as AgendaPage;
 
-    expect(page).toMatchObject({ total: 0, items: [], counts: { pending: 0, confirmed: 0, history: 0 } });
+    expect(page).toMatchObject({
+      total: 0,
+      items: [],
+      counts: { pending: 0, confirmed: 0, history: 0 },
+    });
   });
 
   it('rejects invalid filters with 400', async () => {
-    const invalid = [{ tab: 'all' }, { from: '2026-13-01' }, { from: '24/11/2026' }, { pageSize: 51 }, { extra: 1 }];
+    const invalid = [
+      { tab: 'todas' },
+      { from: '2026-13-01' },
+      { from: '24/11/2026' },
+      { to: '2026-11-31' },
+      { search: 'a'.repeat(121) },
+      { pageSize: 51 },
+      { extra: 1 },
+    ];
     for (const query of invalid) {
       const response = await list(doctor, query);
       expect(response.status, JSON.stringify(query)).toBe(400);
       expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR' });
     }
+  });
+});
+
+describe('GET /api/doctor/appointments filters', () => {
+  let doctor: string;
+  let counts: Counts;
+  let past: Item;
+  let joaoSoon: Item;
+  let confirmed: Item;
+  let cancelled: Item;
+  let joaoLater: Item;
+
+  beforeAll(async () => {
+    const created = await createDoctor(context, 'filtros.medico@email.com', 'Dra. Filtros Teste', '700004');
+    doctor = created.token;
+    const owner = created.doctor;
+    const joao = await signUp(context.app, 'joao.filtros@email.com', 'João Conceição');
+
+    past = await book(helper, owner, slot('2026-11-26', '11:00'));
+    await setStatus(past.id, 'completed');
+    await moveTo(past.id, slot('2026-11-16', '11:00'));
+    joaoSoon = await book(joao, owner, slot('2026-11-23', '11:00'));
+    confirmed = await book(helper, owner, slot('2026-11-23', '12:00'));
+    await setStatus(confirmed.id, 'confirmed');
+    cancelled = await book(joao, owner, slot('2026-11-25', '11:00'));
+    await cancel(joao, cancelled.id, cancelled.startsAt);
+    joaoLater = await book(joao, owner, slot('2026-11-27', '11:00'));
+    counts = ((await list(doctor).expect(200)).body as AgendaPage).counts;
+  });
+
+  const agenda = async (query: Record<string, string>) => (await list(doctor, query).expect(200)).body as AgendaPage;
+  const listed = async (query: Record<string, string>) => ids((await agenda(query)).items);
+
+  it('lists every appointment in any status oldest first in the all tab, with the same counts', async () => {
+    const page = await agenda({ tab: 'all' });
+
+    expect(page.items.map((item) => [item.id, item.status])).toEqual([
+      [past.id, 'completed'],
+      [joaoSoon.id, 'pending'],
+      [confirmed.id, 'confirmed'],
+      [cancelled.id, 'cancelled'],
+      [joaoLater.id, 'pending'],
+    ]);
+    expect(page.total).toBe(5);
+    expect(counts).toEqual({
+      pending: 2,
+      confirmed: 1,
+      awaiting: 0,
+      history: 2,
+    });
+    expect(page.counts).toEqual(counts);
+  });
+
+  it('keeps the São Paulo days between from and to, both included', async () => {
+    expect(await listed({ tab: 'all', from: '2026-11-23', to: '2026-11-25' })).toEqual([
+      joaoSoon.id,
+      confirmed.id,
+      cancelled.id,
+    ]);
+    expect(await listed({ tab: 'all', from: '2026-11-23', to: '2026-11-23' })).toEqual([joaoSoon.id, confirmed.id]);
+    expect(await listed({ tab: 'all', to: '2026-11-23' })).toEqual([past.id, joaoSoon.id, confirmed.id]);
+    expect(await listed({ to: '2026-11-26' })).toEqual([joaoSoon.id]);
+
+    await moveTo(cancelled.id, '2026-11-26T02:30:00.000Z');
+    const beforeMidnight = await listed({ tab: 'all', to: '2026-11-25' });
+    await moveTo(cancelled.id, '2026-11-26T03:00:00.000Z');
+    const atMidnight = await listed({ tab: 'all', to: '2026-11-25' });
+    await moveTo(cancelled.id, slot('2026-11-25', '11:00'));
+
+    expect(beforeMidnight).toContain(cancelled.id);
+    expect(atMidnight).not.toContain(cancelled.id);
+  });
+
+  it('searches the patient name ignoring accents, case and surrounding spaces, without changing the counts', async () => {
+    const joaos = [joaoSoon.id, cancelled.id, joaoLater.id];
+    for (const search of ['joao', 'JOÃO', '  conceicao  ', 'joão conceição']) {
+      const page = await agenda({ tab: 'all', search });
+      expect(ids(page.items), search).toEqual(joaos);
+      expect(page.total).toBe(3);
+      expect(page.counts).toEqual(counts);
+    }
+    expect(await listed({ tab: 'all', search: '%' })).toEqual([]);
+    expect(await listed({ tab: 'all', search: 'Maria' })).toEqual([]);
+    expect((await agenda({ tab: 'all', search: '   ' })).total).toBe(5);
+  });
+
+  it('combines the tab, the period and the search', async () => {
+    expect(await listed({ search: 'joao', from: '2026-11-23', to: '2026-11-25' })).toEqual([joaoSoon.id]);
+    expect(await listed({ tab: 'history', search: 'joao' })).toEqual([cancelled.id]);
+    expect(await listed({ tab: 'all', search: 'paciente', from: '2026-11-17' })).toEqual([confirmed.id]);
+  });
+
+  it('rejects a to before from with 400', async () => {
+    const response = await list(doctor, {
+      tab: 'all',
+      from: '2026-11-25',
+      to: '2026-11-24',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      fields: { to: 'A data final precisa ser igual ou posterior à inicial.' },
+    });
   });
 });
 
@@ -267,11 +407,23 @@ describe('GET /api/doctor/home', () => {
       expired: 1,
     });
     expect(ids(body.pending)).toEqual([pendingToday.id, lateToday.id, tomorrow.id]);
-    expect(body.pending[0]?.actions).toEqual({ ...NO_ACTIONS, canConfirm: true, canCancel: true });
+    expect(body.pending[0]?.actions).toEqual({
+      ...NO_ACTIONS,
+      canConfirm: true,
+      canCancel: true,
+    });
     expect(ids(body.awaitingRecord)).toEqual([awaiting.id]);
     expect(body.awaitingRecord[0]?.actions).toEqual(RECORDABLE);
-    expect(body.counts).toEqual({ pending: 4, confirmed: 1, awaiting: 1, history: 6 });
-    expect(body.lastNotification).toMatchObject({ type: 'appointment_cancelled_by_patient', bookingId: cancelled.id });
+    expect(body.counts).toEqual({
+      pending: 4,
+      confirmed: 1,
+      awaiting: 1,
+      history: 6,
+    });
+    expect(body.lastNotification).toMatchObject({
+      type: 'appointment_cancelled_by_patient',
+      bookingId: cancelled.id,
+    });
   });
 
   it('starts empty for a doctor without appointments', async () => {
@@ -319,11 +471,17 @@ describe('POST /api/appointments/:id/confirm', () => {
     const booked = await book(patient, owner, slot('2026-12-01', '11:00'));
     const before = await unread(patient);
 
-    const response = await confirm(doctor, booked.id, { startsAt: booked.startsAt });
+    const response = await confirm(doctor, booked.id, {
+      startsAt: booked.startsAt,
+    });
 
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.body).toMatchObject({ id: booked.id, status: 'confirmed', startsAt: booked.startsAt });
+    expect(response.body).toMatchObject({
+      id: booked.id,
+      status: 'confirmed',
+      startsAt: booked.startsAt,
+    });
     expect((response.body as { events: unknown[] }).events.at(-1)).toEqual({
       type: 'confirmed',
       actorType: 'doctor',
@@ -362,7 +520,9 @@ describe('POST /api/appointments/:id/confirm', () => {
     await moveTo(past.id, slot('2026-11-20', '11:30'));
 
     const responses = [
-      await confirm(doctor, stale.id, { startsAt: slot('2026-12-02', '13:00') }),
+      await confirm(doctor, stale.id, {
+        startsAt: slot('2026-12-02', '13:00'),
+      }),
       await confirm(doctor, twice.id, { startsAt: twice.startsAt }),
       await confirm(doctor, cancelled.id, { startsAt: cancelled.startsAt }),
       await confirm(doctor, past.id, { startsAt: slot('2026-11-20', '11:30') }),
@@ -388,7 +548,10 @@ describe('POST /api/appointments/:id/confirm', () => {
 
   it('answers 404 to other doctors, exams and unknown ids and 403 to accounts without the doctor profile', async () => {
     const booked = await book(patient, owner, slot('2026-12-03', '11:00'));
-    const other = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password }).expect(200);
+    const other = await login(context.app, {
+      email: DEMO_DOCTOR.email,
+      password: DEMO_DOCTOR.password,
+    }).expect(200);
     const body = { startsAt: booked.startsAt };
 
     const otherDoctor = await confirm((other.body as { token: string }).token, booked.id, body);
@@ -401,10 +564,15 @@ describe('POST /api/appointments/:id/confirm', () => {
       where u.email = 'historico@email.com'
       returning id
     `);
-    const exam = await confirm(doctor, exams.rows[0]?.id ?? '', { startsAt: '2026-12-10T12:00:00.000Z' });
+    const exam = await confirm(doctor, exams.rows[0]?.id ?? '', {
+      startsAt: '2026-12-10T12:00:00.000Z',
+    });
 
     expect(otherDoctor.status).toBe(404);
-    expect(otherDoctor.body).toEqual({ message: 'Consulta não encontrada.', code: 'NOT_FOUND' });
+    expect(otherDoctor.body).toEqual({
+      message: 'Consulta não encontrada.',
+      code: 'NOT_FOUND',
+    });
     expect(unknown.status).toBe(404);
     expect(exam.status).toBe(404);
     expect(byPatient.status).toBe(403);
@@ -414,13 +582,20 @@ describe('POST /api/appointments/:id/confirm', () => {
   it('lets the demo doctor confirm requests of protected patients', async () => {
     const demoDoctor = await doctorNamed(context, DEMO_DOCTOR.fullName);
     const token = (
-      (await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password }).expect(200)).body as {
+      (
+        await login(context.app, {
+          email: DEMO_DOCTOR.email,
+          password: DEMO_DOCTOR.password,
+        }).expect(200)
+      ).body as {
         token: string;
       }
     ).token;
     const booked = await book(context.demoPatient, demoDoctor, slot('2026-12-04', '11:00'));
 
-    const response = await confirm(token, booked.id, { startsAt: booked.startsAt });
+    const response = await confirm(token, booked.id, {
+      startsAt: booked.startsAt,
+    });
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ status: 'confirmed' });
