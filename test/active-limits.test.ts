@@ -69,10 +69,10 @@ describe('active booking limits from the policy', () => {
 
     expect(third.status).toBe(422);
     expect(third.body).toEqual({
-      message: 'Você já tem 2 consultas ativas. Cancele uma ou aguarde a data de uma delas para marcar outra.',
+      message: 'Você atingiu o limite de 2 consultas ativas. Cancele uma ou aguarde a data de uma delas para marcar outra.',
       code: 'ACTIVE_LIMIT',
       fields: {
-        _root: 'Você já tem 2 consultas ativas. Cancele uma ou aguarde a data de uma delas para marcar outra.',
+        _root: 'Você atingiu o limite de 2 consultas ativas. Cancele uma ou aguarde a data de uma delas para marcar outra.',
       },
     });
     expect(exam.status).toBe(201);
@@ -89,7 +89,7 @@ describe('active booking limits from the policy', () => {
     expect(second.status).toBe(422);
     expect(second.body).toMatchObject({
       code: 'ACTIVE_LIMIT',
-      message: 'Você já tem 1 exame ativo. Cancele um ou aguarde a data de um deles para marcar outro.',
+      message: 'Você atingiu o limite de 1 exame ativo. Cancele-o ou aguarde a data dele para marcar outro.',
     });
     expect(appointment.status).toBe(201);
   });
@@ -107,7 +107,7 @@ describe('active booking limits from the policy', () => {
       expect(response.status).toBe(422);
       expect(response.body).toMatchObject({
         code: 'ACTIVE_LIMIT',
-        message: 'Você já tem 2 agendamentos ativos. Cancele um ou aguarde a data de um deles para marcar outro.',
+        message: 'Você atingiu o limite de 2 agendamentos ativos. Cancele um ou aguarde a data de um deles para marcar outro.',
       });
     }
   });
@@ -131,7 +131,10 @@ describe('active booking limits from the policy', () => {
     const blocked = await bookAppointment(patient, at('2026-12-08', '12:30'));
 
     expect(blocked.status).toBe(422);
-    expect(blocked.body).toMatchObject({ code: 'ACTIVE_LIMIT' });
+    expect(blocked.body).toMatchObject({
+      code: 'ACTIVE_LIMIT',
+      message: 'Você atingiu o limite de 1 consulta ativa. Cancele-a ou aguarde a data dela para marcar outra.',
+    });
     expect(await activeOf('limite.reduzido@email.com')).toBe(3);
   });
 
