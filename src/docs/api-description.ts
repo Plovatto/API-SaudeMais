@@ -77,7 +77,8 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`OVERLAP\` | 422 | Faixas de horário do mesmo dia se sobrepõem; veja \`fields\` |
 | \`OUTSIDE_UNIT_HOURS\` | 422 | A faixa de horário fica fora do horário da unidade; veja \`fields\` |
 | \`OUTSIDE_AVAILABILITY\` | 422 | O horário não é uma vaga gerada pela agenda do médico, cai num dia bloqueado por ele ou, no exame, não é uma vaga do horário da unidade |
-| \`PAST_DATE\` | 422 | O dia escolhido para bloquear já passou |
+| \`PAST_DATE\` | 422 | O dia escolhido para bloquear ou desbloquear já passou |
+| \`DATE_TOO_FAR\` | 422 | O dia escolhido para bloquear fica a mais de 365 dias |
 | \`SAME_SLOT\` | 422 | O novo horário pedido no reagendamento é o horário atual |
 | \`ACTIVE_LIMIT\` | 422 | O paciente já tem 5 agendamentos ativos futuros |
 | \`SPECIALTY_MISMATCH\` | 422 | O médico escolhido não atende a especialidade escolhida |

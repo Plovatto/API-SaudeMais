@@ -52,7 +52,7 @@ const unitHourSchema = z.object({
 
 export type UnitHour = z.infer<typeof unitHourSchema>;
 
-export const durationSchema = z.object({
+const durationSchema = z.object({
   appointmentDurationMin: z.int().openapi({
     description: 'Duração de cada consulta, em minutos, usada nas vagas e nos novos agendamentos.',
     example: 30,

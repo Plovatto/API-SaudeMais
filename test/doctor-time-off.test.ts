@@ -105,6 +105,23 @@ describe('POST, GET and DELETE /api/doctor/time-off', () => {
     expect(await blocked()).not.toContainEqual(expect.objectContaining({ date: '2026-11-10' }));
   });
 
+  it('accepts days up to 365 days ahead and refuses later ones with 422 DATE_TOO_FAR', async () => {
+    const farthest = await block({ date: '2027-11-20' });
+    const tooFar = await block({ date: '2027-11-21' });
+
+    expect(farthest.status).toBe(201);
+    expect(tooFar.status).toBe(422);
+    expect(tooFar.body).toMatchObject({ code: 'DATE_TOO_FAR', fields: { date: expect.any(String) as unknown } });
+  });
+
+  it('refuses to unblock a past day with 422 PAST_DATE', async () => {
+    await context.db.execute(sql`insert into doctor_time_off (doctor_id, date) values (${doctor.id}, '2026-11-11')`);
+    const response = await unblock('2026-11-11');
+
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({ code: 'PAST_DATE' });
+  });
+
   it('refuses a past day with 422 PAST_DATE and a blocked day with 409 TIME_OFF_EXISTS', async () => {
     const past = await block({ date: '2026-11-19' });
     await block({ date: '2027-01-04' }).expect(201);

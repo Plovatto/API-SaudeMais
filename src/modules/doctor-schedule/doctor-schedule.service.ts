@@ -2,7 +2,8 @@ import { AppError, conflictError, unprocessable, unprocessableField, type FieldE
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { isExclusionViolation } from '../../lib/pg-errors.js';
-import { civilDateIn, CLINIC_TIME_ZONE } from '../../lib/time.js';
+import { civilDate, civilDateIn, CLINIC_TIME_ZONE, DAY } from '../../lib/time.js';
+import { MAX_BOOKING_HORIZON_DAYS } from '../catalog/catalog.model.js';
 import { WEEKDAYS, WORKDAYS } from '../../lib/week.js';
 import { scheduleMessages } from './doctor-schedule.messages.js';
 import type {
@@ -32,7 +33,9 @@ const rangeField = (dayIndex: number, rangeIndex: number) => `days.${dayIndex}.r
 const rejection = ({ code, message }: { code: string; message: string }, fields?: FieldErrors) =>
   unprocessable(code, message, fields);
 
-const profileMissing = () => new AppError(404, 'NOT_FOUND', scheduleMessages.profileMissing);
+const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
+
+const profileMissing = () => notFound(scheduleMessages.profileMissing);
 
 function overlaps(days: ScheduleDay[]): FieldErrors {
   const fields: FieldErrors = {};
@@ -70,6 +73,8 @@ const sortDays = (days: ScheduleDay[]): ScheduleDay[] =>
 const hasErrors = (fields: FieldErrors) => Object.keys(fields).length > 0;
 
 const today = (now: Date) => civilDateIn(CLINIC_TIME_ZONE, now);
+
+const lastBlockableDay = (now: Date) => civilDate(Date.parse(today(now)) + MAX_BOOKING_HORIZON_DAYS * DAY);
 
 export class DoctorScheduleService {
   constructor(
@@ -118,6 +123,7 @@ export class DoctorScheduleService {
   async block(doctorId: string, { date, reason }: CreateTimeOffInput, actor: Actor): Promise<CreatedTimeOff> {
     const now = this.clock.now();
     if (date < today(now)) throw unprocessableField(scheduleMessages.pastDate);
+    if (date > lastBlockableDay(now)) throw unprocessableField(scheduleMessages.tooFar);
     const result = await this.repository.block({ doctorId, date, reason: reason || null, actor, now });
     if (result === 'missing') throw profileMissing();
     if (result === 'exists') throw conflictError(scheduleMessages.timeOffExists);
@@ -125,9 +131,10 @@ export class DoctorScheduleService {
   }
 
   async unblock(doctorId: string, date: string, actor: Actor): Promise<void> {
+    if (date < today(this.clock.now())) throw unprocessableField(scheduleMessages.pastDate);
     const result = await this.repository.unblock({ doctorId, date, actor });
     if (result === 'missing') throw profileMissing();
-    if (result === 'absent') throw new AppError(404, 'NOT_FOUND', scheduleMessages.timeOffMissing);
+    if (result === 'absent') throw notFound(scheduleMessages.timeOffMissing);
   }
 
   ensureDefault(doctorId: string): Promise<void> {

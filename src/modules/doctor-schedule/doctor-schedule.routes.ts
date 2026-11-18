@@ -13,6 +13,7 @@ import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { DoctorScheduleController } from './doctor-schedule.controller.js';
+import { MAX_BOOKING_HORIZON_DAYS } from '../catalog/catalog.model.js';
 import { scheduleMessages } from './doctor-schedule.messages.js';
 import {
   createdTimeOffSchema,
@@ -27,7 +28,7 @@ import {
 const path = '/api/doctor/schedule';
 const timeOffPath = '/api/doctor/time-off';
 const profileMissing = notFoundResponse(scheduleMessages.profileMissing);
-const { pastDate } = scheduleMessages;
+const { pastDate, tooFar } = scheduleMessages;
 
 documentOperation({
   method: 'get',
@@ -81,18 +82,17 @@ documentOperation({
   tag: tags.doctor.name,
   summary: 'Bloquear um dia',
   description:
-    'Bloqueia um dia inteiro, de hoje em diante, mesmo além do prazo de agendamento, com um motivo opcional de até 80 caracteres. Pacientes deixam de ver vagas no dia e não conseguem marcar nem reagendar para ele (`OUTSIDE_AVAILABILITY`). Nenhuma consulta é cancelada: `warnings` lista as consultas pendentes ou confirmadas que já estavam marcadas no dia. Limite: 30 requisições por minuto por IP.',
+    `Bloqueia um dia inteiro, de hoje até ${MAX_BOOKING_HORIZON_DAYS} dias à frente, mesmo além do prazo de agendamento, com um motivo opcional de até 80 caracteres. Pacientes deixam de ver vagas no dia e não conseguem marcar nem reagendar para ele (\`OUTSIDE_AVAILABILITY\`). Nenhuma consulta é cancelada: \`warnings\` lista as consultas pendentes ou confirmadas que já estavam marcadas no dia. Limite: 30 requisições por minuto por IP.`,
   body: createTimeOffSchema,
   success: { status: 201, description: 'Dia bloqueado.', schema: createdTimeOffSchema },
   errors: {
     403: forbiddenResponse,
     404: profileMissing,
     409: conflictResponse(scheduleMessages.timeOffExists),
-    422: errorResponse('Data já passou (`PAST_DATE`).', {
-      message: pastDate.message,
-      code: pastDate.code,
-      fields: { [pastDate.field]: pastDate.message },
-    }),
+    422: errorResponse(
+      `Data já passou (\`PAST_DATE\`) ou fica a mais de ${MAX_BOOKING_HORIZON_DAYS} dias (\`DATE_TOO_FAR\`).`,
+      { message: tooFar.message, code: tooFar.code, fields: { [tooFar.field]: tooFar.message } },
+    ),
   },
 });
 
@@ -103,7 +103,7 @@ documentOperation({
   tag: tags.doctor.name,
   summary: 'Desbloquear um dia',
   description:
-    'Remove o bloqueio do dia, que volta a gerar vagas pela agenda semanal. Limite: 30 requisições por minuto por IP.',
+    'Remove o bloqueio de hoje ou de um dia futuro, que volta a gerar vagas pela agenda semanal. Limite: 30 requisições por minuto por IP.',
   params: timeOffParams,
   success: { status: 204, description: 'Dia desbloqueado.' },
   errors: {
@@ -111,6 +111,11 @@ documentOperation({
     404: errorResponse('Médico sem perfil ou dia não bloqueado (`NOT_FOUND`).', {
       message: scheduleMessages.timeOffMissing,
       code: 'NOT_FOUND',
+    }),
+    422: errorResponse('Data já passou (`PAST_DATE`).', {
+      message: pastDate.message,
+      code: pastDate.code,
+      fields: { [pastDate.field]: pastDate.message },
     }),
   },
 });
