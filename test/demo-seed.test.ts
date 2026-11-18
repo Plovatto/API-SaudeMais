@@ -302,6 +302,33 @@ describe('demo account restore', () => {
     expect([0, 6]).not.toContain(new Date(`${blocked?.date ?? ''}T12:00:00Z`).getUTCDay());
   });
 
+  it('resets the demo doctor duration to the specialty default and books the demo appointments with it', async () => {
+    const context = await restored();
+    await context.modules.demo.service.restore();
+    await context.db.execute(sql`
+      update doctor_profiles set appointment_duration_min = 45
+      where user_id = (select id from users where email = ${DEMO_DOCTOR.email})
+    `);
+    context.clock.advance(24 * HOUR);
+
+    await context.modules.demo.service.restore();
+
+    const rows = await context.db.execute<{ own: number | null; minutes: number; specialty: number }>(sql`
+      select p.appointment_duration_min as own, s.appointment_duration_min as specialty,
+        extract(epoch from b.ends_at - b.starts_at)::int / 60 as minutes
+      from doctor_profiles p
+      join users u on u.id = p.user_id
+      join specialties s on s.id = p.specialty_id
+      join bookings b on b.doctor_id = p.user_id and b.kind = 'appointment'
+      where u.email = ${DEMO_DOCTOR.email}
+    `);
+    expect(rows.rows.length).toBeGreaterThan(0);
+    for (const row of rows.rows) {
+      expect(row.own).toBeNull();
+      expect(row.minutes).toBe(row.specialty);
+    }
+  });
+
   it('ends the sessions that existed before the password was reset', async () => {
     const context = await restored();
     const first = await login(context.app, { email: DEMO_PATIENT.email, password: DEMO_PATIENT.password });
