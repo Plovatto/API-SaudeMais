@@ -1,8 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { ACTIVE_LIMIT } from '@/modules/bookings/bookings.messages.js';
-import { activeFutureCount } from '@/modules/bookings/bookings.repository.js';
+import { activeFutureCounts, activeLimits } from '@/modules/bookings/bookings.repository.js';
 import { EXAMPLE_DOCTOR } from '@/modules/seed/seed.data.js';
 import {
   availability,
@@ -237,8 +236,13 @@ describe('POST /api/appointments', () => {
 
   it('applies the same active limit to the example patient', async () => {
     const me = await request(context.app).get('/api/me').set(as(context.examplePatient)).expect(200);
-    const active = await activeFutureCount(context.db, (me.body as { id: string }).id, context.clock.now());
-    const times = ['11:00', '11:30', '12:00', '12:30', '13:00', '13:30'].slice(0, ACTIVE_LIMIT - active + 1);
+    const active = await activeFutureCounts(context.db, (me.body as { id: string }).id, context.clock.now());
+    const limits = await activeLimits(context.db);
+    const remaining = Math.min(
+      limits.maxActiveBookings - active.appointment - active.exam,
+      limits.maxActiveAppointments - active.appointment,
+    );
+    const times = ['11:00', '11:30', '12:00', '12:30', '13:00', '13:30'].slice(0, remaining + 1);
     const statuses = [];
     for (const time of times) {
       statuses.push((await book(context.examplePatient, appointment(exampleDoctor, slot('2026-12-02', time)))).status);
