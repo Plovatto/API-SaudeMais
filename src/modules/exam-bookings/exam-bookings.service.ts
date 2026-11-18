@@ -1,5 +1,5 @@
 import type { Transaction } from '../../database/pg-client.js';
-import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
+import { conflictError, notFound, unprocessableField } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { civilPeriodIn, CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotAt, slotDays } from '../../lib/time-slots.js';
@@ -33,7 +33,6 @@ const exclusionConflicts = {
   bookings_patient_no_overlap_excl: patientConflict,
 };
 
-const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
 
 export class ExamBookingsService {
   constructor(

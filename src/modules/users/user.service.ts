@@ -1,6 +1,6 @@
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import type { Role } from '../../database/schema/users.js';
-import { AppError, invalidData } from '../../lib/app-error.js';
+import { AppError, invalidData, notFound } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -207,7 +207,7 @@ export class UserService {
   async endSession({ sessionId, user }: AuthContext, id: string): Promise<void> {
     if (id === sessionId) throw new AppError(422, currentSession.code, currentSession.message);
     if (!(await this.repository.deleteOwnSession(user.id, id))) {
-      throw new AppError(404, 'NOT_FOUND', sessionNotFound);
+      throw notFound(sessionNotFound);
     }
     this.sessions.invalidateSessions([id]);
   }

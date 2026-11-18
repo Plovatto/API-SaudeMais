@@ -1,5 +1,5 @@
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
-import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
+import { conflictError, notFound, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotAt } from '../../lib/time-slots.js';
@@ -26,7 +26,6 @@ const exclusionConflicts = {
   bookings_patient_no_overlap_excl: patientConflict,
 };
 
-const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
 
 function ensureParty({ roles }: Viewer): void {
   if (!roles.includes('patient') && !roles.includes('doctor')) throw forbidden();

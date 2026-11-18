@@ -1,4 +1,4 @@
-import { AppError, conflictError, unprocessable, unprocessableField, type FieldErrors } from '../../lib/app-error.js';
+import { conflictError, notFound, unprocessable, unprocessableField, type FieldErrors } from '../../lib/app-error.js';
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { isExclusionViolation } from '../../lib/pg-errors.js';
@@ -33,7 +33,6 @@ const rangeField = (dayIndex: number, rangeIndex: number) => `days.${dayIndex}.r
 const rejection = ({ code, message }: { code: string; message: string }, fields?: FieldErrors) =>
   unprocessable(code, message, fields);
 
-const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
 
 const profileMissing = () => notFound(scheduleMessages.profileMissing);
 

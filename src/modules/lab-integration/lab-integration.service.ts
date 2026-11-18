@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
-import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
+import { conflictError, notFound, unprocessableField } from '../../lib/app-error.js';
 import { recordAudit, type Actor, type AuditActor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -77,7 +77,7 @@ export class LabIntegrationService {
 
   async revokeClient(id: string, actor: Actor): Promise<IntegrationClient> {
     const client = await this.repository.revokeClient(id, actor, this.clock.now());
-    if (!client) throw new AppError(404, 'NOT_FOUND', clientNotFound);
+    if (!client) throw notFound(clientNotFound);
     return client;
   }
 
@@ -115,7 +115,7 @@ export class LabIntegrationService {
     const now = this.clock.now();
     if (Date.parse(issuedAt) > now.getTime() + ISSUED_AT_SKEW) throw unprocessableField(issuedInFuture);
     const exam = await this.repository.lockExam(tx, examCode, now);
-    if (!exam) throw new AppError(404, 'NOT_FOUND', examNotFound);
+    if (!exam) throw notFound(examNotFound);
     if (!exam.eligible) throw unprocessableField(notEligible);
     const payload = payloadOf(exam.kind, content);
     const existing = await this.repository.resultOf(tx, exam.id);

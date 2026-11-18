@@ -40,3 +40,7 @@ export function unprocessableField({ code, field, message }: FieldConflict): App
 export function conflictError({ code, field, message }: FieldConflict): AppError {
   return new AppError(409, code, message, { [field]: message });
 }
+
+export function notFound(message: string): AppError {
+  return new AppError(404, 'NOT_FOUND', message);
+}
