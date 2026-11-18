@@ -92,6 +92,14 @@ describe('GET /docs/openapi.json', () => {
     expect(JSON.stringify(document.components.schemas)).not.toMatch(/"allOf":\[\{"\$ref":"[^"]+"\},\{"type":\[/);
   });
 
+  it('lists every appointment duration a doctor can choose', async () => {
+    const { document } = await fetchDocument();
+
+    expect(document.components.schemas.SaveDoctorScheduleRequest).toMatchObject({
+      properties: { appointmentDurationMin: { type: ['integer', 'null'], enum: [15, 20, 30, 45, 60, null] } },
+    });
+  });
+
   it('documents the doctor agenda filters with examples', async () => {
     const { document } = await fetchDocument();
     const operation = document.paths['/api/doctor/appointments']?.get as {
