@@ -5,6 +5,7 @@ import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
 import { EXAMPLE_DOCTOR, EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
+import { seedWithoutSampleBookings } from '../test/support/doctors.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { as, HOUR, signUp, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
@@ -29,7 +30,7 @@ describe('appointments on PostgreSQL', () => {
     await runMigrations(pool);
     context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.seed.service.seed();
+    await seedWithoutSampleBookings(context.modules);
     const doctors = await pool.query<Doctor & { full_name: string }>(
       'select u.id, u.full_name, p.specialty_id from users u join doctor_profiles p on p.user_id = u.id',
     );

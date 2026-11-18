@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
+import { seedWithoutSampleBookings } from '../test/support/doctors.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { as, signUp, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
@@ -26,7 +27,7 @@ describe('exam bookings on PostgreSQL', () => {
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.seed.service.seed();
+    await seedWithoutSampleBookings(context.modules);
     const rows = await pool.query<{ unit_id: string; exam_type_id: string }>(
       `update unit_exam_offers o set capacity_per_slot = $1
        from units u, exam_types e

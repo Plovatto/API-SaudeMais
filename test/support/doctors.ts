@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
+import type { createModules } from '@/modules/index.js';
 import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { as, buildUsersApp, login, registerAndLogin, signUp } from './users.js';
 
@@ -22,10 +23,14 @@ export interface Availability {
   days: { date: string; slots: { startsAt: string; endsAt: string }[] }[];
 }
 
+export async function seedWithoutSampleBookings(modules: Pick<ReturnType<typeof createModules>, 'users' | 'seed'>) {
+  await modules.users.service.ensureAccount(EXAMPLE_PATIENT);
+  await modules.seed.service.seed();
+}
+
 export async function setupClinic() {
   const context = await buildUsersApp();
-  await context.modules.users.service.ensureAccount(EXAMPLE_PATIENT);
-  await context.modules.seed.service.seed();
+  await seedWithoutSampleBookings(context.modules);
   const patient = await registerAndLogin(context.app);
   const exampleLogin = await login(context.app, {
     email: EXAMPLE_PATIENT.email,
