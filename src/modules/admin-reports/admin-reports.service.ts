@@ -4,6 +4,7 @@ import { noStatusTotals } from '../bookings/bookings.repository.js';
 import {
   DEFAULT_REPORT_DAYS,
   MAX_DAILY_DAYS,
+  rateOf,
   reportPeriod,
   type AdminReport,
   type ReportsQuery,
@@ -17,11 +18,6 @@ const noKindTotals = {
 };
 
 const shiftDays = (date: string, days: number) => civilDate(Date.parse(date) + days * DAY);
-
-function rateOf(part: number, rest: number): number | null {
-  const whole = part + rest;
-  return whole === 0 ? null : Math.round((part / whole) * 1000) / 1000;
-}
 
 export class AdminReportsService {
   constructor(
