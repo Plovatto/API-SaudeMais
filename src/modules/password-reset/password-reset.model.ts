@@ -12,6 +12,7 @@ export const resetConfirmSchema = registry.register(
     .strictObject({
       token: z.string().regex(TOKEN_PATTERN, 'Link inválido ou vencido.').openapi({
         description: 'Token recebido no link do e-mail, depois de `#token=`.',
+        example: 'q8Zr3VtYw1mN0pLk7sXc2bHf9dGj4uEa6oIi5nRy_-T',
       }),
       password,
       passwordConfirmation: z.string().openapi({ example: 'nova-senha-segura-456' }),
