@@ -9,6 +9,7 @@ import {
 } from '../../docs/common-schemas.js';
 import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
+import type { FieldConflict } from '../../lib/app-error.js';
 import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
@@ -17,7 +18,13 @@ import { WELCOME_TOKEN_HOURS } from '../password-reset/password-reset.service.js
 import { updateProfileSchema } from '../users/user.model.js';
 import { emailConflicts } from '../users/user.messages.js';
 import type { AdminUserController } from './admin-users.controller.js';
-import { adminConflicts, doctorProfileNotFound, unavailable, userNotFound } from './admin-users.messages.js';
+import {
+  adminConflicts,
+  doctorProfileNotFound,
+  inDoctorProfile,
+  unavailable,
+  userNotFound,
+} from './admin-users.messages.js';
 import {
   adminUserDetailSchema,
   adminUserPageSchema,
@@ -30,19 +37,17 @@ import {
 } from './admin-users.model.js';
 
 const userMissing = notFoundResponse(userNotFound);
-const unavailableResponse = errorResponse(
-  'Especialidade ou unidade inativa ou inexistente (`SPECIALTY_UNAVAILABLE`, `UNIT_UNAVAILABLE`).',
-  {
-    message: unavailable.specialty.message,
-    code: unavailable.specialty.code,
-    fields: { specialtyId: unavailable.specialty.message },
-  },
-);
+const unavailableResponse = ({ code, field, message }: FieldConflict) =>
+  errorResponse('Especialidade ou unidade inativa ou inexistente (`SPECIALTY_UNAVAILABLE`, `UNIT_UNAVAILABLE`).', {
+    message,
+    code,
+    fields: { [field]: message },
+  });
 
 interface Operation extends Omit<OperationDoc, 'tag' | 'errors'> {
   notFound?: string;
   conflict?: ReturnType<typeof conflictResponse>;
-  unprocessable?: boolean;
+  unprocessable?: FieldConflict;
   busy?: boolean;
 }
 
@@ -54,7 +59,7 @@ function document({ notFound, conflict, unprocessable, busy, ...operation }: Ope
       403: forbiddenResponse,
       ...(operation.params && { 404: notFound ? notFoundResponse(notFound) : userMissing }),
       ...(conflict && { 409: conflict }),
-      ...(unprocessable && { 422: unavailableResponse }),
+      ...(unprocessable && { 422: unavailableResponse(unprocessable) }),
       ...(busy && { 503: serverBusyResponse }),
     },
   });
@@ -79,8 +84,8 @@ document({
   summary: 'Cadastrar usuário',
   description: `Cria uma conta de paciente, médico ou administrador. Toda conta também é paciente; para \`doctor\`, envie \`doctorProfile\` (o conselho vem da especialidade). A conta nasce sem senha utilizável: entrar antes de criar a senha responde \`INVALID_CREDENTIALS\`. Depois de salvar, a pessoa recebe por e-mail um link válido por ${WELCOME_TOKEN_HOURS} horas para criar a senha em \`POST /api/password-reset/confirm\`; esse link conta nos limites de \`POST /api/admin/users/{id}/password-reset\`. Fica no registro de auditoria (\`user.created\`) e, ao contrário do autocadastro, não gera o aviso \`user_registered\` para os administradores.`,
   body: createUserSchema,
-  conflict: conflictResponse(emailConflicts.users_email_key, adminConflicts.registryTaken),
-  unprocessable: true,
+  conflict: conflictResponse(emailConflicts.users_email_key, inDoctorProfile(adminConflicts.registryTaken)),
+  unprocessable: inDoctorProfile(unavailable.specialty),
   busy: true,
   success: { status: 201, description: 'Usuário cadastrado.', ...detail },
 });
@@ -173,7 +178,7 @@ document({
   params: idParams,
   body: doctorProfileInputSchema,
   conflict: conflictResponse(adminConflicts.registryTaken, adminConflicts.profileExists, adminConflicts.inactive),
-  unprocessable: true,
+  unprocessable: unavailable.specialty,
   success: { status: 201, description: 'Perfil médico criado.', ...detail },
 });
 document({
@@ -187,7 +192,7 @@ document({
   body: updateDoctorProfileSchema,
   notFound: doctorProfileNotFound,
   conflict: conflictResponse(adminConflicts.registryTaken, adminConflicts.futureAppointments),
-  unprocessable: true,
+  unprocessable: unavailable.specialty,
   success: { status: 200, description: 'Perfil médico atualizado.', ...detail },
 });
 document({

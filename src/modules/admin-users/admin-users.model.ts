@@ -166,7 +166,7 @@ export const deactivationImpactSchema = registry.register(
 
 export type UsersQuery = z.infer<typeof usersQuery>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
-export type DoctorProfileInput =z.infer<typeof doctorProfileInputSchema>;
+export type DoctorProfileInput = z.infer<typeof doctorProfileInputSchema>;
 export type UpdateDoctorProfileInput = z.infer<typeof updateDoctorProfileSchema>;
 export type DoctorProfile = z.infer<typeof doctorProfileSchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;

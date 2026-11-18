@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
 import { as, buildUsersApp, HOUR, login, registration } from './support/users.js';
 
+const anyText = expect.any(String) as unknown;
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 
 async function adminSession(context: Awaited<ReturnType<typeof buildUsersApp>>, credentials = ADMIN) {
@@ -490,7 +492,6 @@ describe('POST /api/admin/users', () => {
   it('requires the doctor profile only for doctors and validates it like the profile route', async () => {
     const context = await withAdmin();
     const profile = await doctorProfile(context);
-    const anyText = expect.any(String) as unknown;
 
     const missing = await create(context, { ...person, role: 'doctor' });
     const notDoctor = await create(context, { ...person, role: 'patient', doctorProfile: profile });
@@ -515,13 +516,23 @@ describe('POST /api/admin/users', () => {
   it('rolls everything back when the specialty or unit is unavailable', async () => {
     const context = await withAdmin();
     const profile = await doctorProfile(context);
+    const unknownSpecialty = await create(context, {
+      ...person,
+      role: 'doctor',
+      doctorProfile: { ...profile, specialtyId: randomUUID() },
+    });
     await call(context, context.admin.token, 'patch', `/api/admin/units/${profile.unitId}`, { isActive: false });
 
     const response = await create(context, { ...person, role: 'doctor', doctorProfile: profile });
     await context.mail.drain();
 
+    expect(unknownSpecialty.status).toBe(422);
+    expect(unknownSpecialty.body).toMatchObject({
+      code: 'SPECIALTY_UNAVAILABLE',
+      fields: { 'doctorProfile.specialtyId': anyText },
+    });
     expect(response.status).toBe(422);
-    expect(response.body).toMatchObject({ code: 'UNIT_UNAVAILABLE' });
+    expect(response.body).toMatchObject({ code: 'UNIT_UNAVAILABLE', fields: { 'doctorProfile.unitId': anyText } });
     expect(await accountsWith(context, person.email)).toBe(0);
     expect(context.mailer.sent).toHaveLength(0);
   });
@@ -539,7 +550,10 @@ describe('POST /api/admin/users', () => {
     });
 
     expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({ code: 'REGISTRY_TAKEN' });
+    expect(response.body).toMatchObject({
+      code: 'REGISTRY_TAKEN',
+      fields: { 'doctorProfile.registryNumber': anyText },
+    });
     expect(await accountsWith(context, 'bruno@email.com')).toBe(0);
   });
 
