@@ -53,6 +53,7 @@ export interface NewUser {
   roles: Role[];
   isProtected: boolean;
   termsVersion: string | null;
+  grantedBy?: string | undefined;
   now: Date;
 }
 
@@ -87,7 +88,7 @@ export class UserRepository {
   constructor(private readonly db: Database) {}
 
   async createUser(
-    { fullName, email, phone, passwordHash, roles, isProtected, termsVersion, now }: NewUser,
+    { fullName, email, phone, passwordHash, roles, isProtected, termsVersion, grantedBy, now }: NewUser,
     onCreated?: (tx: Transaction, user: PublicUser) => Promise<AfterCommit>,
   ): Promise<PublicUser> {
     const [user, afterCommit] = await this.db.transaction(async (tx) => {
@@ -96,7 +97,7 @@ export class UserRepository {
         .values({ fullName, email, phone, passwordHash, isProtected })
         .returning(userColumns);
       if (!row) throw new Error('User insert returned no row');
-      await tx.insert(userRoles).values(roles.map((role) => ({ userId: row.id, role, grantedAt: now })));
+      await tx.insert(userRoles).values(roles.map((role) => ({ userId: row.id, role, grantedBy, grantedAt: now })));
       if (termsVersion) await tx.insert(termsAcceptances).values({ userId: row.id, termsVersion, acceptedAt: now });
       const created = { ...row, roles: [...roles].sort() };
       return [created, await onCreated?.(tx, created)] as const;

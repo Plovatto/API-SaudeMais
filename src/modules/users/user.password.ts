@@ -51,3 +51,7 @@ export function placeholderPasswordHash(): Promise<string> {
   });
   return placeholderHash;
 }
+
+export function unusablePasswordHash(): Promise<string> {
+  return hashPassword(randomBytes(32).toString('base64url'));
+}
