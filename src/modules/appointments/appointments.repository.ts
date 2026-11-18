@@ -34,7 +34,6 @@ interface NewAppointment {
 interface DoctorLock {
   doctorId: string;
   specialtyId: string;
-  includeProtected: boolean;
   now: Date;
 }
 
@@ -89,10 +88,7 @@ const appointmentWith = (id: string) => and(eq(bookings.id, id), eq(bookings.kin
 export class AppointmentsRepository {
   constructor(private readonly db: Database) {}
 
-  async lockDoctor(
-    tx: Transaction,
-    { doctorId, specialtyId, includeProtected, now }: DoctorLock,
-  ): Promise<SlotContext | undefined> {
+  async lockDoctor(tx: Transaction, { doctorId, specialtyId, now }: DoctorLock): Promise<SlotContext | undefined> {
     await tx.select({ id: specialties.id }).from(specialties).where(eq(specialties.id, specialtyId)).for('share');
     const [unit] = await tx
       .select({ id: units.id })
@@ -106,7 +102,7 @@ export class AppointmentsRepository {
       .from(doctorProfiles)
       .where(and(eq(doctorProfiles.userId, doctorId), eq(doctorProfiles.unitId, unit.id)))
       .for('share');
-    return profiles.length > 0 ? slotContext(tx, doctorId, includeProtected, now) : undefined;
+    return profiles.length > 0 ? slotContext(tx, doctorId, now) : undefined;
   }
 
   async create(tx: Transaction, appointment: NewAppointment): Promise<string> {

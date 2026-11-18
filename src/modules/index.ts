@@ -12,7 +12,6 @@ import { createCatalogModule } from './catalog/index.js';
 import { createDoctorAgendaModule } from './doctor-agenda/index.js';
 import { createDoctorScheduleModule } from './doctor-schedule/index.js';
 import { createDoctorsModule } from './doctors/index.js';
-import { createDemoModule } from './demo/index.js';
 import { createEmailNotificationsModule } from './email-notifications/index.js';
 import { createExamBookingsModule } from './exam-bookings/index.js';
 import { createExamResultsModule } from './exam-results/index.js';
@@ -20,6 +19,7 @@ import { createLabIntegrationModule } from './lab-integration/index.js';
 import { createNotificationsModule } from './notifications/index.js';
 import { createPasswordResetModule } from './password-reset/index.js';
 import { createPatientBookingsModule } from './patient-bookings/index.js';
+import { createSeedModule } from './seed/index.js';
 import { createUsersModule, type SessionPolicy } from './users/index.js';
 import { SessionCache } from './users/user.session-cache.js';
 
@@ -58,12 +58,11 @@ export function createModules(deps: ModulesDeps) {
     requireAuth: users.requireAuth,
     notifications: notifications.service,
   });
-  const demo = createDemoModule({
+  const seed = createSeedModule({
     db: deps.db,
     users: users.service,
     schedules: doctorSchedule.service,
     clock: deps.clock,
-    notifications: notifications.service,
     lab: labIntegration.service,
   });
   const doctors = createDoctorsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
@@ -99,7 +98,6 @@ export function createModules(deps: ModulesDeps) {
     db: deps.db,
     clock: deps.clock,
     bookings: bookings.service,
-    demo: demo.service,
     notifications: notifications.service,
     reminders: email.notifier,
   });
@@ -108,7 +106,7 @@ export function createModules(deps: ModulesDeps) {
     passwordReset,
     catalog,
     adminUsers,
-    demo,
+    seed,
     adminHome,
     doctorSchedule,
     doctors,

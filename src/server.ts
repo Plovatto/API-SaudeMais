@@ -59,17 +59,15 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-const { users, demo, maintenance, routers } = createModulesFromEnv(env, createDb(pool), mail);
+const { users, maintenance, routers } = createModulesFromEnv(env, createDb(pool), mail);
 
 try {
   await runMigrations(pool);
   logger.info('Database migrations applied');
-  const admin =
-    env.ADMIN_EMAIL && env.ADMIN_PASSWORD ? { email: env.ADMIN_EMAIL, password: env.ADMIN_PASSWORD } : undefined;
-  const skipped = await users.bootstrap(admin, { demoAccounts: env.DEMO_ACCOUNTS_ENABLED });
-  if (env.DEMO_ACCOUNTS_ENABLED) skipped.push(...(await demo.service.ensure()));
-  for (const warning of skipped) logger.warn(warning);
-  logger.info('Initial accounts ensured');
+  if (env.ADMIN_EMAIL && env.ADMIN_PASSWORD) {
+    await users.bootstrap({ email: env.ADMIN_EMAIL, password: env.ADMIN_PASSWORD });
+    logger.info('Initial administrator ensured');
+  }
 } catch (err) {
   logger.fatal({ err }, 'Database setup failed');
   await pool.end();
@@ -86,7 +84,7 @@ const server = app.listen(env.PORT, () => {
 shutdown.attach(server);
 
 if (env.MAINTENANCE_SCHEDULER) {
-  scheduler = startScheduler(() => maintenance.runExclusive({ restoreDemo: env.DEMO_ACCOUNTS_ENABLED }), {
+  scheduler = startScheduler(() => maintenance.runExclusive(), {
     schedule: MAINTENANCE_SCHEDULE,
     clock: systemClock,
     lastActivityAt: () => lastDbActivityAt,

@@ -18,7 +18,7 @@ import type { Doctor, DoctorsQuery } from './doctors.model.js';
 export type SlotContext = Pick<
   SlotRequest,
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays' | 'blockedDates'
-> & { specialtyId: string; isProtected: boolean };
+> & { specialtyId: string };
 
 interface Period {
   from: Date;
@@ -40,22 +40,19 @@ function joinProfile<Q extends PgSelect>(query: Q) {
     .innerJoin(units, eq(units.id, doctorProfiles.unitId));
 }
 
-function bookable(includeProtected: boolean): SQL | undefined {
-  return and(
-    hasRole('doctor'),
-    isNull(users.deactivatedAt),
-    eq(specialties.isActive, true),
-    eq(units.isActive, true),
-    includeProtected ? undefined : eq(users.isProtected, false),
-  );
-}
+const bookable = and(
+  hasRole('doctor'),
+  isNull(users.deactivatedAt),
+  eq(specialties.isActive, true),
+  eq(units.isActive, true),
+);
 
 export class DoctorsRepository {
   constructor(private readonly db: Database) {}
 
-  page({ specialtyId, search, page, pageSize }: DoctorsQuery, includeProtected: boolean): Promise<Page<Doctor>> {
+  page({ specialtyId, search, page, pageSize }: DoctorsQuery): Promise<Page<Doctor>> {
     const where = and(
-      bookable(includeProtected),
+      bookable,
       specialtyId ? eq(doctorProfiles.specialtyId, specialtyId) : undefined,
       search ? unaccentMatch(users.fullName, search) : undefined,
     );
@@ -71,12 +68,11 @@ export class DoctorsRepository {
 
   bookingContext(
     doctorId: string,
-    includeProtected: boolean,
     { from, to, now }: Period,
     except: SQL | undefined,
   ): Promise<(SlotContext & Pick<SlotRequest, 'busy'>) | undefined> {
     return this.db.transaction(async (tx) => {
-      const context = await slotContext(tx, doctorId, includeProtected, now);
+      const context = await slotContext(tx, doctorId, now);
       if (!context) return undefined;
       const busy = await tx
         .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
@@ -99,7 +95,6 @@ export class DoctorsRepository {
 export async function slotContext(
   db: Pick<Database, 'select'>,
   doctorId: string,
-  includeProtected: boolean,
   now: Date,
 ): Promise<SlotContext | undefined> {
   const [doctor] = await joinProfile(
@@ -108,11 +103,10 @@ export async function slotContext(
         durationMin: appointmentDuration,
         specialtyId: specialties.id,
         unitId: units.id,
-        isProtected: users.isProtected,
       })
       .from(users)
       .$dynamic(),
-  ).where(and(eq(users.id, doctorId), bookable(includeProtected)));
+  ).where(and(eq(users.id, doctorId), bookable));
   if (!doctor) return undefined;
   const ranges = await db
     .select({
@@ -129,14 +123,13 @@ export async function slotContext(
       ),
     )
     .where(and(eq(doctorScheduleRanges.doctorId, doctorId), eq(doctorScheduleDays.isActive, true)));
-  const { durationMin, specialtyId, unitId, isProtected } = doctor;
+  const { durationMin, specialtyId, unitId } = doctor;
   const policy = await slotPolicy(db);
   const from = civilDateIn(CLINIC_TIME_ZONE, now);
   const to = civilDate(Date.parse(from) + (policy.bookingHorizonDays + 1) * DAY);
   return {
     durationMin,
     specialtyId,
-    isProtected,
     ranges,
     unitHours: await hoursOf(db, unitId),
     blockedDates: await blockedDatesFrom(db, doctorId, { from, to }),

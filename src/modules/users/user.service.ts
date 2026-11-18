@@ -1,5 +1,5 @@
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
-import { AppError, conflictError, invalidData } from '../../lib/app-error.js';
+import { AppError, invalidData } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -19,7 +19,7 @@ import type {
 } from './user.model.js';
 import { birthDateInFuture, currentSession, emailConflicts, sessionNotFound } from './user.messages.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
-import { isDemoEmail, type SeedAccount } from './user.demo.js';
+import type { SeedAccount } from './user.seed.js';
 import type { NewUser, UserRepository } from './user.repository.js';
 import type { SessionCache } from './user.session-cache.js';
 import { createSessionToken, hashToken, isWellFormedToken } from './user.token.js';
@@ -27,7 +27,6 @@ import { createSessionToken, hashToken, isWellFormedToken } from './user.token.j
 export const TERMS_VERSION = '2026-11-13';
 
 export const TOUCH_INTERVAL = 5 * MINUTE;
-const PROTECTED_SESSION_LIMIT = 500;
 
 export interface SessionPolicy {
   idleHours: number;
@@ -42,7 +41,6 @@ export interface ClientInfo {
 
 export interface AuthContext {
   sessionId: string;
-  isProtected: boolean;
   user: PublicUser;
 }
 
@@ -71,12 +69,11 @@ export class UserService {
   }
 
   async createAccount(
-    account: Omit<NewUser, 'isProtected' | 'now'>,
+    account: Omit<NewUser, 'now'>,
     onCreated: (tx: Transaction, user: PublicUser) => Promise<AfterCommit>,
   ): Promise<PublicUser> {
-    if (isDemoEmail(account.email)) throw conflictError(emailConflicts.users_email_key);
     return withConstraintConflicts(
-      () => this.repository.createUser({ ...account, isProtected: false, now: this.clock.now() }, onCreated),
+      () => this.repository.createUser({ ...account, now: this.clock.now() }, onCreated),
       emailConflicts,
     );
   }
@@ -89,23 +86,23 @@ export class UserService {
     if (candidate.deactivatedAt) throw new AppError(403, 'USER_INACTIVE', 'Esta conta está desativada.');
 
     const absoluteExpiresAt = new Date(now.getTime() + this.policy.maxDays * DAY);
-    const remembered = remember && !candidate.isProtected;
-    const expiresAt = remembered ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
+    const expiresAt = remember ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
     const { token, tokenHash } = createSessionToken();
     const sessionId = await this.repository.createSession({
       userId: candidate.id,
       tokenHash,
-      remember: remembered,
+      remember,
       userAgent: client.userAgent,
       ip: client.ip,
       createdAt: now,
       expiresAt,
       absoluteExpiresAt,
     });
-    const limit = candidate.isProtected ? PROTECTED_SESSION_LIMIT : this.policy.maxSessionsPerUser;
-    this.sessions.invalidateSessions(await this.repository.pruneSessions(candidate.id, sessionId, now, limit));
+    this.sessions.invalidateSessions(
+      await this.repository.pruneSessions(candidate.id, sessionId, now, this.policy.maxSessionsPerUser),
+    );
 
-    const { passwordHash: _hash, isProtected: _protected, deactivatedAt: _deactivated, ...user } = candidate;
+    const { passwordHash: _hash, deactivatedAt: _deactivated, ...user } = candidate;
     return { token, expiresAt: expiresAt.toISOString(), user };
   }
 
@@ -124,16 +121,13 @@ export class UserService {
       await this.repository.touchSession(session.id, now, expiresAt);
       Object.assign(session, { lastUsedAt: now, expiresAt });
     }
-    return { sessionId: session.id, isProtected: session.isProtected, user: session.user };
+    return { sessionId: session.id, user: session.user };
   }
 
-  async ensureAccount({ fullName, email, password, roles, isProtected }: SeedAccount): Promise<void> {
+  async ensureAccount({ fullName, email, password, roles }: SeedAccount): Promise<void> {
     const now = this.clock.now();
     const existing = await this.repository.findLoginCandidate(email);
     if (existing) {
-      if (existing.isProtected !== isProtected) {
-        throw new SeedAccountConflictError(`Seed account ${email} already exists with a different protection setting`);
-      }
       const missing = roles.filter((role) => !existing.roles.includes(role));
       if (missing.length === 0) return;
       if (existing.deactivatedAt || !(await verifyPassword(password, existing.passwordHash))) {
@@ -142,29 +136,26 @@ export class UserService {
       await this.repository.grantRoles(existing.id, missing, now);
       return;
     }
+    await this.createSeedAccount({ fullName, email, password, roles });
+  }
+
+  async createSeedAccount({ fullName, email, password, roles }: SeedAccount): Promise<string | undefined> {
     const passwordHash = await hashPassword(password);
     try {
-      await this.repository.createUser({
+      const user = await this.repository.createUser({
         fullName,
         email,
         phone: undefined,
         passwordHash,
         roles,
-        isProtected,
         termsVersion: null,
-        now,
+        now: this.clock.now(),
       });
+      return user.id;
     } catch (error) {
       if (!isUniqueViolation(error, 'users_email_key')) throw error;
+      return undefined;
     }
-  }
-
-  async restoreAccount({ fullName, email, password, roles }: SeedAccount): Promise<void> {
-    const existing = await this.repository.findLoginCandidate(email);
-    if (!existing?.isProtected) return;
-    const passwordHash = (await verifyPassword(password, existing.passwordHash)) ? undefined : await hashPassword(password);
-    await this.repository.restoreSeedAccount(existing.id, { fullName, passwordHash, roles, now: this.clock.now() });
-    this.sessions.invalidateUser(existing.id);
   }
 
   async profile(userId: string): Promise<Profile> {
@@ -205,8 +196,7 @@ export class UserService {
     }));
   }
 
-  async logoutEverywhere({ sessionId, isProtected, user }: AuthContext): Promise<void> {
-    if (isProtected) return this.logout(sessionId);
+  async logoutEverywhere({ user }: AuthContext): Promise<void> {
     await this.repository.deleteSessionsOf(user.id, null);
     this.sessions.invalidateUser(user.id);
   }
@@ -219,8 +209,7 @@ export class UserService {
     this.sessions.invalidateSessions([id]);
   }
 
-  async endOtherSessions({ sessionId, isProtected, user }: AuthContext): Promise<void> {
-    if (isProtected) return;
+  async endOtherSessions({ sessionId, user }: AuthContext): Promise<void> {
     await this.repository.deleteSessionsOf(user.id, sessionId);
     this.sessions.invalidateUser(user.id);
   }
