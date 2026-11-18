@@ -40,7 +40,7 @@ const phoneDescription = {
   example: '(11) 98765-4321',
 };
 
-const phone = z
+export const optionalPhone = z
   .union([z.literal('').transform(() => undefined), phoneNumber])
   .optional()
   .openapi(phoneDescription);
@@ -64,7 +64,7 @@ export const registerSchema = registry.register(
     .strictObject({
       fullName: personName,
       email,
-      phone,
+      phone: optionalPhone,
       password,
       passwordConfirmation: z.string().openapi({ example: 'senha-segura-123' }),
       acceptTerms: z
