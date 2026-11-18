@@ -1,5 +1,5 @@
 import type { Clock } from '../../lib/clock.js';
-import { civilDate, CLINIC_TIME_ZONE, dayRangeIn, wallClockIn } from '../../lib/time.js';
+import { civilDateIn, CLINIC_TIME_ZONE, dayRangeIn } from '../../lib/time.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import type { DoctorAppointmentPage, DoctorAppointmentsQuery, DoctorHome } from './doctor-agenda.model.js';
 import type { DoctorAgendaRepository } from './doctor-agenda.repository.js';
@@ -21,6 +21,6 @@ export class DoctorAgendaService {
       this.repository.home(doctorId, dayRangeIn(CLINIC_TIME_ZONE, now), now),
       this.notifications.latest({ userId: doctorId, role: 'doctor' }),
     ]);
-    return { today: { date: civilDate(wallClockIn(CLINIC_TIME_ZONE, now)), ...today }, ...agenda, lastNotification };
+    return { today: { date: civilDateIn(CLINIC_TIME_ZONE, now), ...today }, ...agenda, lastNotification };
   }
 }

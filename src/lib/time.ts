@@ -32,6 +32,10 @@ export function civilDate(wallClock: number): string {
   return new Date(wallClock).toISOString().slice(0, 10);
 }
 
+export function civilDateIn(timeZone: string, instant: Date): string {
+  return civilDate(wallClockIn(timeZone, instant));
+}
+
 export function startOfDayIn(timeZone: string, date: Date): Date {
   const wallClock = wallClockIn(timeZone, date);
   return instantOfWallClock(timeZone, wallClock - (wallClock % DAY));
