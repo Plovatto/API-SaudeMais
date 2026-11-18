@@ -82,7 +82,7 @@ document({
   path: '/api/admin/users',
   operationId: 'adminCreateUser',
   summary: 'Cadastrar usuário',
-  description: `Cria uma conta de paciente, médico ou administrador. Toda conta também é paciente; para \`doctor\`, envie \`doctorProfile\` (o conselho vem da especialidade). A conta nasce sem senha utilizável: entrar antes de criar a senha responde \`INVALID_CREDENTIALS\`. Depois de salvar, a pessoa recebe por e-mail um link válido por ${WELCOME_TOKEN_HOURS} horas para criar a senha em \`POST /api/password-reset/confirm\`; esse link conta nos limites de \`POST /api/admin/users/{id}/password-reset\`. Fica no registro de auditoria (\`user.created\`) e, ao contrário do autocadastro, não gera o aviso \`user_registered\` para os administradores.`,
+  description: `Cria uma conta de paciente, médico ou administrador. Toda conta também é paciente; para \`doctor\`, envie \`doctorProfile\` (o conselho vem da especialidade). A conta nasce sem senha utilizável: entrar antes de criar a senha responde \`INVALID_CREDENTIALS\`. Depois de salvar, a pessoa recebe por e-mail um link válido por ${WELCOME_TOKEN_HOURS} horas para criar a senha em \`POST /api/password-reset/confirm\`; esse link conta nos limites por conta de \`POST /api/admin/users/{id}/password-reset\`. Fica no registro de auditoria (\`user.created\`) e, ao contrário do autocadastro, não gera o aviso \`user_registered\` para os administradores.`,
   body: createUserSchema,
   conflict: conflictResponse(emailConflicts.users_email_key, inDoctorProfile(adminConflicts.registryTaken)),
   unprocessable: inDoctorProfile(unavailable.specialty),

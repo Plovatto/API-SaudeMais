@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { startOfDayIn } from '@/lib/time.js';
+import { CLINIC_TIME_ZONE, startOfDayIn } from '@/lib/time.js';
 import { PasswordResetRepository } from '@/modules/password-reset/password-reset.repository.js';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
 import { buildUsersApp, login, registerAndLogin, registration, START } from './support/users.js';
@@ -93,49 +93,14 @@ describe('POST /api/password-reset/request', () => {
     expect(context.mailer.sent).toHaveLength(1);
   });
 
-  it('stops sending once the daily total for the whole site is reached', async () => {
+  async function siteLimited(globalPerDay: number) {
     const context = await buildUsersApp();
     const ids: string[] = [];
     for (const email of ['a@email.com', 'b@email.com', 'c@email.com']) {
       const created = await request(context.app).post('/api/users/register').send(registration({ email }));
       ids.push((created.body as { id: string }).id);
     }
-    const resets = new PasswordResetRepository(context.db, {
-      perUserPerDay: 3,
-      globalPerDay: 2,
-      minIntervalMs: 15 * MINUTE,
-    });
-    const now = context.clock.now();
-
-    const results = [];
-    for (const [index, userId] of ids.entries()) {
-      results.push(
-        await resets.issue({
-          userId,
-          requestedBy: null,
-          tokenHash: String(index).repeat(64),
-          now,
-          expiresAt: new Date(now.getTime() + 30 * MINUTE),
-          dayStart: startOfDayIn('America/Sao_Paulo', now),
-        }),
-      );
-    }
-
-    expect(results).toEqual([true, true, false]);
-  });
-
-  it('leaves welcome links out of the daily total for the whole site', async () => {
-    const context = await buildUsersApp();
-    const ids: string[] = [];
-    for (const email of ['a@email.com', 'b@email.com', 'c@email.com']) {
-      const created = await request(context.app).post('/api/users/register').send(registration({ email }));
-      ids.push((created.body as { id: string }).id);
-    }
-    const resets = new PasswordResetRepository(context.db, {
-      perUserPerDay: 3,
-      globalPerDay: 1,
-      minIntervalMs: 15 * MINUTE,
-    });
+    const resets = new PasswordResetRepository(context.db, { perUserPerDay: 3, globalPerDay, minIntervalMs: 15 * MINUTE });
     const now = context.clock.now();
     const token = (index: number) => ({
       requestedBy: null,
@@ -143,13 +108,28 @@ describe('POST /api/password-reset/request', () => {
       now,
       expiresAt: new Date(now.getTime() + 30 * MINUTE),
     });
-    const [first, second, third] = ids as [string, string, string];
+    const issue = (userId: string, index: number) =>
+      resets.issue({ userId, ...token(index), dayStart: startOfDayIn(CLINIC_TIME_ZONE, now) });
+    return { context, resets, token, issue, ids: ids as [string, string, string] };
+  }
+
+  it('stops sending once the daily total for the whole site is reached', async () => {
+    const { ids, issue } = await siteLimited(2);
+
+    const results = [];
+    for (const [index, userId] of ids.entries()) results.push(await issue(userId, index));
+
+    expect(results).toEqual([true, true, false]);
+  });
+
+  it('leaves welcome links out of the daily total for the whole site', async () => {
+    const { context, resets, token, issue, ids } = await siteLimited(1);
+    const [first, second, third] = ids;
 
     await resets.store(context.db, { userId: first, purpose: 'welcome', ...token(1) });
     await resets.store(context.db, { userId: second, purpose: 'welcome', ...token(2) });
-    const dayStart = startOfDayIn('America/Sao_Paulo', now);
 
-    expect(await resets.issue({ userId: third, ...token(3), dayStart })).toBe(true);
+    expect(await issue(third, 3)).toBe(true);
   });
 
   it('invalidates the previous link when a new one is sent', async () => {

@@ -20,7 +20,6 @@ export interface NewResetToken {
   now: Date;
   expiresAt: Date;
   dayStart: Date;
-  purpose?: ResetTokenPurpose;
   audit?: AuditEntry | undefined;
 }
 
@@ -65,7 +64,14 @@ export class PasswordResetRepository {
 
   async store(
     db: Pick<Database, 'insert'>,
-    { userId, requestedBy, tokenHash, now, expiresAt, purpose }: Omit<NewResetToken, 'dayStart' | 'audit'>,
+    {
+      userId,
+      requestedBy,
+      tokenHash,
+      now,
+      expiresAt,
+      purpose,
+    }: Omit<NewResetToken, 'dayStart' | 'audit'> & { purpose?: ResetTokenPurpose },
   ): Promise<void> {
     await db
       .insert(passwordResetTokens)
