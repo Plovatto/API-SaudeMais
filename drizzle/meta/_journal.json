@@ -141,6 +141,13 @@
       "when": 1794930376118,
       "tag": "0019_email_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794968622256,
+      "tag": "0020_doctor_availability_settings",
+      "breakpoints": true
     }
   ]
 }

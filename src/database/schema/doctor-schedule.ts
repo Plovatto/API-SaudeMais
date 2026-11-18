@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, foreignKey, pgTable, primaryKey, smallint, uuid } from 'drizzle-orm/pg-core';
-import { uuidv7Id } from './columns.js';
+import { boolean, check, date, foreignKey, pgTable, primaryKey, smallint, text, uuid } from 'drizzle-orm/pg-core';
+import { timestamptz, uuidv7Id } from './columns.js';
 import { doctorProfiles } from './doctor-profiles.js';
 
 export const doctorScheduleDays = pgTable(
@@ -37,5 +37,26 @@ export const doctorScheduleRanges = pgTable(
       foreignColumns: [doctorScheduleDays.doctorId, doctorScheduleDays.weekday],
     }).onDelete('cascade'),
     check('doctor_schedule_ranges_period_check', sql`0 <= start_min and start_min < end_min and end_min <= 1440`),
+  ],
+);
+
+export const MAX_TIME_OFF_REASON = 80;
+
+export const doctorTimeOff = pgTable(
+  'doctor_time_off',
+  {
+    doctorId: uuid('doctor_id').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    reason: text('reason'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: 'doctor_time_off_pkey', columns: [table.doctorId, table.date] }),
+    foreignKey({
+      name: 'doctor_time_off_doctor_id_fkey',
+      columns: [table.doctorId],
+      foreignColumns: [doctorProfiles.userId],
+    }).onDelete('cascade'),
+    check('doctor_time_off_reason_check', sql.raw(`char_length(reason) between 1 and ${MAX_TIME_OFF_REASON}`)),
   ],
 );

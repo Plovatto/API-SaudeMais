@@ -1,8 +1,11 @@
 import { sql } from 'drizzle-orm';
-import { check, foreignKey, index, pgTable, text, unique, uuid } from 'drizzle-orm/pg-core';
+import { check, foreignKey, index, pgTable, smallint, text, unique, uuid } from 'drizzle-orm/pg-core';
 import { timestamps } from './columns.js';
 import { specialties, units } from './catalog.js';
 import { users } from './users.js';
+
+export const APPOINTMENT_DURATIONS = [15, 20, 30, 45, 60] as const;
+export type AppointmentDuration = (typeof APPOINTMENT_DURATIONS)[number];
 
 export const doctorProfiles = pgTable(
   'doctor_profiles',
@@ -13,6 +16,7 @@ export const doctorProfiles = pgTable(
     unitId: uuid('unit_id').notNull(),
     registryNumber: text('registry_number').notNull(),
     registryUf: text('registry_uf').notNull(),
+    appointmentDurationMin: smallint('appointment_duration_min').$type<AppointmentDuration>(),
     ...timestamps(),
   },
   (table) => [
@@ -32,5 +36,12 @@ export const doctorProfiles = pgTable(
     index('doctor_profiles_unit_id_idx').on(table.unitId),
     check('doctor_profiles_registry_number_check', sql`registry_number ~ '^[1-9][0-9]{0,9}$'`),
     check('doctor_profiles_registry_uf_check', sql`registry_uf ~ '^[A-Z]{2}$'`),
+    check(
+      'doctor_profiles_appointment_duration_min_check',
+      sql.raw(`appointment_duration_min in (${APPOINTMENT_DURATIONS.join(', ')})`),
+    ),
   ],
 );
+
+export const appointmentDuration =
+  sql<number>`coalesce(${doctorProfiles.appointmentDurationMin}, ${specialties.appointmentDurationMin})`.mapWith(Number);
