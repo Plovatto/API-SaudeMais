@@ -1,9 +1,10 @@
 import { sql } from 'drizzle-orm';
+import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { DEMO_DOCTOR_PROFILE } from '@/modules/demo/demo.data.js';
 import { seedTarget } from '@/modules/demo/seed-guard.js';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
-import { buildUsersApp, login } from './support/users.js';
+import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
+import { as, buildUsersApp, login } from './support/users.js';
 
 const tables = [
   'users',
@@ -174,6 +175,58 @@ describe('demo data', () => {
       sql`select code from exam_types where code like 'hemograma%' order by code`,
     );
     expect(rows.rows).toEqual([{ code: 'hemograma_completo' }]);
+  });
+});
+
+describe('demo account restore', () => {
+  async function restored() {
+    const context = await buildUsersApp();
+    await context.modules.demo.service.seed();
+    return context;
+  }
+
+  it('makes the documented credentials work again after a password change', async () => {
+    const context = await restored();
+    const first = await login(context.app, { email: DEMO_PATIENT.email, password: DEMO_PATIENT.password });
+    await request(context.app)
+      .post('/api/me/password')
+      .set(as((first.body as { token: string }).token))
+      .send({
+        currentPassword: DEMO_PATIENT.password,
+        password: 'nova-senha-456',
+        passwordConfirmation: 'nova-senha-456',
+      })
+      .expect(204);
+    expect((await login(context.app, { email: DEMO_PATIENT.email, password: DEMO_PATIENT.password })).status).toBe(401);
+
+    await context.modules.demo.service.restore();
+
+    expect((await login(context.app, { email: DEMO_PATIENT.email, password: DEMO_PATIENT.password })).status).toBe(200);
+  });
+
+  it('reactivates a deactivated demo account and restores its name', async () => {
+    const context = await restored();
+    await context.db.execute(
+      sql`update users set deactivated_at = now(), full_name = 'Outro Nome' where email = ${DEMO_DOCTOR.email}`,
+    );
+
+    await context.modules.demo.service.restore();
+
+    const response = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ user: { fullName: DEMO_DOCTOR.fullName } });
+  });
+
+  it('grants the doctor role again when it was revoked but the profile remains', async () => {
+    const context = await restored();
+    await context.db.execute(
+      sql`delete from user_roles where role = 'doctor' and user_id = (select id from users where email = ${DEMO_DOCTOR.email})`,
+    );
+
+    await context.modules.demo.service.restore();
+
+    const response = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password });
+    expect(response.body).toMatchObject({ user: { roles: ['doctor', 'patient'] } });
   });
 });
 

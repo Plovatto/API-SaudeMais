@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { auditLogs } from '../../database/schema/audit-logs.js';
 import { bookingEvents, bookings } from '../../database/schema/bookings.js';
@@ -109,14 +109,6 @@ export class DemoRepository {
     return row;
   }
 
-  async hasDoctorProfile(userId: string): Promise<boolean> {
-    const [row] = await this.db
-      .select({ userId: doctorProfiles.userId })
-      .from(doctorProfiles)
-      .where(eq(doctorProfiles.userId, userId));
-    return Boolean(row);
-  }
-
   grantDoctorProfile({ userId, specialty, unitId, registryNumber, registryUf, now }: DoctorProfileSeed): Promise<void> {
     return this.db.transaction(async (tx) => {
       await tx
@@ -138,7 +130,7 @@ export class DemoRepository {
       .from(users)
       .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
       .innerJoin(specialties, eq(specialties.id, doctorProfiles.specialtyId))
-      .where(eq(users.email, email));
+      .where(and(eq(users.email, email), isNull(users.deactivatedAt)));
     return row;
   }
 

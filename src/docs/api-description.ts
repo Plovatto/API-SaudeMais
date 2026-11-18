@@ -118,7 +118,7 @@ Para testar sem criar conta, entre com uma das contas de demonstração. As cred
 - Paciente: \`paciente@saudemais.test\`, senha \`paciente-demo-123\`.
 - Médico, que também é paciente e passa pela escolha de perfil: \`medico@saudemais.test\`, senha \`medico-demo-123\`.
 
-Os dados delas são de exemplo, e elas não podem ser alteradas nem desativadas. Esses e-mails não podem ser usados em um cadastro novo. Uma vez por dia, os agendamentos delas voltam ao exemplo inicial.
+Os dados delas são de exemplo e podem ser alterados. Esses e-mails não podem ser usados em um cadastro novo. Uma vez por dia, a rotina de manutenção devolve as contas ao estado de exemplo (senha documentada, nome, conta ativa e perfis) e os agendamentos voltam ao exemplo inicial.
 
 ## Rotinas automáticas
 

@@ -98,7 +98,9 @@ export const doctorProfileSchema = registry.register(
 export const adminUserSchema = registry.register(
   'AdminUser',
   publicUserSchema.extend({
-    isProtected: z.boolean().openapi({ description: 'Conta de demonstração: os dados são restaurados periodicamente e ficam fora das métricas.' }),
+    isProtected: z.boolean().openapi({
+      description: 'Conta de demonstração: os dados são restaurados periodicamente e ficam fora das métricas.',
+    }),
     deactivatedAt: z.iso.datetime().nullable(),
     createdAt: z.iso.datetime(),
   }),

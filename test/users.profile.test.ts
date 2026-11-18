@@ -283,7 +283,7 @@ describe('protected demo account', () => {
 
     expect(patch.status).toBe(200);
     expect(patch.body).toMatchObject({ fullName: 'Outro Nome', birthDate: '1990-01-01' });
-    expect(password.status).not.toBe(403);
+    expect(password.status).toBe(204);
   });
 
   it('signs out only the visitor who asked', async () => {

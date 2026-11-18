@@ -138,6 +138,13 @@ export class UserRepository {
     await this.db.update(users).set(changes).where(eq(users.id, id));
   }
 
+  async restoreSeedAccount(id: string, changes: { fullName: string; passwordHash?: string | undefined }): Promise<void> {
+    await this.db
+      .update(users)
+      .set({ ...changes, deactivatedAt: null })
+      .where(eq(users.id, id));
+  }
+
   replacePassword(id: string, passwordHash: string, keepSessionId: string, now: Date): Promise<void> {
     return this.db.transaction((tx) => applyNewPassword(tx, id, passwordHash, keepSessionId, now));
   }
