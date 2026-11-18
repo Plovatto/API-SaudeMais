@@ -1,6 +1,6 @@
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import type { Role } from '../../database/schema/users.js';
-import { AppError, invalidData, notFound } from '../../lib/app-error.js';
+import { AppError, invalidData, notFound, unprocessable, unprocessableField } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -180,8 +180,11 @@ export class UserService {
     const now = this.clock.now();
     const stored = await this.repository.findPasswordHash(user.id);
     if (!stored || !(await verifyPassword(currentPassword, stored))) {
-      const message = 'A senha atual está incorreta.';
-      throw new AppError(422, 'INVALID_CURRENT_PASSWORD', message, { currentPassword: message });
+      throw unprocessableField({
+        code: 'INVALID_CURRENT_PASSWORD',
+        field: 'currentPassword',
+        message: 'A senha atual está incorreta.',
+      });
     }
     await this.repository.replacePassword(user.id, await hashPassword(password), sessionId, now);
     this.sessions.invalidateUser(user.id);
@@ -205,7 +208,7 @@ export class UserService {
   }
 
   async endSession({ sessionId, user }: AuthContext, id: string): Promise<void> {
-    if (id === sessionId) throw new AppError(422, currentSession.code, currentSession.message);
+    if (id === sessionId) throw unprocessable(currentSession.code, currentSession.message);
     if (!(await this.repository.deleteOwnSession(user.id, id))) {
       throw notFound(sessionNotFound);
     }
