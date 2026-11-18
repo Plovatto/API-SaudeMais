@@ -8,7 +8,7 @@ import { doctorScheduleDays, doctorScheduleRanges } from '../../database/schema/
 import { users } from '../../database/schema/users.js';
 import { pageOf, type Page } from '../../lib/pagination.js';
 import { unaccentMatch } from '../../lib/search.js';
-import { civilDateIn, CLINIC_TIME_ZONE } from '../../lib/time.js';
+import { civilDate, civilDateIn, CLINIC_TIME_ZONE, DAY } from '../../lib/time.js';
 import type { SlotRequest } from '../../lib/time-slots.js';
 import { placeColumns } from '../bookings/bookings.repository.js';
 import { blockedDatesFrom, hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
@@ -125,13 +125,16 @@ export async function slotContext(
     )
     .where(and(eq(doctorScheduleRanges.doctorId, doctorId), eq(doctorScheduleDays.isActive, true)));
   const { durationMin, specialtyId, unitId } = doctor;
+  const policy = await slotPolicy(db);
+  const from = civilDateIn(CLINIC_TIME_ZONE, now);
+  const to = civilDate(Date.parse(from) + (policy.bookingHorizonDays + 1) * DAY);
   return {
     durationMin,
     specialtyId,
     ranges,
     unitHours: await hoursOf(db, unitId),
-    blockedDates: await blockedDatesFrom(db, doctorId, civilDateIn(CLINIC_TIME_ZONE, now)),
-    ...(await slotPolicy(db)),
+    blockedDates: await blockedDatesFrom(db, doctorId, { from, to }),
+    ...policy,
   };
 }
 

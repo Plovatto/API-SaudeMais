@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lt } from 'drizzle-orm';
+import { and, asc, eq, gte, lt, lte } from 'drizzle-orm';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import { bookings, isActiveFuture } from '../../database/schema/bookings.js';
 import { specialties, unitHours, units } from '../../database/schema/catalog.js';
@@ -225,12 +225,12 @@ async function appointmentsOn(tx: Transaction, doctorId: string, date: string, n
 export async function blockedDatesFrom(
   db: Pick<Database, 'select'>,
   doctorId: string,
-  since: string,
+  { from, to }: { from: string; to: string },
 ): Promise<string[]> {
   const rows = await db
     .select({ date: doctorTimeOff.date })
     .from(doctorTimeOff)
-    .where(and(eq(doctorTimeOff.doctorId, doctorId), gte(doctorTimeOff.date, since)));
+    .where(and(eq(doctorTimeOff.doctorId, doctorId), gte(doctorTimeOff.date, from), lte(doctorTimeOff.date, to)));
   return rows.map((row) => row.date);
 }
 
