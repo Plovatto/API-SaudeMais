@@ -2,7 +2,7 @@ import type { BookingKind } from '../../database/schema/bookings.js';
 import { errorResponse } from '../../docs/common-schemas.js';
 import type { FieldConflict } from '../../lib/app-error.js';
 
-export type ActiveLimitScope = BookingKind | 'total';
+type ActiveLimitScope = BookingKind | 'total';
 
 export const patientConflict: FieldConflict = {
   code: 'PATIENT_CONFLICT',
@@ -10,30 +10,41 @@ export const patientConflict: FieldConflict = {
   message: 'Você já tem um agendamento que coincide com este horário.',
 };
 
-const activeLimitWording: Record<ActiveLimitScope, { one: string; many: string; advice: string }> = {
+interface ActiveLimitWording {
+  one: string;
+  many: string;
+  adviceOne: string;
+  adviceMany: string;
+}
+
+const activeLimitWording: Record<ActiveLimitScope, ActiveLimitWording> = {
   total: {
     one: 'agendamento ativo',
     many: 'agendamentos ativos',
-    advice: 'Cancele um ou aguarde a data de um deles para marcar outro.',
+    adviceOne: 'Cancele-o ou aguarde a data dele para marcar outro.',
+    adviceMany: 'Cancele um ou aguarde a data de um deles para marcar outro.',
   },
   appointment: {
     one: 'consulta ativa',
     many: 'consultas ativas',
-    advice: 'Cancele uma ou aguarde a data de uma delas para marcar outra.',
+    adviceOne: 'Cancele-a ou aguarde a data dela para marcar outra.',
+    adviceMany: 'Cancele uma ou aguarde a data de uma delas para marcar outra.',
   },
   exam: {
     one: 'exame ativo',
     many: 'exames ativos',
-    advice: 'Cancele um ou aguarde a data de um deles para marcar outro.',
+    adviceOne: 'Cancele-o ou aguarde a data dele para marcar outro.',
+    adviceMany: 'Cancele um ou aguarde a data de um deles para marcar outro.',
   },
 };
 
 export function activeLimit(scope: ActiveLimitScope, limit: number): FieldConflict {
-  const { one, many, advice } = activeLimitWording[scope];
+  const { one, many, adviceOne, adviceMany } = activeLimitWording[scope];
+  const single = limit === 1;
   return {
     code: 'ACTIVE_LIMIT',
     field: '_root',
-    message: `Você já tem ${limit} ${limit === 1 ? one : many}. ${advice}`,
+    message: `Você atingiu o limite de ${limit} ${single ? one : many}. ${single ? adviceOne : adviceMany}`,
   };
 }
 

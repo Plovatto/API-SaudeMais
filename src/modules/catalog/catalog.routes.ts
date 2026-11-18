@@ -3,6 +3,7 @@ import { idParams } from '../../lib/params.js';
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
+import { MAX_ACTIVE_LIMIT } from '../../database/schema/catalog.js';
 import { conflictResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
 import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
@@ -226,8 +227,7 @@ document({
   path: '/api/admin/policy',
   operationId: 'adminUpdatePolicy',
   summary: 'Alterar a política de agendamento',
-  description:
-    'Substitui todos os valores da política e registra `policy.updated` na auditoria. Vale para as próximas ações de pacientes e médicos: baixar um limite de agendamentos ativos não cancela nada, só impede novos agendamentos enquanto o paciente estiver no limite. Cada limite de agendamentos ativos fica entre 1 e 50.',
+  description: `Substitui todos os valores da política e registra \`policy.updated\` na auditoria. Vale para as próximas ações de pacientes e médicos: baixar um limite de agendamentos ativos não cancela nada, só impede novos agendamentos enquanto o paciente estiver no limite. Cada limite de agendamentos ativos fica entre 1 e ${MAX_ACTIVE_LIMIT}. O limite por tipo e o limite total valem juntos, então o menor dos dois é o que bloqueia primeiro.`,
   body: policyInputSchema,
   success: { status: 200, description: 'Política atualizada.', schema: policySchema },
 });
