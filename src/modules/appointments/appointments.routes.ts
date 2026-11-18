@@ -36,7 +36,7 @@ documentOperation({
   operationId: 'bookAppointment',
   tag: tags.scheduling.name,
   summary: 'Pedir uma consulta',
-  description: `Cria o pedido de consulta do paciente logado, que nasce pendente (\`pending\`) até o médico confirmar, e avisa o médico. \`startsAt\` precisa ser o início de uma vaga devolvida por \`GET /api/doctors/{id}/availability\`; o fim vem da duração atual da especialidade. A unidade e a especialidade gravadas são as do perfil do médico. Cada paciente tem no máximo ${ACTIVE_LIMIT} agendamentos ativos futuros; a conta de demonstração só fica livre desse limite ao marcar com o médico de demonstração. Se duas pessoas pedem a mesma vaga ao mesmo tempo, só uma consegue; a outra recebe \`SLOT_TAKEN\`. Limite: 60 requisições por minuto por IP.`,
+  description: `Cria o pedido de consulta do paciente logado, que nasce pendente (\`pending\`) até o médico confirmar, e avisa o médico. \`startsAt\` precisa ser o início de uma vaga devolvida por \`GET /api/doctors/{id}/availability\`; o fim vem da duração atual da especialidade. A unidade e a especialidade gravadas são as do perfil do médico. Cada paciente tem no máximo ${ACTIVE_LIMIT} agendamentos ativos futuros, somando consultas e exames. Se duas pessoas pedem a mesma vaga ao mesmo tempo, só uma consegue; a outra recebe \`SLOT_TAKEN\`. Limite: 60 requisições por minuto por IP.`,
   body: bookAppointmentSchema,
   success: { status: 201, description: 'Pedido criado.', schema: appointmentSchema },
   errors: {
@@ -77,7 +77,7 @@ documentOperation({
   tag: tags.scheduling.name,
   summary: 'Cancelar uma consulta',
   description:
-    'Cancela uma consulta pendente ou confirmada que ainda não começou e avisa a outra parte depois do commit: o médico recebe `appointment_cancelled_by_patient` e o paciente recebe `appointment_cancelled`. Cancelam o paciente dela, com motivo opcional, e o médico que a atende, com motivo obrigatório. Envie em `startsAt` o início que a tela mostrava: se a consulta mudou, já começou ou já foi encerrada, a resposta é `INVALID_STATE` e nada muda. O paciente pode cancelar uma consulta confirmada dentro da janela da política (`appointmentLateWindowHours`), e o cancelamento fica marcado como tardio. A vaga volta a ficar livre. As contas de demonstração também cancelam, porque os agendamentos delas são restaurados todo dia. Responde o detalhe atualizado; para os demais usuários, responde como inexistente. Limite: 60 requisições por minuto por IP.',
+    'Cancela uma consulta pendente ou confirmada que ainda não começou e avisa a outra parte depois do commit: o médico recebe `appointment_cancelled_by_patient` e o paciente recebe `appointment_cancelled`. Cancelam o paciente dela, com motivo opcional, e o médico que a atende, com motivo obrigatório. Envie em `startsAt` o início que a tela mostrava: se a consulta mudou, já começou ou já foi encerrada, a resposta é `INVALID_STATE` e nada muda. O paciente pode cancelar uma consulta confirmada dentro da janela da política (`appointmentLateWindowHours`), e o cancelamento fica marcado como tardio. A vaga volta a ficar livre. Responde o detalhe atualizado; para os demais usuários, responde como inexistente. Limite: 60 requisições por minuto por IP.',
   params: idParams,
   body: cancelAppointmentSchema,
   success: { status: 200, description: 'Consulta cancelada.', schema: appointmentSchema },
@@ -100,7 +100,7 @@ documentOperation({
   tag: tags.doctor.name,
   summary: 'Confirmar uma consulta',
   description:
-    'Confirma um pedido pendente (`pending`) que ainda não começou, registra o evento `confirmed` com o médico como autor e, depois do commit, avisa o paciente com `appointment_confirmed`. Só o médico que atende a consulta confirma. Envie em `startsAt` o início que a tela mostrava: se o paciente reagendou ou cancelou, se a consulta já foi confirmada ou se o horário já chegou, a resposta é `INVALID_STATE` e nada muda. Horário desatualizado, consulta já iniciada e pedido expirado respondem todos com esse mesmo código; não existem `NOT_STARTED` nem `EXPIRED` nesta rota. A conta de demonstração também confirma, porque os agendamentos dela são restaurados todo dia. Responde o detalhe atualizado; para os demais médicos, responde como inexistente. Limite: 60 requisições por minuto por IP.',
+    'Confirma um pedido pendente (`pending`) que ainda não começou, registra o evento `confirmed` com o médico como autor e, depois do commit, avisa o paciente com `appointment_confirmed`. Só o médico que atende a consulta confirma. Envie em `startsAt` o início que a tela mostrava: se o paciente reagendou ou cancelou, se a consulta já foi confirmada ou se o horário já chegou, a resposta é `INVALID_STATE` e nada muda. Horário desatualizado, consulta já iniciada e pedido expirado respondem todos com esse mesmo código; não existem `NOT_STARTED` nem `EXPIRED` nesta rota. Responde o detalhe atualizado; para os demais médicos, responde como inexistente. Limite: 60 requisições por minuto por IP.',
   params: idParams,
   body: confirmAppointmentSchema,
   success: { status: 200, description: 'Consulta confirmada.', schema: appointmentSchema },

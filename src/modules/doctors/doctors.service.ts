@@ -15,23 +15,18 @@ export class DoctorsService {
     private readonly clock: Clock,
   ) {}
 
-  page(query: DoctorsQuery, viewerIsProtected: boolean): Promise<Page<Doctor>> {
-    return this.repository.page(query, viewerIsProtected);
+  page(query: DoctorsQuery): Promise<Page<Doctor>> {
+    return this.repository.page(query);
   }
 
   async availability(
     doctorId: string,
     { rescheduling, ...period }: AvailabilityQuery,
-    { user, isProtected }: Pick<AuthContext, 'user' | 'isProtected'>,
+    { user }: Pick<AuthContext, 'user'>,
   ): Promise<Availability> {
     const now = this.clock.now();
     const { start: from, end: to } = civilPeriodIn(CLINIC_TIME_ZONE, period);
-    const context = await this.repository.bookingContext(
-      doctorId,
-      isProtected,
-      { from, to, now },
-      exceptOwn(user.id, rescheduling),
-    );
+    const context = await this.repository.bookingContext(doctorId, { from, to, now }, exceptOwn(user.id, rescheduling));
     if (!context) throw new AppError(404, 'NOT_FOUND', doctorNotFound);
     return { days: slotDays({ ...context, ...period, now, timeZone: CLINIC_TIME_ZONE }) };
   }

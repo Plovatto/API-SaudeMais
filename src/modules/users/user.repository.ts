@@ -1,6 +1,5 @@
-import { and, eq, exists, gt, gte, isNull, lte, ne, not, notInArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, gt, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
-import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
 import type { Profile, PublicUser } from './user.model.js';
@@ -39,20 +38,12 @@ export async function applyNewPassword(
     .where(and(eq(sessions.userId, userId), keepSessionId ? ne(sessions.id, keepSessionId) : undefined));
 }
 
-interface RestoredAccount {
-  fullName: string;
-  passwordHash?: string | undefined;
-  roles: Role[];
-  now: Date;
-}
-
 export interface NewUser {
   fullName: string;
   email: string;
   phone: string | undefined;
   passwordHash: string;
   roles: Role[];
-  isProtected: boolean;
   termsVersion: string | null;
   grantedBy?: string | undefined;
   now: Date;
@@ -60,7 +51,6 @@ export interface NewUser {
 
 export interface LoginCandidate extends PublicUser {
   passwordHash: string;
-  isProtected: boolean;
   deactivatedAt: Date | null;
 }
 
@@ -81,7 +71,6 @@ export interface ActiveSession {
   lastUsedAt: Date;
   expiresAt: Date;
   absoluteExpiresAt: Date;
-  isProtected: boolean;
   user: PublicUser;
 }
 
@@ -89,14 +78,11 @@ export class UserRepository {
   constructor(private readonly db: Database) {}
 
   async createUser(
-    { fullName, email, phone, passwordHash, roles, isProtected, termsVersion, grantedBy, now }: NewUser,
+    { fullName, email, phone, passwordHash, roles, termsVersion, grantedBy, now }: NewUser,
     onCreated?: (tx: Transaction, user: PublicUser) => Promise<AfterCommit>,
   ): Promise<PublicUser> {
     const [user, afterCommit] = await this.db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(users)
-        .values({ fullName, email, phone, passwordHash, isProtected })
-        .returning(userColumns);
+      const [row] = await tx.insert(users).values({ fullName, email, phone, passwordHash }).returning(userColumns);
       if (!row) throw new Error('User insert returned no row');
       await tx.insert(userRoles).values(roles.map((role) => ({ userId: row.id, role, grantedBy, grantedAt: now })));
       if (termsVersion) await tx.insert(termsAcceptances).values({ userId: row.id, termsVersion, acceptedAt: now });
@@ -119,7 +105,6 @@ export class UserRepository {
       .select({
         ...publicUserColumns,
         passwordHash: users.passwordHash,
-        isProtected: users.isProtected,
         deactivatedAt: users.deactivatedAt,
       })
       .from(users)
@@ -145,30 +130,6 @@ export class UserRepository {
     changes: { fullName?: string; phone?: string | null; birthDate?: string | null },
   ): Promise<void> {
     await this.db.update(users).set(changes).where(eq(users.id, id));
-  }
-
-  restoreSeedAccount(
-    id: string,
-    { fullName, passwordHash, roles, now }: RestoredAccount,
-  ): Promise<void> {
-    return this.db.transaction(async (tx) => {
-      await tx.update(users).set({ fullName, deactivatedAt: null }).where(eq(users.id, id));
-      if (passwordHash) await applyNewPassword(tx, id, passwordHash, null, now);
-      const hasDoctorProfile = exists(tx.select().from(doctorProfiles).where(eq(doctorProfiles.userId, id)));
-      await tx
-        .delete(userRoles)
-        .where(
-          and(
-            eq(userRoles.userId, id),
-            notInArray(userRoles.role, roles),
-            or(ne(userRoles.role, 'doctor'), not(hasDoctorProfile)),
-          ),
-        );
-      await tx
-        .insert(userRoles)
-        .values(roles.map((role) => ({ userId: id, role, grantedAt: now })))
-        .onConflictDoNothing();
-    });
   }
 
   replacePassword(id: string, passwordHash: string, keepSessionId: string, now: Date): Promise<void> {
@@ -221,7 +182,6 @@ export class UserRepository {
         lastUsedAt: sessions.lastUsedAt,
         expiresAt: sessions.expiresAt,
         absoluteExpiresAt: sessions.absoluteExpiresAt,
-        isProtected: users.isProtected,
         user: publicUserColumns,
       })
       .from(sessions)

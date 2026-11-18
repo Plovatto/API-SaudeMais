@@ -36,10 +36,6 @@ export interface ChangedBooking {
   startsAt: Date;
 }
 
-export interface LockedPatient {
-  isProtected: boolean;
-}
-
 interface CreatedBooking {
   bookingId: string;
   patientId: string;
@@ -197,15 +193,15 @@ export async function futureBookingCounts(db: Pick<Database, 'select'>, userId: 
 export function asPatient<T>(
   db: Database,
   patientId: string,
-  work: (tx: Transaction, patient: LockedPatient) => Promise<T>,
+  work: (tx: Transaction) => Promise<T>,
 ): Promise<T | undefined> {
   return db.transaction(async (tx) => {
     const [patient] = await tx
-      .select({ isProtected: users.isProtected })
+      .select({ id: users.id })
       .from(users)
       .where(and(eq(users.id, patientId), isNull(users.deactivatedAt)))
       .for('no key update');
-    return patient ? work(tx, patient) : undefined;
+    return patient ? work(tx) : undefined;
   });
 }
 
