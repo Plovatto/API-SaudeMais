@@ -43,7 +43,6 @@ export function createApp({ config = env, logger = defaultLogger, routers = [] }
         if (res.statusCode >= 400) return 'warn';
         return 'info';
       },
-      // LGPD: headers, query string and body may carry tokens or personal data and must never be logged.
       serializers: {
         req: (req: { id: unknown; method: string; url: string; remoteAddress?: string; raw?: { ip?: string } }) => ({
           id: req.id,

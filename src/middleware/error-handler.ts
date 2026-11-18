@@ -14,7 +14,6 @@ interface HttpClientError {
   type?: unknown;
 }
 
-// Only Express client errors are trusted; any other error with a `status` becomes 500 so upstream details never leak.
 function asHttpClientError(err: unknown): HttpClientError | undefined {
   if (typeof err !== 'object' || err === null) return undefined;
   const candidate = err as { status?: unknown; statusCode?: unknown; expose?: unknown; type?: unknown };

@@ -202,10 +202,7 @@ export const policyInputSchema = registry.register('UpdatePolicyRequest', z.stri
 export const policySchema = registry.register('Policy', z.object({ ...policyFields, updatedAt: z.iso.datetime() }));
 
 export const unitsQuery = z.strictObject({
-  examTypeId: z
-    .uuid('Identificador inválido.')
-    .optional()
-    .openapi({ description: 'Só unidades que oferecem o exame.' }),
+  examTypeId: uuidParam.optional().openapi({ description: 'Só unidades que oferecem o exame.' }),
 });
 
 export const specialtyPageSchema = paginatedSchema(specialtySchema);
