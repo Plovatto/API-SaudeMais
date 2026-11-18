@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { ACTIVE_LIMIT } from '@/modules/bookings/bookings.messages.js';
+import { activeFutureCounts, activeLimits } from '@/modules/bookings/bookings.repository.js';
 import { EXAMPLE_DOCTOR_PROFILE } from '@/modules/seed/seed.data.js';
 import { seedTarget } from '@/modules/seed/seed-guard.js';
 import { EXAMPLE_DOCTOR, EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
@@ -40,15 +40,6 @@ async function bookingsOf(db: Context['db'], email: string) {
   return rows.rows[0]?.total ?? 0;
 }
 
-async function activeFutureOf(context: Context, email: string) {
-  const rows = await context.db.execute<{ total: number }>(sql`
-    select count(*)::int as total from bookings b join users u on u.id = b.patient_id
-    where u.email = ${email} and b.status in ('pending', 'confirmed')
-      and b.starts_at > ${context.clock.now().toISOString()}::timestamptz
-  `);
-  return rows.rows[0]?.total ?? 0;
-}
-
 const loginAs = (context: Context, account: { email: string; password: string }) =>
   login(context.app, { email: account.email, password: account.password });
 
@@ -84,11 +75,15 @@ describe('seed', () => {
 
     await context.modules.seed.service.seed();
 
-    await loginAs(context, EXAMPLE_PATIENT).expect(200);
+    const login = await loginAs(context, EXAMPLE_PATIENT).expect(200);
+    const patientId = (login.body as { user: { id: string } }).user.id;
+    const active = await activeFutureCounts(context.db, patientId, context.clock.now());
+    const limits = await activeLimits(context.db);
     expect(await bookingsOf(context.db, EXAMPLE_PATIENT.email)).toBeGreaterThan(0);
-    const active = await activeFutureOf(context, EXAMPLE_PATIENT.email);
-    expect(active).toBeGreaterThan(0);
-    expect(active).toBeLessThanOrEqual(ACTIVE_LIMIT);
+    expect(active.appointment + active.exam).toBeGreaterThan(0);
+    expect(active.appointment + active.exam).toBeLessThan(limits.maxActiveBookings);
+    expect(active.appointment).toBeLessThan(limits.maxActiveAppointments);
+    expect(active.exam).toBeLessThan(limits.maxActiveExams);
   });
 
   it('seeds everything once and adds nothing on a second run', async () => {

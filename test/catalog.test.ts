@@ -257,31 +257,91 @@ describe('exam types and offers', () => {
   });
 });
 
-describe('booking policy', () => {
-  it('starts with the planned defaults', async () => {
-    const response = await adminCall('get', '/api/admin/policy');
+const LIMIT_FIELDS = ['maxActiveBookings', 'maxActiveAppointments', 'maxActiveExams'] as const;
 
-    expect(response.body).toMatchObject({
+const fullPolicy = {
+  appointmentLateWindowHours: 12,
+  examLateWindowHours: 1,
+  maxReschedules: 3,
+  bookingHorizonDays: 90,
+  minLeadMinutes: 120,
+  maxActiveBookings: 8,
+  maxActiveAppointments: 6,
+  maxActiveExams: 4,
+};
+
+describe('booking policy', () => {
+  it('starts with the planned defaults, the active booking limits included', async () => {
+    const fresh = await buildUsersApp();
+    await fresh.modules.users.bootstrap(ADMIN);
+    const token = ((await login(fresh.app, ADMIN).expect(200)).body as { token: string }).token;
+
+    const response = await request(fresh.app).get('/api/admin/policy').set(as(token));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
       appointmentLateWindowHours: 24,
       examLateWindowHours: 2,
       maxReschedules: 2,
       bookingHorizonDays: 60,
       minLeadMinutes: 60,
+      maxActiveBookings: 5,
+      maxActiveAppointments: 5,
+      maxActiveExams: 5,
+      updatedAt: expect.any(String) as unknown,
     });
   });
 
-  it('saves every value at once and refuses values out of range', async () => {
-    const policy = {
-      appointmentLateWindowHours: 12,
-      examLateWindowHours: 1,
-      maxReschedules: 3,
-      bookingHorizonDays: 90,
-      minLeadMinutes: 120,
-    };
+  it('saves every value at once and records the change in the audit log', async () => {
+    const response = await adminCall('put', '/api/admin/policy', fullPolicy);
 
-    expect((await adminCall('put', '/api/admin/policy', policy)).body).toMatchObject(policy);
-    expect((await adminCall('put', '/api/admin/policy', { ...policy, maxReschedules: 11 })).status).toBe(400);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject(fullPolicy);
+    expect((await adminCall('get', '/api/admin/policy')).body).toMatchObject(fullPolicy);
+    const audit = await context.db.execute<{ actor_type: string; metadata: unknown }>(
+      sql`select actor_type, metadata from audit_logs where action = 'policy.updated' order by created_at desc limit 1`,
+    );
+    expect(audit.rows).toEqual([{ actor_type: 'user', metadata: fullPolicy }]);
+  });
+
+  it('refuses a partial policy and values out of range', async () => {
+    expect((await adminCall('put', '/api/admin/policy', { ...fullPolicy, maxReschedules: 11 })).status).toBe(400);
     expect((await adminCall('put', '/api/admin/policy', { maxReschedules: 1 })).status).toBe(400);
+    const { maxActiveExams: _left, ...withoutExams } = fullPolicy;
+    expect((await adminCall('put', '/api/admin/policy', withoutExams)).status).toBe(400);
+  });
+
+  it.each(LIMIT_FIELDS.flatMap((field) => [0, 51, 2.5, '5'].map((value) => [field, value] as const)))(
+    'refuses %s = %s with VALIDATION_ERROR',
+    async (field, value) => {
+      const response = await adminCall('put', '/api/admin/policy', { ...fullPolicy, [field]: value });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        code: 'VALIDATION_ERROR',
+        fields: { [field]: expect.any(String) as unknown },
+      });
+    },
+  );
+
+  it.each(LIMIT_FIELDS)('accepts %s at the bounds 1 and 50', async (field) => {
+    for (const value of [1, 50]) {
+      const response = await adminCall('put', '/api/admin/policy', { ...fullPolicy, [field]: value });
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ [field]: value });
+    }
+  });
+
+  it.each([
+    ['max_active_bookings', 0],
+    ['max_active_appointments', 51],
+    ['max_active_exams', -1],
+  ])('keeps %s = %s out of the database too', async (column, value) => {
+    await expect(
+      context.db.execute(sql`update settings set ${sql.identifier(column)} = ${value}`),
+    ).rejects.toMatchObject({
+      cause: { constraint: `settings_${column}_check` },
+    });
   });
 });
 
