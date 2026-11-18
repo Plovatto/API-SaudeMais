@@ -84,7 +84,10 @@ describe('doctor schedule on PostgreSQL', () => {
       ['Congresso', 'Viagem'].map((reason) => service.block(doctorId, { date: '2026-12-24', reason }, actor)),
     );
 
-    const rows = await pool.query('select 1 from doctor_time_off where doctor_id = $1', [doctorId]);
+    const rows = await pool.query('select reason from doctor_time_off where doctor_id = $1 and date = $2', [
+      doctorId,
+      '2026-12-24',
+    ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.find((result) => result.status === 'rejected')).toMatchObject({
       reason: { status: 409, code: 'TIME_OFF_EXISTS' },
