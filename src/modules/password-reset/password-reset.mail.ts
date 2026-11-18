@@ -13,3 +13,16 @@ export function resetEmail(to: string, link: string, minutes: number): MailMessa
     footer: 'Se você não pediu, ignore este e-mail. Sua senha continua a mesma.',
   });
 }
+
+export function welcomeEmail(to: string, link: string, hours: number): MailMessage {
+  return composeMail({
+    to,
+    subject: 'Sua conta no Saúde+ foi criada',
+    paragraphs: [
+      'Sua conta no Saúde+ foi criada pela equipe da clínica com este e-mail.',
+      `Abra o link abaixo em até ${hours} horas para criar sua senha e entrar.`,
+    ],
+    link: { href: link, label: 'Criar minha senha' },
+    footer: 'Se o link vencer, toque em "Esqueceu a senha?" na tela de entrada para receber outro.',
+  });
+}

@@ -56,12 +56,19 @@ export class PasswordResetRepository {
         .update(passwordResetTokens)
         .set({ revokedAt: now })
         .where(and(eq(passwordResetTokens.userId, userId), open));
-      await tx
-        .insert(passwordResetTokens)
-        .values({ userId, requestedBy, tokenHash, createdAt: now, expiresAt, sentAt: now });
+      await this.store(tx, { userId, requestedBy, tokenHash, now, expiresAt });
       if (audit) await recordAudit(tx, audit);
       return true;
     });
+  }
+
+  async store(
+    db: Pick<Database, 'insert'>,
+    { userId, requestedBy, tokenHash, now, expiresAt }: Omit<NewResetToken, 'dayStart' | 'audit'>,
+  ): Promise<void> {
+    await db
+      .insert(passwordResetTokens)
+      .values({ userId, requestedBy, tokenHash, createdAt: now, expiresAt, sentAt: now });
   }
 
   consume(tokenHash: string, passwordHash: string, now: Date): Promise<string | undefined> {

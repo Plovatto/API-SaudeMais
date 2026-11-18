@@ -1,3 +1,4 @@
+import type { AfterCommit, Database } from '../../database/pg-client.js';
 import type { AuditEntry } from '../../lib/audit.js';
 import { AppError } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
@@ -7,11 +8,12 @@ import { hashPassword } from '../users/user.password.js';
 import type { UserRepository } from '../users/user.repository.js';
 import type { SessionCache } from '../users/user.session-cache.js';
 import { createSessionToken, hashToken } from '../users/user.token.js';
-import { resetEmail } from './password-reset.mail.js';
+import { resetEmail, welcomeEmail } from './password-reset.mail.js';
 import type { ResetConfirmInput, ResetRequestInput } from './password-reset.model.js';
 import type { PasswordResetRepository } from './password-reset.repository.js';
 
 export const RESET_TOKEN_MINUTES = 30;
+export const WELCOME_TOKEN_HOURS = 72;
 
 export class PasswordResetService {
   constructor(
@@ -34,21 +36,37 @@ export class PasswordResetService {
     requestedBy: string | null,
     audit?: AuditEntry,
   ): Promise<boolean> {
-    const now = this.clock.now();
-    const { token, tokenHash } = createSessionToken();
+    const { link, ...token } = this.newToken(RESET_TOKEN_MINUTES);
     const issued = await this.resets.issue({
       userId: user.id,
       requestedBy,
-      tokenHash,
-      now,
-      expiresAt: new Date(now.getTime() + RESET_TOKEN_MINUTES * MINUTE),
-      dayStart: startOfDayIn(CLINIC_TIME_ZONE, now),
+      ...token,
+      dayStart: startOfDayIn(CLINIC_TIME_ZONE, token.now),
       audit,
     });
-    if (issued) {
-      this.mail.enqueue(resetEmail(user.email, `${this.appUrl}/redefinir-senha#token=${token}`, RESET_TOKEN_MINUTES));
-    }
+    if (issued) this.mail.enqueue(resetEmail(user.email, link, RESET_TOKEN_MINUTES));
     return issued;
+  }
+
+  async issueWelcome(
+    tx: Pick<Database, 'insert'>,
+    user: { id: string; email: string },
+    requestedBy: string,
+  ): Promise<AfterCommit> {
+    const { link, ...token } = this.newToken(WELCOME_TOKEN_HOURS * 60);
+    await this.resets.store(tx, { userId: user.id, requestedBy, ...token });
+    return () => this.mail.enqueue(welcomeEmail(user.email, link, WELCOME_TOKEN_HOURS));
+  }
+
+  private newToken(minutes: number) {
+    const now = this.clock.now();
+    const { token, tokenHash } = createSessionToken();
+    return {
+      tokenHash,
+      now,
+      expiresAt: new Date(now.getTime() + minutes * MINUTE),
+      link: `${this.appUrl}/redefinir-senha#token=${token}`,
+    };
   }
 
   async confirm({ token, password }: ResetConfirmInput): Promise<void> {
