@@ -18,7 +18,7 @@ import type { Doctor, DoctorsQuery } from './doctors.model.js';
 export type SlotContext = Pick<
   SlotRequest,
   'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays' | 'blockedDates'
-> & { specialtyId: string };
+> & { specialtyId: string; isProtected: boolean };
 
 interface Period {
   from: Date;
@@ -104,7 +104,12 @@ export async function slotContext(
 ): Promise<SlotContext | undefined> {
   const [doctor] = await joinProfile(
     db
-      .select({ durationMin: appointmentDuration, specialtyId: specialties.id, unitId: units.id })
+      .select({
+        durationMin: appointmentDuration,
+        specialtyId: specialties.id,
+        unitId: units.id,
+        isProtected: users.isProtected,
+      })
       .from(users)
       .$dynamic(),
   ).where(and(eq(users.id, doctorId), bookable(includeProtected)));
@@ -124,13 +129,14 @@ export async function slotContext(
       ),
     )
     .where(and(eq(doctorScheduleRanges.doctorId, doctorId), eq(doctorScheduleDays.isActive, true)));
-  const { durationMin, specialtyId, unitId } = doctor;
+  const { durationMin, specialtyId, unitId, isProtected } = doctor;
   const policy = await slotPolicy(db);
   const from = civilDateIn(CLINIC_TIME_ZONE, now);
   const to = civilDate(Date.parse(from) + (policy.bookingHorizonDays + 1) * DAY);
   return {
     durationMin,
     specialtyId,
+    isProtected,
     ranges,
     unitHours: await hoursOf(db, unitId),
     blockedDates: await blockedDatesFrom(db, doctorId, { from, to }),

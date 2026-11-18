@@ -1,5 +1,6 @@
-import { and, eq, gt, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, exists, gt, gte, isNull, lte, ne, not, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
+import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
 import type { Profile, PublicUser } from './user.model.js';
@@ -153,6 +154,16 @@ export class UserRepository {
     return this.db.transaction(async (tx) => {
       await tx.update(users).set({ fullName, deactivatedAt: null }).where(eq(users.id, id));
       if (passwordHash) await applyNewPassword(tx, id, passwordHash, null, now);
+      const hasDoctorProfile = exists(tx.select().from(doctorProfiles).where(eq(doctorProfiles.userId, id)));
+      await tx
+        .delete(userRoles)
+        .where(
+          and(
+            eq(userRoles.userId, id),
+            notInArray(userRoles.role, roles),
+            or(ne(userRoles.role, 'doctor'), not(hasDoctorProfile)),
+          ),
+        );
       await tx
         .insert(userRoles)
         .values(roles.map((role) => ({ userId: id, role, grantedAt: now })))

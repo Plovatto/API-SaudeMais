@@ -237,6 +237,33 @@ describe('demo account restore', () => {
     expect(response.body).toMatchObject({ user: { roles: ['doctor', 'patient'] } });
   });
 
+  it('takes away roles granted to a demo account after the seed', async () => {
+    const context = await restored();
+    await context.db.execute(
+      sql`insert into user_roles (user_id, role) select id, 'admin' from users where email = ${DEMO_PATIENT.email}`,
+    );
+
+    await context.modules.demo.service.restore();
+
+    const response = await login(context.app, { email: DEMO_PATIENT.email, password: DEMO_PATIENT.password });
+    expect(response.body).toMatchObject({ user: { roles: ['patient'] } });
+  });
+
+  it('keeps the doctor role of the demo doctor through the daily restore', async () => {
+    const context = await restored();
+    const doctorGrant = () =>
+      context.db.execute(
+        sql`select granted_at from user_roles where role = 'doctor' and user_id = (select id from users where email = ${DEMO_DOCTOR.email})`,
+      );
+    const before = await doctorGrant();
+
+    await context.modules.users.service.restoreAccount(DEMO_DOCTOR);
+
+    const after = await doctorGrant();
+    expect(after.rows).toEqual(before.rows);
+    expect(after.rows).toHaveLength(1);
+  });
+
   it('reactivates a deactivated demo patient and seeds its bookings', async () => {
     const context = await restored();
     await context.db.execute(sql`update users set deactivated_at = now() where email = ${DEMO_PATIENT.email}`);

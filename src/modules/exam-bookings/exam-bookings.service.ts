@@ -117,7 +117,7 @@ export class ExamBookingsService {
     { unitId, examTypeId, notes, ...input }: BookExamInput,
   ) {
     const now = this.clock.now();
-    await this.bookings.ensureActiveLimit(tx, patientId, patient, now);
+    await this.bookings.ensureActiveLimit(tx, patientId, patient.isProtected, now);
     const offer = { unitId, examTypeId };
     const context = await this.repository.lockOffer(tx, offer);
     if (!context) throw notFound(examOfferNotFound);

@@ -36,7 +36,7 @@ documentOperation({
   operationId: 'bookAppointment',
   tag: tags.scheduling.name,
   summary: 'Pedir uma consulta',
-  description: `Cria o pedido de consulta do paciente logado, que nasce pendente (\`pending\`) até o médico confirmar, e avisa o médico. \`startsAt\` precisa ser o início de uma vaga devolvida por \`GET /api/doctors/{id}/availability\`; o fim vem da duração atual da especialidade. A unidade e a especialidade gravadas são as do perfil do médico. Contas comuns têm no máximo ${ACTIVE_LIMIT} agendamentos ativos futuros. Se duas pessoas pedem a mesma vaga ao mesmo tempo, só uma consegue; a outra recebe \`SLOT_TAKEN\`. Limite: 60 requisições por minuto por IP.`,
+  description: `Cria o pedido de consulta do paciente logado, que nasce pendente (\`pending\`) até o médico confirmar, e avisa o médico. \`startsAt\` precisa ser o início de uma vaga devolvida por \`GET /api/doctors/{id}/availability\`; o fim vem da duração atual da especialidade. A unidade e a especialidade gravadas são as do perfil do médico. Cada paciente tem no máximo ${ACTIVE_LIMIT} agendamentos ativos futuros; a conta de demonstração só fica livre desse limite ao marcar com o médico de demonstração. Se duas pessoas pedem a mesma vaga ao mesmo tempo, só uma consegue; a outra recebe \`SLOT_TAKEN\`. Limite: 60 requisições por minuto por IP.`,
   body: bookAppointmentSchema,
   success: { status: 201, description: 'Pedido criado.', schema: appointmentSchema },
   errors: {

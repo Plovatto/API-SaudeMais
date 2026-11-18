@@ -137,8 +137,8 @@ export class BookingsService {
     return { ...moved, fromStartsAt: booking.startsAt };
   }
 
-  async ensureActiveLimit(tx: Transaction, patientId: string, { isProtected }: LockedPatient, now: Date) {
-    if (!isProtected && (await activeFutureCount(tx, patientId, now)) >= ACTIVE_LIMIT) {
+  async ensureActiveLimit(tx: Transaction, patientId: string, exempt: boolean, now: Date) {
+    if (!exempt && (await activeFutureCount(tx, patientId, now)) >= ACTIVE_LIMIT) {
       throw unprocessableField(activeLimit);
     }
   }
