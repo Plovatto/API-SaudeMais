@@ -178,6 +178,13 @@ describe('demo data', () => {
   });
 });
 
+async function bookingsOf(db: Awaited<ReturnType<typeof buildUsersApp>>['db'], email: string) {
+  const rows = await db.execute<{ total: number }>(
+    sql`select count(*)::int as total from bookings join users on users.id = bookings.patient_id where users.email = ${email}`,
+  );
+  return rows.rows[0]?.total ?? 0;
+}
+
 describe('demo account restore', () => {
   async function restored() {
     const context = await buildUsersApp();
@@ -228,6 +235,61 @@ describe('demo account restore', () => {
 
     const response = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password });
     expect(response.body).toMatchObject({ user: { roles: ['doctor', 'patient'] } });
+  });
+
+  it('reactivates a deactivated demo patient and seeds its bookings', async () => {
+    const context = await restored();
+    await context.db.execute(sql`update users set deactivated_at = now() where email = ${DEMO_PATIENT.email}`);
+
+    await context.modules.demo.service.restore();
+
+    expect((await login(context.app, { email: DEMO_PATIENT.email, password: DEMO_PATIENT.password })).status).toBe(200);
+    expect(await bookingsOf(context.db, DEMO_PATIENT.email)).toBeGreaterThan(0);
+  });
+
+  it('leaves a regular account that holds a demo e-mail untouched and seeds nothing for it', async () => {
+    const context = await buildUsersApp();
+    await context.modules.users.service.ensureAccount({
+      ...DEMO_PATIENT,
+      fullName: 'Pessoa Real',
+      password: 'senha-real-123',
+      isProtected: false,
+    });
+    await context.modules.demo.service.seed();
+
+    await context.modules.demo.service.restore();
+
+    const response = await login(context.app, { email: DEMO_PATIENT.email, password: 'senha-real-123' });
+    expect(response.body).toMatchObject({ user: { fullName: 'Pessoa Real', roles: ['patient'] } });
+    expect(await bookingsOf(context.db, DEMO_PATIENT.email)).toBe(0);
+  });
+
+  it('restores the accounts once a day, so changes survive the other maintenance runs', async () => {
+    const context = await restored();
+    await context.modules.demo.service.restore();
+    await context.db.execute(sql`update users set full_name = 'Outro Nome' where email = ${DEMO_PATIENT.email}`);
+
+    await context.modules.demo.service.restore();
+
+    const name = await context.db.execute<{ full_name: string }>(
+      sql`select full_name from users where email = ${DEMO_PATIENT.email}`,
+    );
+    expect(name.rows[0]?.full_name).toBe('Outro Nome');
+  });
+
+  it('ends the sessions that existed before the password was reset', async () => {
+    const context = await restored();
+    const first = await login(context.app, { email: DEMO_PATIENT.email, password: DEMO_PATIENT.password });
+    const { token } = first.body as { token: string };
+    await context.db.execute(sql`
+      update users set password_hash = (select password_hash from users where email = ${DEMO_DOCTOR.email})
+      where email = ${DEMO_PATIENT.email}
+    `);
+    expect(await context.auth.authenticate(token)).not.toBeNull();
+
+    await context.modules.demo.service.restore();
+
+    expect(await context.auth.authenticate(token)).toBeNull();
   });
 });
 

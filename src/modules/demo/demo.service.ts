@@ -93,9 +93,10 @@ export class DemoService {
 
   async restore(): Promise<RestoredDemo | undefined> {
     const now = this.clock.now();
+    if (await this.repository.restoredSince(startOfDayIn(CLINIC_TIME_ZONE, now))) return undefined;
     for (const account of [...DEMO_ACCOUNTS, DEMO_DOCTOR]) await this.users.restoreAccount(account);
     await this.ensure();
-    const patientId = await this.repository.userIdByEmail(DEMO_PATIENT.email);
+    const patientId = await this.repository.demoUserId(DEMO_PATIENT.email);
     const doctor = await this.repository.demoDoctor(DEMO_DOCTOR.email);
     if (!patientId || !doctor) return undefined;
     const demoBookings: DemoBooking[] = [];

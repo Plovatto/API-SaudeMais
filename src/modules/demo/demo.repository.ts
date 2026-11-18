@@ -57,6 +57,10 @@ interface Restoration {
 
 const RESTORE_ACTION = 'demo.restored';
 
+async function restoredSince(db: Pick<Database, '$count'>, since: Date): Promise<boolean> {
+  return (await db.$count(auditLogs, and(eq(auditLogs.action, RESTORE_ACTION), gte(auditLogs.createdAt, since)))) > 0;
+}
+
 export class DemoRepository {
   constructor(private readonly db: Database) {}
 
@@ -95,6 +99,18 @@ export class DemoRepository {
   async userIdByEmail(email: string): Promise<string | undefined> {
     const [row] = await this.db.select({ id: users.id }).from(users).where(eq(users.email, email));
     return row?.id;
+  }
+
+  async demoUserId(email: string): Promise<string | undefined> {
+    const [row] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.email, email), eq(users.isProtected, true), isNull(users.deactivatedAt)));
+    return row?.id;
+  }
+
+  restoredSince(since: Date): Promise<boolean> {
+    return restoredSince(this.db, since);
   }
 
   async integrationClient(name: string) {
@@ -142,7 +158,7 @@ export class DemoRepository {
       .from(users)
       .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
       .innerJoin(specialties, eq(specialties.id, doctorProfiles.specialtyId))
-      .where(and(eq(users.email, email), isNull(users.deactivatedAt)));
+      .where(and(eq(users.email, email), eq(users.isProtected, true), isNull(users.deactivatedAt)));
     return row;
   }
 
@@ -162,11 +178,7 @@ export class DemoRepository {
   restoreBookings(since: Date, now: Date, demoBookings: DemoBooking[]): Promise<Restoration | undefined> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${MAINTENANCE_LOCK}, 1)`);
-      if (
-        (await tx.$count(auditLogs, and(eq(auditLogs.action, RESTORE_ACTION), gte(auditLogs.createdAt, since)))) > 0
-      ) {
-        return undefined;
-      }
+      if (await restoredSince(tx, since)) return undefined;
       const protectedIds = tx.select({ id: users.id }).from(users).where(eq(users.isProtected, true));
       const demoScope = or(inArray(bookings.patientId, protectedIds), inArray(bookings.doctorId, protectedIds));
       const demoBookingIds = tx.select({ id: bookings.id }).from(bookings).where(demoScope);

@@ -169,8 +169,7 @@ export class UserService {
     const existing = await this.repository.findLoginCandidate(email);
     if (!existing?.isProtected) return;
     const passwordHash = (await verifyPassword(password, existing.passwordHash)) ? undefined : await hashPassword(password);
-    await this.repository.restoreSeedAccount(existing.id, { fullName, passwordHash });
-    await this.repository.grantRoles(existing.id, roles, this.clock.now());
+    await this.repository.restoreSeedAccount(existing.id, { fullName, passwordHash, roles, now: this.clock.now() });
     this.sessions.invalidateUser(existing.id);
   }
 
