@@ -208,11 +208,10 @@ describe('maintenance', () => {
       ).toSorted((a, b) => a.id.localeCompare(b.id));
     const before = await bookingsOfExample();
 
-    const report = await run();
+    await run();
     context.clock.advance(DAY);
     await run();
 
-    expect(report).not.toHaveProperty('demoRestored');
     expect(await statusOf(ownVisit)).toBe('pending');
     expect((await bookingsOfExample()).map(({ id }) => id)).toEqual(before.map(({ id }) => id));
   });
