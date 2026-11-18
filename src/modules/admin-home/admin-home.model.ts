@@ -13,7 +13,7 @@ export const adminHomeSchema = registry.register(
     }),
     doctors: z.int().nonnegative().openapi({ description: 'Contas ativas com o perfil de médico.', example: 61 }),
     appointmentsToday: countSchema(
-      'Consultas que começam hoje no fuso de São Paulo pendentes, confirmadas, concluídas ou com falta registrada, sem as canceladas, e as não confirmadas a tempo.',
+      'Consultas que começam hoje no fuso de São Paulo pendentes, confirmadas, concluídas ou com falta registrada, sem as canceladas e as não confirmadas a tempo.',
       24,
     ),
   }),
