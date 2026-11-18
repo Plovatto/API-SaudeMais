@@ -181,6 +181,7 @@ describe('demo data', () => {
 describe('demo account restore', () => {
   async function restored() {
     const context = await buildUsersApp();
+    await context.modules.users.bootstrap(undefined);
     await context.modules.demo.service.seed();
     return context;
   }

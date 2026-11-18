@@ -109,6 +109,18 @@ export class DemoRepository {
     return row;
   }
 
+  async hasDoctorProfile(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ userId: doctorProfiles.userId })
+      .from(doctorProfiles)
+      .where(eq(doctorProfiles.userId, userId));
+    return Boolean(row);
+  }
+
+  async grantDoctorRole(userId: string, now: Date): Promise<void> {
+    await this.db.insert(userRoles).values({ userId, role: 'doctor', grantedAt: now }).onConflictDoNothing();
+  }
+
   grantDoctorProfile({ userId, specialty, unitId, registryNumber, registryUf, now }: DoctorProfileSeed): Promise<void> {
     return this.db.transaction(async (tx) => {
       await tx

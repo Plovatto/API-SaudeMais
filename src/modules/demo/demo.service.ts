@@ -60,7 +60,9 @@ export class DemoService {
     }
     const userId = await this.repository.userIdByEmail(DEMO_DOCTOR.email);
     if (!userId) return [];
-    const warnings = await this.grantProfile(userId, DEMO_DOCTOR.email, DEMO_DOCTOR_PROFILE);
+    let warnings: string[] = [];
+    if (await this.repository.hasDoctorProfile(userId)) await this.repository.grantDoctorRole(userId, this.clock.now());
+    else warnings = await this.grantProfile(userId, DEMO_DOCTOR.email, DEMO_DOCTOR_PROFILE);
     await this.schedules.ensureDefault(userId);
     return warnings;
   }
