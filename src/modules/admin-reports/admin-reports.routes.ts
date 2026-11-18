@@ -61,8 +61,8 @@ export function createAdminReportsRouter({ service, requireAuth, requireAdmin }:
   };
   const exportLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 20 });
   const exportReport: RequestHandler = async (req, res) => {
-    const { fileName, mediaType, content } = await service.export(reportExportQuery.parse(req.query));
-    res.type(mediaType).attachment(fileName).send(content);
+    const { fileName, content } = await service.export(reportExportQuery.parse(req.query));
+    res.attachment(fileName).send(content);
   };
   const router = Router();
   router.get('/api/admin/reports', reportsLimit, noStore, requireAuth, requireAdmin, report);

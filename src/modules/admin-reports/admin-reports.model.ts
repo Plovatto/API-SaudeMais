@@ -25,8 +25,12 @@ export const exportMediaTypes = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 } as const;
 
+type ExportFormat = keyof typeof exportMediaTypes;
+
+const reportFormats = Object.keys(exportMediaTypes) as [ExportFormat, ...ExportFormat[]];
+
 export const reportExportQuery = reportsQuery.extend({
-  format: z.enum(['pdf', 'xlsx']).openapi({
+  format: z.enum(reportFormats).openapi({
     description: 'Formato do arquivo: `pdf` para imprimir ou `xlsx` para abrir em planilha.',
     example: 'pdf',
   }),

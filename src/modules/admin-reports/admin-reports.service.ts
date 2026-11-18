@@ -4,7 +4,6 @@ import { noStatusTotals } from '../bookings/bookings.repository.js';
 import { reportFileName } from './admin-reports.export.js';
 import {
   DEFAULT_REPORT_DAYS,
-  exportMediaTypes,
   MAX_DAILY_DAYS,
   rateOf,
   reportPeriod,
@@ -63,7 +62,6 @@ export class AdminReportsService {
     const report = await this.report(query);
     return {
       fileName: reportFileName(report, format),
-      mediaType: exportMediaTypes[format],
       content: await renderers[format](report, this.clock.now()),
     };
   }

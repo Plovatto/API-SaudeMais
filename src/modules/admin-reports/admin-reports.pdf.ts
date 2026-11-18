@@ -1,4 +1,5 @@
-import { BRAND, openPdf, PDF_COLORS, PDF_MARGIN, printable, type PdfColumn } from '../../lib/pdf.js';
+import { BRAND } from '../../lib/brand.js';
+import { openPdf, PDF_COLORS, PDF_MARGIN, printable, type PdfColumn } from '../../lib/pdf.js';
 import { clinicDateTime } from '../../lib/time.js';
 import {
   civilDayLabel,
@@ -15,7 +16,7 @@ import {
 } from './admin-reports.export.js';
 import type { AdminReport } from './admin-reports.model.js';
 
-const TILE = { columns: 3, height: 44, gap: 8 };
+const TILE = { columns: 4, height: 40, gap: 8 };
 const COLUMN_PADDING = 10;
 
 const footer = (page: number, pages: number) => `${BRAND} · ${REPORT_TITLE} · Página ${page} de ${pages}`;
@@ -34,10 +35,10 @@ export function renderReportPdf(report: AdminReport, generatedAt: Date): Promise
           doc.font('Helvetica-Bold').fontSize(9).widthOfString(widest[index] ?? ''),
         ) + COLUMN_PADDING,
     );
-    const extra = (width - natural.reduce((total, size) => total + size, 0)) / labels.length;
+    const scale = width / natural.reduce((total, size) => total + size, 0);
     let x = PDF_MARGIN;
     return labels.map((label, index) => {
-      const size = (natural[index] ?? 0) + extra;
+      const size = (natural[index] ?? 0) * scale;
       const column: PdfColumn = { label, x: x + 4, width: size - 8, align: index === 0 ? 'left' : 'right' };
       x += size;
       return column;
@@ -63,7 +64,7 @@ export function renderReportPdf(report: AdminReport, generatedAt: Date): Promise
         width: tileWidth - 20,
         lineBreak: false,
       });
-      doc.font('Helvetica-Bold').fontSize(14).fillColor(PDF_COLORS.ink).text(value, x + 10, y + 21, {
+      doc.font('Helvetica-Bold').fontSize(14).fillColor(PDF_COLORS.ink).text(value, x + 10, y + 19, {
         width: tileWidth - 20,
         lineBreak: false,
       });
@@ -72,7 +73,7 @@ export function renderReportPdf(report: AdminReport, generatedAt: Date): Promise
     doc.moveDown(0.6);
   };
 
-  header(REPORT_TITLE);
+  header('Administração da clínica');
   doc.font('Helvetica-Bold').fontSize(14).fillColor(PDF_COLORS.ink).text(printable(REPORT_TITLE.toUpperCase()));
   doc.moveDown(0.4);
   pair('Período', periodLabel(report));
@@ -98,7 +99,7 @@ export function renderReportPdf(report: AdminReport, generatedAt: Date): Promise
   table(
     fittedColumns(
       [seriesStartLabel(report), ...SERIES_COLUMNS.map(({ label }) => label)],
-      ['00/00/0000', ...SERIES_COLUMNS.map(() => '00000')],
+      ['00/00/0000', ...SERIES_COLUMNS.map(() => '000000')],
     ),
     report.series.map((bucket) => [
       civilDayLabel(bucket.start),

@@ -1,6 +1,6 @@
-import { rateOf, type AdminReport, type ReportFormat } from './admin-reports.model.js';
+import type { AdminReport, ReportFormat } from './admin-reports.model.js';
 
-type KindTotals = AdminReport['exams'];
+type KindTotals = AdminReport['appointments'] | AdminReport['exams'];
 type StatusKey = Exclude<keyof AdminReport['series'][number], 'start'>;
 
 export interface SummaryLine {
@@ -19,11 +19,19 @@ export const SUMMARY_KINDS = [
 
 export const SUMMARY_LINES: SummaryLine[] = [
   { label: 'Total', value: ({ total }) => total },
+  { label: 'A confirmar', value: ({ pending }) => pending },
+  { label: 'Confirmados', value: ({ confirmed }) => confirmed },
+  { label: 'Aguardando registro', value: ({ awaitingRecord }) => awaitingRecord },
   { label: 'Realizados', value: ({ completed }) => completed },
-  { label: 'Cancelados', value: ({ cancelled }) => cancelled },
   { label: 'Faltas', value: ({ noShow }) => noShow },
-  { label: 'Comparecimento', value: ({ completed, noShow }) => rateOf(completed, noShow), percent: true },
+  { label: 'Taxa de faltas', value: (totals) => ('noShowRate' in totals ? totals.noShowRate : null), percent: true },
+  { label: 'Expirados', value: ({ expired }) => expired },
+  { label: 'Cancelados', value: ({ cancelled }) => cancelled },
   { label: 'Cancelamentos tardios', value: ({ lateCancellations }) => lateCancellations },
+  { label: 'Cancelados pelo paciente', value: ({ cancelledBy }) => cancelledBy.patient },
+  { label: 'Cancelados pelo médico', value: ({ cancelledBy }) => cancelledBy.doctor },
+  { label: 'Cancelados pela clínica', value: ({ cancelledBy }) => cancelledBy.admin },
+  { label: 'Cancelados pelo sistema', value: ({ cancelledBy }) => cancelledBy.system },
 ];
 
 export const SERIES_COLUMNS: { key: StatusKey; label: string }[] = [
@@ -58,7 +66,8 @@ export const civilDayLabel = (date: string) => date.split('-').reverse().join('/
 
 export const periodLabel = ({ period }: AdminReport) => `${civilDayLabel(period.from)} a ${civilDayLabel(period.to)}`;
 
-export const seriesStartLabel = ({ period }: AdminReport) => (period.granularity === 'day' ? 'Dia' : 'Início da semana');
+export const seriesStartLabel = ({ period }: AdminReport) =>
+  period.granularity === 'day' ? 'Dia' : 'Início da semana';
 
 export const isEmptyReport = ({ appointments, exams }: AdminReport) => appointments.total + exams.total === 0;
 
