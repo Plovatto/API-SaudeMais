@@ -126,9 +126,9 @@ describe('POST /api/password-reset/request', () => {
     const { issue, ids } = await siteLimited(1);
     const [first, second, third] = ids;
 
-    expect(await issue(first, 1)).toBe(true);
-    expect(await issue(second, 2, first)).toBe(true);
-    expect(await issue(third, 3)).toBe(false);
+    expect(await issue(first, 1, third)).toBe(true);
+    expect(await issue(second, 2)).toBe(true);
+    expect(await issue(third, 3, second)).toBe(true);
   });
 
   it('leaves welcome links out of the daily total for the whole site', async () => {

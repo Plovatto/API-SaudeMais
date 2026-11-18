@@ -14,11 +14,11 @@ import type { PasswordResetRepository } from './password-reset.repository.js';
 
 export const RESET_TOKEN_MINUTES = 30;
 export const INVALID_RESET_TOKEN_MESSAGE = 'Este link é inválido ou já venceu. Peça um novo.';
+export const WELCOME_TOKEN_HOURS = 72;
 
 function invalidResetToken(): AppError {
   return new AppError(400, 'INVALID_RESET_TOKEN', INVALID_RESET_TOKEN_MESSAGE, { token: INVALID_RESET_TOKEN_MESSAGE });
 }
-export const WELCOME_TOKEN_HOURS = 72;
 
 export class PasswordResetService {
   constructor(
