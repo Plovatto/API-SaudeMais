@@ -10,7 +10,7 @@ import {
   validationErrorResponse,
   type FileDownload,
 } from './common-schemas.js';
-import { registry, sessionSecurity } from './registry.js';
+import { registry, sessionSecurity, type OperationSecurity } from './registry.js';
 
 interface Success {
   status: 200 | 201 | 202 | 204;
@@ -30,8 +30,9 @@ export interface OperationDoc {
   query?: z.ZodObject;
   params?: z.ZodObject;
   success: Success | Success[];
-  errors?: Partial<Record<401 | 403 | 404 | 409 | 422 | 503, ResponseConfig>>;
-  auth?: typeof sessionSecurity;
+  errors?: Partial<Record<400 | 401 | 403 | 404 | 409 | 422 | 503, ResponseConfig>>;
+  auth?: OperationSecurity;
+  rateLimited?: boolean;
 }
 
 export function documentOperation({
@@ -42,6 +43,7 @@ export function documentOperation({
   query,
   params,
   auth = sessionSecurity,
+  rateLimited = true,
   ...operation
 }: OperationDoc): void {
   const responses: Record<number, ResponseConfig> = {
@@ -53,12 +55,12 @@ export function documentOperation({
           file ? fileResponse(description, file) : schema ? jsonResponse(description, schema) : { description },
         ]),
     ),
-    401: unauthenticatedResponse,
-    429: tooManyRequestsResponse,
+    ...(auth.security.length > 0 && { 401: unauthenticatedResponse }),
+    ...(rateLimited && { 429: tooManyRequestsResponse }),
     500: internalErrorResponse,
+    ...(Boolean(body ?? query ?? params) && { 400: validationErrorResponse }),
     ...errors,
   };
-  if (body ?? query ?? params) responses[400] = validationErrorResponse;
   registry.registerPath({
     ...operation,
     tags: [tag],
