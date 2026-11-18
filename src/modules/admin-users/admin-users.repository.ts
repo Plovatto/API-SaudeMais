@@ -15,7 +15,6 @@ const ADMIN_SET_LOCK = 727_003;
 
 const adminUserColumns = {
   ...publicUserColumns,
-  isProtected: users.isProtected,
   deactivatedAt: users.deactivatedAt,
   createdAt: users.createdAt,
 };
@@ -26,7 +25,6 @@ export interface LockedUser {
   id: string;
   email: string;
   roles: Role[];
-  isProtected: boolean;
   deactivatedAt: Date | null;
 }
 
@@ -85,7 +83,6 @@ export class AdminUserRepository {
           id: users.id,
           email: users.email,
           roles: publicUserColumns.roles,
-          isProtected: users.isProtected,
           deactivatedAt: users.deactivatedAt,
         })
         .from(users)

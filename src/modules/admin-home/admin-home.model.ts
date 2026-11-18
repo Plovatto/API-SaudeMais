@@ -8,15 +8,12 @@ export const adminHomeSchema = registry.register(
   z.object({
     patients: z.int().nonnegative().openapi({
       description:
-        'Contas ativas com o perfil de paciente, sem as contas de demonstração. Toda conta nasce paciente, então médicos e administradores também entram.',
+        'Contas ativas com o perfil de paciente. Toda conta nasce paciente, então médicos e administradores também entram.',
       example: 127,
     }),
-    doctors: z
-      .int()
-      .nonnegative()
-      .openapi({ description: 'Contas ativas com o perfil de médico, sem a conta de demonstração.', example: 61 }),
+    doctors: z.int().nonnegative().openapi({ description: 'Contas ativas com o perfil de médico.', example: 61 }),
     appointmentsToday: countSchema(
-      'Consultas que começam hoje no fuso de São Paulo pendentes, confirmadas, concluídas ou com falta registrada, sem as canceladas, as não confirmadas a tempo e as de pacientes de demonstração.',
+      'Consultas que começam hoje no fuso de São Paulo pendentes, confirmadas, concluídas ou com falta registrada, sem as canceladas, e as não confirmadas a tempo.',
       24,
     ),
   }),
