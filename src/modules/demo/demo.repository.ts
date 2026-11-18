@@ -3,7 +3,8 @@ import type { Database } from '../../database/pg-client.js';
 import { auditLogs } from '../../database/schema/audit-logs.js';
 import { bookingEvents, bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
-import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
+import { appointmentDuration, doctorProfiles } from '../../database/schema/doctor-profiles.js';
+import { doctorTimeOff } from '../../database/schema/doctor-schedule.js';
 import { examResults } from '../../database/schema/exam-results.js';
 import { healthMetrics } from '../../database/schema/health-metrics.js';
 import { integrationClients } from '../../database/schema/integration-clients.js';
@@ -153,7 +154,7 @@ export class DemoRepository {
         id: users.id,
         specialtyId: doctorProfiles.specialtyId,
         unitId: doctorProfiles.unitId,
-        durationMin: specialties.appointmentDurationMin,
+        durationMin: appointmentDuration,
       })
       .from(users)
       .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
@@ -175,7 +176,12 @@ export class DemoRepository {
     return row;
   }
 
-  restoreBookings(since: Date, now: Date, demoBookings: DemoBooking[]): Promise<Restoration | undefined> {
+  restoreBookings(
+    since: Date,
+    now: Date,
+    demoBookings: DemoBooking[],
+    timeOff: typeof doctorTimeOff.$inferInsert,
+  ): Promise<Restoration | undefined> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${MAINTENANCE_LOCK}, 1)`);
       if (await restoredSince(tx, since)) return undefined;
@@ -189,6 +195,8 @@ export class DemoRepository {
         .where(inArray(notifications.bookingId, demoBookingIds))
         .returning({ userId: notifications.userId, audienceRole: notifications.audienceRole });
       const deleted = await tx.delete(bookings).where(demoScope).returning({ id: bookings.id });
+      await tx.delete(doctorTimeOff).where(inArray(doctorTimeOff.doctorId, protectedIds));
+      await tx.insert(doctorTimeOff).values(timeOff);
       let created = 0;
       const examCodes: string[] = [];
       for (const { booking, exam, events, metrics } of demoBookings) {
