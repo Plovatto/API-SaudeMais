@@ -8,6 +8,7 @@ import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
+import { seedWithoutSamples } from '../test/support/doctors.js';
 
 const API_KEY = `slab_0a1b2c3d_${'k'.repeat(43)}`;
 const EXAM_CODE = 'EX-7F3K2Q';
@@ -21,8 +22,7 @@ describe('lab results on PostgreSQL', () => {
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await seedWithoutSamples(context.modules);
     await pool.query(
       `insert into integration_clients (name, key_prefix, api_key_hash, created_by)
        select 'Laboratório Central', '0a1b2c3d', $1, id from users order by created_at limit 1`,

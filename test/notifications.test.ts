@@ -6,7 +6,6 @@ import type { NotificationParams, NotificationType } from '@/database/schema/not
 import type { Role } from '@/database/schema/users.js';
 import { MINUTE } from '@/lib/time.js';
 import { NotificationsRepository } from '@/modules/notifications/notifications.repository.js';
-import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
 import { as, buildUsersApp, login, registration } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
@@ -33,7 +32,7 @@ async function session(
 
 async function withAdmin() {
   const context = await buildUsersApp();
-  await context.modules.users.bootstrap(ADMIN, { demoAccounts: false });
+  await context.modules.users.bootstrap(ADMIN);
   return { ...context, admin: await session(context, ADMIN) };
 }
 
@@ -144,22 +143,6 @@ describe('access', () => {
     expect((await request(context.app).post(`${PATH}/read-all?role=doctor`).set(as(patient.token))).status).toBe(403);
     expect((await request(context.app).post(`${PATH}/not-a-uuid/read`).set(as(patient.token))).status).toBe(400);
   });
-
-  it('lets the demo account mark notifications read', async () => {
-    const context = await withAdmin();
-    await context.modules.users.bootstrap(undefined);
-    const [demo] = DEMO_ACCOUNTS;
-    const visitor = await session(context, { email: demo?.email, password: demo?.password });
-    await deliver(context, visitor.id, 'patient');
-    const [item] = itemsOf(await list(context, visitor.token, 'role=patient').expect(200));
-
-    const one = await request(context.app).post(`${PATH}/${item?.id}/read`).set(as(visitor.token));
-    const all = await request(context.app).post(`${PATH}/read-all?role=patient`).set(as(visitor.token));
-
-    expect(one.status).toBe(204);
-    expect(all.status).toBe(204);
-    expect(await unread(context, visitor.token, 'patient')).toBe(0);
-  });
 });
 
 describe('user_registered', () => {
@@ -202,9 +185,11 @@ describe('user_registered', () => {
     const context = await withAdmin();
     await register(context, 'Ana Maria Silva', 'ana.silva@email.com');
     await request(context.app).post('/api/users/register').send(registration()).expect(409);
-    await context.modules.users.bootstrap(undefined);
+    await context.modules.seed.service.seed();
 
-    const rows = await context.db.execute<{ total: number }>(sql`select count(*)::int as total from notifications`);
+    const rows = await context.db.execute<{ total: number }>(
+      sql`select count(*)::int as total from notifications where type = 'user_registered'`,
+    );
     expect(rows.rows[0]?.total).toBe(1);
   });
 

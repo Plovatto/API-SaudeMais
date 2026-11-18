@@ -3,7 +3,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { bookings, users, type BookingStatus } from '@/database/schema/index.js';
 import { lockSeen, moveBooking } from '@/modules/bookings/bookings.repository.js';
-import { DEMO_PATIENT } from '@/modules/users/user.demo.js';
+import { EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
 import { createDoctor, doctorNamed, setupClinic, type Clinic } from './support/doctors.js';
 import { as, createAdmin, createPatient, HOUR, registration, signUp } from './support/users.js';
 
@@ -59,7 +59,7 @@ async function remindedAt(id: string) {
 }
 
 const runMaintenance = async () => {
-  const report = await context.modules.maintenance.run({ restoreDemo: false });
+  const report = await context.modules.maintenance.run();
   await context.mail.drain();
   return report;
 };
@@ -115,10 +115,10 @@ describe('e-mail preferences', () => {
     expect((await choose(context.patient, body)).status).toBe(400);
   });
 
-  it('lets the demo account change its choices', async () => {
-    await preferences(context.demoPatient).expect(200);
+  it('lets the example account change its choices', async () => {
+    await preferences(context.examplePatient).expect(200);
 
-    const response = await choose(context.demoPatient, { preferences: [{ topic: 'exam_result', enabled: false }] });
+    const response = await choose(context.examplePatient, { preferences: [{ topic: 'exam_result', enabled: false }] });
 
     expect(response.status).toBe(200);
   });
@@ -202,16 +202,23 @@ describe('reminders', () => {
     expect(await remindedAt(pending)).toBeNull();
   });
 
-  it('marks but does not e-mail patients who turned reminders off or the demo account', async () => {
+  it('marks but does not e-mail patients who turned reminders off', async () => {
     await choose(context.patient, { preferences: [{ topic: 'booking_reminder', enabled: false }] }).expect(200);
     const quiet = await appointment(PATIENT_EMAIL, 'confirmed', later(3 * HOUR));
-    const demo = await appointment(DEMO_PATIENT.email, 'confirmed', later(4 * HOUR));
 
     expect((await runMaintenance()).remindersSent).toBe(0);
 
     expect(context.mailer.sent).toEqual([]);
     expect(await remindedAt(quiet)).not.toBeNull();
-    expect(await remindedAt(demo)).not.toBeNull();
+  });
+
+  it('e-mails the example account like any other patient', async () => {
+    const example = await appointment(EXAMPLE_PATIENT.email, 'confirmed', later(4 * HOUR));
+
+    expect((await runMaintenance()).remindersSent).toBe(1);
+
+    expect(context.mailer.sent.map(({ to }) => to)).toEqual([EXAMPLE_PATIENT.email]);
+    expect(await remindedAt(example)).not.toBeNull();
   });
 
   it('reminds a booking again after it is moved', async () => {

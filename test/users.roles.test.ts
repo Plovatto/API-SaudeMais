@@ -10,7 +10,7 @@ import { createRequireRole } from '@/middleware/auth.js';
 import { rateLimitDefaults } from '@/middleware/rate-limit.js';
 import { MailQueue } from '@/mail/index.js';
 import { createModules } from '@/modules/index.js';
-import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
+import { EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
 import { TEST_CORS_ORIGIN } from './support/build-test-app.js';
 import { createTestDb } from './support/create-test-db.js';
 import { fixedClock } from './support/fixed-clock.js';
@@ -18,8 +18,6 @@ import { MemoryMailer } from './support/memory-mailer.js';
 import { login, registration, START } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
-const demo = DEMO_ACCOUNTS[0];
-if (!demo) throw new Error('A demo account is expected');
 
 async function buildRolesApp() {
   const db = await createTestDb();
@@ -78,19 +76,16 @@ describe('role authorization', () => {
 });
 
 describe('initial accounts', () => {
-  it('creates the admin as patient and admin, and the demo patient as a protected account', async () => {
+  it('creates only the admin, as patient and admin, at startup', async () => {
     const { db, users } = await buildRolesApp();
 
     await users.bootstrap(ADMIN);
 
-    const rows = await db.execute<{ email: string; is_protected: boolean; roles: string[] }>(sql`
-      select email, is_protected, array(select role from user_roles where user_id = users.id order by role) as roles
+    const rows = await db.execute<{ email: string; roles: string[] }>(sql`
+      select email, array(select role from user_roles where user_id = users.id order by role) as roles
       from users order by email
     `);
-    expect(rows.rows).toEqual([
-      { email: ADMIN.email, is_protected: false, roles: ['admin', 'patient'] },
-      { email: demo.email, is_protected: true, roles: ['patient'] },
-    ]);
+    expect(rows.rows).toEqual([{ email: ADMIN.email, roles: ['admin', 'patient'] }]);
   });
 
   it('refuses to promote an existing account whose password does not match', async () => {
@@ -104,23 +99,6 @@ describe('initial accounts', () => {
     const rows = await db.execute<{ total: number }>(
       sql`select count(*)::int as total from user_roles where role = 'admin'`,
     );
-    expect(rows.rows[0]?.total).toBe(0);
-  });
-
-  it('skips the demo account with a warning when its e-mail belongs to a regular account', async () => {
-    const { db, users } = await buildRolesApp();
-    await users.service.ensureAccount({ ...demo, isProtected: false });
-
-    await expect(users.bootstrap(undefined)).resolves.toEqual([expect.stringMatching(/different protection/)]);
-    const rows = await db.execute<{ is_protected: boolean }>(sql`select is_protected from users`);
-    expect(rows.rows).toEqual([{ is_protected: false }]);
-  });
-
-  it('creates no demo account when demo accounts are turned off', async () => {
-    const { db, users } = await buildRolesApp();
-
-    await expect(users.bootstrap(undefined, { demoAccounts: false })).resolves.toEqual([]);
-    const rows = await db.execute<{ total: number }>(sql`select count(*)::int as total from users`);
     expect(rows.rows[0]?.total).toBe(0);
   });
 
@@ -139,32 +117,27 @@ describe('initial accounts', () => {
         array(select role from user_roles join users u on u.id = user_id where u.email = ${ADMIN.email} order by role) as roles
       from users
     `);
-    expect(rows.rows[0]).toEqual({ total: 2, roles: ['admin', 'patient'] });
-  });
-
-  it('skips the admin when none is configured', async () => {
-    const { db, users } = await buildRolesApp();
-
-    await users.bootstrap(undefined);
-
-    const rows = await db.execute<{ email: string }>(sql`select email from users`);
-    expect(rows.rows).toEqual([{ email: demo.email }]);
+    expect(rows.rows[0]).toEqual({ total: 1, roles: ['admin', 'patient'] });
   });
 });
 
-describe('protected demo account', () => {
-  it('keeps more than 10 sessions, since many visitors share it, but never remembers them', async () => {
+describe('example account', () => {
+  it('keeps at most 10 sessions and remembers them like any other account', async () => {
     const { app, db, users } = await buildRolesApp();
-    await users.bootstrap(undefined);
+    await users.service.ensureAccount(EXAMPLE_PATIENT);
     let expiresAt = '';
     for (let attempt = 0; attempt < 11; attempt += 1) {
-      const response = await login(app, { email: demo.email, password: demo.password, remember: true }).expect(200);
+      const response = await login(app, {
+        email: EXAMPLE_PATIENT.email,
+        password: EXAMPLE_PATIENT.password,
+        remember: true,
+      }).expect(200);
       expiresAt = (response.body as { expiresAt: string }).expiresAt;
     }
 
     const total = await db.execute<{ total: number }>(sql`select count(*)::int as total from sessions`);
 
-    expect(total.rows[0]?.total).toBe(11);
-    expect(expiresAt).toBe(new Date(START.getTime() + 12 * 3_600_000).toISOString());
+    expect(total.rows[0]?.total).toBe(10);
+    expect(expiresAt).toBe(new Date(START.getTime() + 7 * 24 * 3_600_000).toISOString());
   });
 });

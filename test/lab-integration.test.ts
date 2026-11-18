@@ -376,24 +376,4 @@ describe('POST /api/integrations/lab/results', () => {
     const notices = await rows<{ params: unknown }>(sql`select params from notifications`);
     expect(JSON.stringify([audit, notices])).not.toMatch(/SIGILOSO|sigiloso/);
   });
-
-  it('lets the demo restoration replace the results of demo exams', async () => {
-    const restore = async () => {
-      await context.db.execute(sql`delete from audit_logs where action = 'demo.restored'`);
-      return context.modules.demo.service.restore();
-    };
-    const demoResults = () =>
-      rows<{ booking_id: string }>(sql`
-        select r.booking_id from exam_results r join bookings b on b.id = r.booking_id
-        join users u on u.id = b.patient_id where u.is_protected
-      `);
-    await restore();
-    const before = await demoResults();
-
-    await expect(restore()).resolves.toBeDefined();
-
-    const after = await demoResults();
-    expect([before.length, after.length]).toEqual([1, 1]);
-    expect(after).not.toEqual(before);
-  });
 });

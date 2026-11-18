@@ -1,20 +1,20 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR } from '@/modules/users/user.seed.js';
 import { TERMS_VERSION } from '@/modules/users/user.service.js';
 import { buildUsersApp, registration } from './support/users.js';
 
 describe('POST /api/users/register', () => {
-  it('refuses the e-mail reserved for a demo account even before it exists', async () => {
+  it('accepts the e-mail of an example account that does not exist yet, like any other', async () => {
     const { app } = await buildUsersApp();
 
     const response = await request(app)
       .post('/api/users/register')
-      .send(registration({ email: DEMO_DOCTOR.email.toUpperCase() }));
+      .send(registration({ email: EXAMPLE_DOCTOR.email.toUpperCase() }));
 
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({ code: 'EMAIL_TAKEN' });
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ email: EXAMPLE_DOCTOR.email });
   });
 
   it('creates a patient-only account with a normalized e-mail and phone', async () => {

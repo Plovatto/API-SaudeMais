@@ -1,18 +1,13 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
+import { EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
 import { createSessionToken } from '@/modules/users/user.token.js';
 import { buildUsersApp, HOUR, login, registerAndLogin, START } from './support/users.js';
 
 type App = Parameters<typeof request>[0];
 type Session = { id: string; current: boolean };
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
-const demo = (() => {
-  const account = DEMO_ACCOUNTS[0];
-  if (!account) throw new Error('A demo account is expected');
-  return account;
-})();
 
 const changePassword = (app: App, token: string, body: Record<string, unknown>) =>
   request(app)
@@ -260,46 +255,45 @@ describe('sessions', () => {
   });
 });
 
-describe('protected demo account', () => {
-  async function demoApp() {
+describe('example account', () => {
+  async function exampleApp() {
     const context = await buildUsersApp();
-    await context.modules.users.bootstrap(undefined);
-    const first = ((await login(context.app, { email: demo.email, password: demo.password })).body as { token: string })
-      .token;
-    const second = (
-      (await login(context.app, { email: demo.email, password: demo.password })).body as { token: string }
-    ).token;
+    await context.modules.users.service.ensureAccount(EXAMPLE_PATIENT);
+    const credentials = { email: EXAMPLE_PATIENT.email, password: EXAMPLE_PATIENT.password };
+    const first = ((await login(context.app, credentials)).body as { token: string }).token;
+    const second = ((await login(context.app, credentials)).body as { token: string }).token;
     return { ...context, first, second };
   }
 
   it('can change its data and password', async () => {
-    const { app, first } = await demoApp();
+    const { app, first } = await exampleApp();
 
     const patch = await request(app)
       .patch('/api/me')
       .set(auth(first))
       .send({ fullName: 'Outro Nome', birthDate: '1990-01-01' });
-    const password = await changePassword(app, first, { currentPassword: demo.password });
+    const password = await changePassword(app, first, { currentPassword: EXAMPLE_PATIENT.password });
 
     expect(patch.status).toBe(200);
     expect(patch.body).toMatchObject({ fullName: 'Outro Nome', birthDate: '1990-01-01' });
     expect(password.status).toBe(204);
   });
 
-  it('signs out only the visitor who asked', async () => {
-    const { app, auth: service, first, second } = await demoApp();
+  it('signs out every session when asked, like any other account', async () => {
+    const { app, auth: service, first, second } = await exampleApp();
 
     await request(app).delete('/api/me/sessions').set(auth(first)).expect(204);
 
     expect(await service.authenticate(first)).toBeNull();
-    expect(await service.authenticate(second)).not.toBeNull();
+    expect(await service.authenticate(second)).toBeNull();
   });
 
-  it("keeps other visitors' sessions when asked to end the others", async () => {
-    const { app, auth: service, first, second } = await demoApp();
+  it('ends the other sessions when asked, like any other account', async () => {
+    const { app, auth: service, first, second } = await exampleApp();
 
     await request(app).delete('/api/me/sessions/others').set(auth(first)).expect(204);
 
-    expect(await service.authenticate(second)).not.toBeNull();
+    expect(await service.authenticate(first)).not.toBeNull();
+    expect(await service.authenticate(second)).toBeNull();
   });
 });
