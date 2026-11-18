@@ -1,12 +1,12 @@
-## O que foi feito
+## What changed
 
 - 
 
-## Detalhes
+## Details
 
 - 
 
-## Testes
+## Tests
 
 - 
 
