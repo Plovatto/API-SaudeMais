@@ -101,3 +101,19 @@ export function nullableRef<T extends z.ZodType>(schema: T) {
 
 export const countSchema = (description: string, example: number) =>
   z.int().nonnegative().openapi({ description, example });
+
+export interface FileDownload {
+  mediaTypes: [string, ...string[]];
+  disposition: string;
+  example: string;
+}
+
+export function fileResponse(description: string, { mediaTypes, disposition, example }: FileDownload) {
+  return {
+    description,
+    headers: { 'Content-Disposition': { description: disposition, schema: { type: 'string' as const, example } } },
+    content: Object.fromEntries(
+      mediaTypes.map((mediaType) => [mediaType, { schema: { type: 'string' as const, format: 'binary' } }]),
+    ),
+  };
+}

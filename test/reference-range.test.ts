@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aboutItem } from '@/modules/exam-results/exam-results.glossary.js';
-import { printable } from '@/modules/exam-results/exam-results.pdf.js';
+import { printable } from '@/lib/pdf.js';
 import { parseReferenceRange } from '@/modules/exam-results/reference-range.js';
 
 describe('parseReferenceRange', () => {

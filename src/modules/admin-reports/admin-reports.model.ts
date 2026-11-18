@@ -20,6 +20,22 @@ export const reportsQuery = z.strictObject({
   }),
 });
 
+export const exportMediaTypes = {
+  pdf: 'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+} as const;
+
+type ExportFormat = keyof typeof exportMediaTypes;
+
+const reportFormats = Object.keys(exportMediaTypes) as [ExportFormat, ...ExportFormat[]];
+
+export const reportExportQuery = reportsQuery.extend({
+  format: z.enum(reportFormats).openapi({
+    description: 'Formato do arquivo: `pdf` para imprimir ou `xlsx` para abrir em planilha.',
+    example: 'pdf',
+  }),
+});
+
 export const reportPeriod = withPeriodRules(z.object(periodShape), MAX_REPORT_DAYS);
 
 const statusTotalsShape = {
@@ -98,5 +114,12 @@ export const adminReportSchema = registry.register(
   }),
 );
 
+export function rateOf(part: number, rest: number): number | null {
+  const whole = part + rest;
+  return whole === 0 ? null : Math.round((part / whole) * 1000) / 1000;
+}
+
 export type ReportsQuery = z.infer<typeof reportsQuery>;
+export type ReportExportQuery = z.infer<typeof reportExportQuery>;
+export type ReportFormat = ReportExportQuery['format'];
 export type AdminReport = z.infer<typeof adminReportSchema>;

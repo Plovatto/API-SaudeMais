@@ -4,6 +4,12 @@ export const DAY = 24 * HOUR;
 
 export const CLINIC_TIME_ZONE = 'America/Sao_Paulo';
 
+export const clinicDateTime = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: CLINIC_TIME_ZONE,
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
+
 const offsetFormats = new Map<string, Intl.DateTimeFormat>();
 
 function offsetMinutes(timeZone: string, date: Date): number {

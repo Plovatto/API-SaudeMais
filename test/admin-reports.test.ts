@@ -1,8 +1,11 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { DAY } from '@/lib/time.js';
+import { binary } from './support/binary.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { as, login } from './support/users.js';
+import { EXCEL_EPOCH, workbookOf } from './support/xlsx.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PATIENT = 'ana.silva@email.com';
@@ -27,10 +30,12 @@ interface Totals {
   expired: number;
 }
 
+type CancelledBy = Record<'patient' | 'doctor' | 'admin' | 'system', number>;
+
 interface Report {
   period: { from: string; to: string; granularity: 'day' | 'week' };
-  appointments: Totals & { lateCancellations: number; cancelledBy: Record<string, number>; noShowRate: number | null };
-  exams: Totals & { lateCancellations: number; cancelledBy: Record<string, number> };
+  appointments: Totals & { lateCancellations: number; cancelledBy: CancelledBy; noShowRate: number | null };
+  exams: Totals & { lateCancellations: number; cancelledBy: CancelledBy };
   series: (Totals & { start: string })[];
   topSpecialties: { id: string; name: string; total: number }[];
   topExamTypes: { id: string; name: string; total: number }[];
@@ -95,6 +100,9 @@ function exam(code: string, publicCode: string, startsAt: string, status: string
 
 const reports = (query: Record<string, string> = {}, token = admin) =>
   request(context.app).get('/api/admin/reports').query(query).set(as(token));
+
+const exportOf = (query: Record<string, string>, token = admin) =>
+  request(context.app).get('/api/admin/reports/export').query(query).set(as(token)).buffer(true).parse(binary);
 
 async function reportOf(query: Record<string, string> = {}) {
   const response = await reports(query).expect(200);
@@ -262,5 +270,98 @@ describe('GET /api/admin/reports', () => {
   it('is only for admins', async () => {
     expect((await request(context.app).get('/api/admin/reports')).status).toBe(401);
     expect((await reports({}, context.patient)).status).toBe(403);
+  });
+});
+
+describe('GET /api/admin/reports/export', () => {
+  const period = { from: '2026-11-10', to: '2026-11-20' };
+
+  it('downloads the report of the period as a pdf attachment', async () => {
+    const response = await exportOf({ ...period, format: 'pdf' }).expect(200);
+
+    expect(response.headers['content-type']).toBe('application/pdf');
+    expect(response.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-11-10_a_2026-11-20.pdf');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect((response.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('prints both files for a period without bookings', async () => {
+    const pdf = await exportOf({ from: '2026-01-01', to: '2026-01-07', format: 'pdf' }).expect(200);
+    const xlsx = await exportOf({ from: '2026-01-01', to: '2026-01-07', format: 'xlsx' }).expect(200);
+
+    expect(pdf.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-01-01_a_2026-01-07.pdf');
+    expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+    expect(workbookOf(xlsx.body as Buffer).sheet(3)).toEqual([['Especialidade', 'Agendamentos']]);
+  });
+
+  it('downloads a spreadsheet with the same numbers as the report', async () => {
+    const response = await exportOf({ ...period, format: 'xlsx' }).expect(200);
+    const report = await reportOf(period);
+    const workbook = workbookOf(response.body as Buffer);
+    const summary = workbook.sheet(1);
+    expect(response.headers['content-type']).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(response.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-11-10_a_2026-11-20.xlsx');
+    expect(workbook.names).toEqual(['Resumo', 'Série', 'Especialidades', 'Exames']);
+    expect(summary[1]).toEqual(['Período', '10/11/2026 a 20/11/2026', null]);
+    expect(summary[4]).toEqual(['Indicador', 'Consultas', 'Exames']);
+    expect(summary.slice(5)).toEqual(
+      (
+        [
+          ['Total', ({ total }) => total],
+          ['A confirmar', ({ pending }) => pending],
+          ['Confirmados', ({ confirmed }) => confirmed],
+          ['Aguardando registro', ({ awaitingRecord }) => awaitingRecord],
+          ['Realizados', ({ completed }) => completed],
+          ['Faltas', ({ noShow }) => noShow],
+          ['Taxa de faltas', (totals) => ('noShowRate' in totals ? totals.noShowRate : null)],
+          ['Expirados', ({ expired }) => expired],
+          ['Cancelados', ({ cancelled }) => cancelled],
+          ['Cancelamentos tardios', ({ lateCancellations }) => lateCancellations],
+          ['Cancelados pelo paciente', ({ cancelledBy }) => cancelledBy.patient],
+          ['Cancelados pelo médico', ({ cancelledBy }) => cancelledBy.doctor],
+          ['Cancelados por administrador', ({ cancelledBy }) => cancelledBy.admin],
+          ['Cancelados pelo sistema', ({ cancelledBy }) => cancelledBy.system],
+        ] satisfies [string, (totals: Report['appointments'] | Report['exams']) => number | null][]
+      ).map(([label, value]) => [label, value(report.appointments), value(report.exams)]),
+    );
+    expect(workbook.sheet(2).slice(1)).toEqual(
+      report.series.map((bucket) => [
+        Date.parse(`${bucket.start}T00:00:00Z`) / DAY + EXCEL_EPOCH,
+        bucket.total,
+        bucket.completed,
+        bucket.noShow,
+        bucket.cancelled,
+        bucket.confirmed,
+        bucket.pending,
+        bucket.awaitingRecord,
+        bucket.expired,
+      ]),
+    );
+    expect(workbook.sheet(3).slice(1)).toEqual(report.topSpecialties.map(({ name, total }) => [name, total]));
+    expect(workbook.sheet(4).slice(1)).toEqual(report.topExamTypes.map(({ name, total }) => [name, total]));
+    expect(workbook.text).not.toContain(PATIENT);
+  });
+
+  it('refuses the same periods as the report and a missing or unknown format', async () => {
+    const refused = [
+      await exportOf({ from: '2025-11-19', to: '2026-11-20', format: 'pdf' }),
+      await exportOf(period),
+      await exportOf({ ...period, format: 'csv' }),
+    ];
+
+    expect(refused.map(({ status }) => status)).toEqual([400, 400, 400]);
+    const [longer, missing, unknown] = refused.map(
+      ({ body }) => JSON.parse((body as Buffer).toString()) as { code: string; fields: Record<string, string> },
+    );
+    expect(longer?.fields).toEqual({ to: 'Consulte no máximo 366 dias por vez.' });
+    expect(Object.keys(missing?.fields ?? {})).toEqual(['format']);
+    expect(unknown?.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('is only for admins', async () => {
+    expect((await request(context.app).get('/api/admin/reports/export').query({ format: 'pdf' })).status).toBe(401);
+    expect((await exportOf({ format: 'pdf' }, context.patient)).status).toBe(403);
   });
 });

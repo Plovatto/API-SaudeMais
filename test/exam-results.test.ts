@@ -1,11 +1,11 @@
 import { sql } from 'drizzle-orm';
-import type { Response } from 'superagent';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { aboutItem } from '@/modules/exam-results/exam-results.glossary.js';
 import { parseReferenceRange } from '@/modules/exam-results/reference-range.js';
 import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
 import { UNKNOWN_ID } from './support/agenda.js';
+import { binary } from './support/binary.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
 import { insertExam, offerOf, type Offer } from './support/exams.js';
 import { createLabKey, ISSUED_AT, publishResult, rowsOf, valueOf, type Exam } from './support/lab.js';
@@ -45,12 +45,6 @@ const ITEMS = [
   { name: 'Leucócitos', value: 'Ausentes', unit: null, referenceRange: null, flag: 'low' },
 ];
 const AMENDED_ITEMS = [{ ...ITEMS[0], value: 11.2, flag: 'low' }, ITEMS[1]];
-const binary = (response: Response, done: (error: Error | null, body: Buffer) => void) => {
-  const stream = response as unknown as NodeJS.ReadableStream;
-  const chunks: Buffer[] = [];
-  stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-  stream.on('end', () => done(null, Buffer.concat(chunks)));
-};
 const detailed = (items: readonly (object | undefined)[]) =>
   items.map((item) => {
     const { name = '', referenceRange = null } = (item ?? {}) as { name?: string; referenceRange?: string | null };
