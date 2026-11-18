@@ -30,7 +30,7 @@ export const SUMMARY_LINES: SummaryLine[] = [
   { label: 'Cancelamentos tardios', value: ({ lateCancellations }) => lateCancellations },
   { label: 'Cancelados pelo paciente', value: ({ cancelledBy }) => cancelledBy.patient },
   { label: 'Cancelados pelo médico', value: ({ cancelledBy }) => cancelledBy.doctor },
-  { label: 'Cancelados pela clínica', value: ({ cancelledBy }) => cancelledBy.admin },
+  { label: 'Cancelados por administrador', value: ({ cancelledBy }) => cancelledBy.admin },
   { label: 'Cancelados pelo sistema', value: ({ cancelledBy }) => cancelledBy.system },
 ];
 

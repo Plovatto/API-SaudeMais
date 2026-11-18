@@ -1,10 +1,11 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { DAY } from '@/lib/time.js';
 import { binary } from './support/binary.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { as, login } from './support/users.js';
-import { DAY_MS, EXCEL_EPOCH, workbookOf } from './support/xlsx.js';
+import { EXCEL_EPOCH, workbookOf } from './support/xlsx.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PATIENT = 'ana.silva@email.com';
@@ -29,10 +30,12 @@ interface Totals {
   expired: number;
 }
 
+type CancelledBy = Record<'patient' | 'doctor' | 'admin' | 'system', number>;
+
 interface Report {
   period: { from: string; to: string; granularity: 'day' | 'week' };
-  appointments: Totals & { lateCancellations: number; cancelledBy: Record<string, number>; noShowRate: number | null };
-  exams: Totals & { lateCancellations: number; cancelledBy: Record<string, number> };
+  appointments: Totals & { lateCancellations: number; cancelledBy: CancelledBy; noShowRate: number | null };
+  exams: Totals & { lateCancellations: number; cancelledBy: CancelledBy };
   series: (Totals & { start: string })[];
   topSpecialties: { id: string; name: string; total: number }[];
   topExamTypes: { id: string; name: string; total: number }[];
@@ -296,32 +299,36 @@ describe('GET /api/admin/reports/export', () => {
     const report = await reportOf(period);
     const workbook = workbookOf(response.body as Buffer);
     const summary = workbook.sheet(1);
-    const indicator = (label: string) => {
-      const row = summary.find(([name]) => name === label) ?? [];
-      return [row[1] ?? null, row[2] ?? null];
-    };
-
     expect(response.headers['content-type']).toBe(
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(response.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-11-10_a_2026-11-20.xlsx');
     expect(workbook.names).toEqual(['Resumo', 'Série', 'Especialidades', 'Exames']);
-    expect(summary[1]).toEqual(['Período', '10/11/2026 a 20/11/2026']);
+    expect(summary[1]).toEqual(['Período', '10/11/2026 a 20/11/2026', null]);
     expect(summary[4]).toEqual(['Indicador', 'Consultas', 'Exames']);
-    expect(indicator('Total')).toEqual([report.appointments.total, report.exams.total]);
-    expect(indicator('Aguardando registro')).toEqual([report.appointments.awaitingRecord, report.exams.awaitingRecord]);
-    expect(indicator('Taxa de faltas')).toEqual([report.appointments.noShowRate, null]);
-    expect(indicator('Cancelados pelo paciente')).toEqual([
-      report.appointments.cancelledBy.patient,
-      report.exams.cancelledBy.patient,
-    ]);
-    expect(indicator('Cancelamentos tardios')).toEqual([
-      report.appointments.lateCancellations,
-      report.exams.lateCancellations,
-    ]);
+    expect(summary.slice(5)).toEqual(
+      (
+        [
+          ['Total', ({ total }) => total],
+          ['A confirmar', ({ pending }) => pending],
+          ['Confirmados', ({ confirmed }) => confirmed],
+          ['Aguardando registro', ({ awaitingRecord }) => awaitingRecord],
+          ['Realizados', ({ completed }) => completed],
+          ['Faltas', ({ noShow }) => noShow],
+          ['Taxa de faltas', (totals) => ('noShowRate' in totals ? totals.noShowRate : null)],
+          ['Expirados', ({ expired }) => expired],
+          ['Cancelados', ({ cancelled }) => cancelled],
+          ['Cancelamentos tardios', ({ lateCancellations }) => lateCancellations],
+          ['Cancelados pelo paciente', ({ cancelledBy }) => cancelledBy.patient],
+          ['Cancelados pelo médico', ({ cancelledBy }) => cancelledBy.doctor],
+          ['Cancelados por administrador', ({ cancelledBy }) => cancelledBy.admin],
+          ['Cancelados pelo sistema', ({ cancelledBy }) => cancelledBy.system],
+        ] satisfies [string, (totals: Report['appointments'] | Report['exams']) => number | null][]
+      ).map(([label, value]) => [label, value(report.appointments), value(report.exams)]),
+    );
     expect(workbook.sheet(2).slice(1)).toEqual(
       report.series.map((bucket) => [
-        Date.parse(`${bucket.start}T00:00:00Z`) / DAY_MS + EXCEL_EPOCH,
+        Date.parse(`${bucket.start}T00:00:00Z`) / DAY + EXCEL_EPOCH,
         bucket.total,
         bucket.completed,
         bucket.noShow,
