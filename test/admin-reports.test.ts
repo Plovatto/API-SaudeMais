@@ -1,10 +1,10 @@
 import { sql } from 'drizzle-orm';
-import { strFromU8, unzipSync } from 'fflate';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { binary } from './support/binary.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { as, login } from './support/users.js';
+import { DAY_MS, EXCEL_EPOCH, workbookOf } from './support/xlsx.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PATIENT = 'ana.silva@email.com';
@@ -282,37 +282,59 @@ describe('GET /api/admin/reports/export', () => {
     expect((response.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
   });
 
-  it('prints a pdf for a period without bookings', async () => {
-    const response = await exportOf({ from: '2026-01-01', to: '2026-01-07', format: 'pdf' }).expect(200);
+  it('prints both files for a period without bookings', async () => {
+    const pdf = await exportOf({ from: '2026-01-01', to: '2026-01-07', format: 'pdf' }).expect(200);
+    const xlsx = await exportOf({ from: '2026-01-01', to: '2026-01-07', format: 'xlsx' }).expect(200);
 
-    expect((response.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pdf.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-01-01_a_2026-01-07.pdf');
+    expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+    expect(workbookOf(xlsx.body as Buffer).sheet(3)).toEqual([['Especialidade', 'Agendamentos']]);
   });
 
-  it('downloads a spreadsheet with the summary, series and rankings as numbers', async () => {
+  it('downloads a spreadsheet with the same numbers as the report', async () => {
     const response = await exportOf({ ...period, format: 'xlsx' }).expect(200);
-    const files = unzipSync(new Uint8Array(response.body as Buffer));
-    const workbook = strFromU8(files['xl/workbook.xml'] ?? new Uint8Array());
-    const strings = strFromU8(files['xl/sharedStrings.xml'] ?? new Uint8Array());
-    const summary = strFromU8(files['xl/worksheets/sheet1.xml'] ?? new Uint8Array());
-    const series = strFromU8(files['xl/worksheets/sheet2.xml'] ?? new Uint8Array());
+    const report = await reportOf(period);
+    const workbook = workbookOf(response.body as Buffer);
+    const summary = workbook.sheet(1);
+    const indicator = (label: string) => {
+      const row = summary.find(([name]) => name === label) ?? [];
+      return [row[1] ?? null, row[2] ?? null];
+    };
 
     expect(response.headers['content-type']).toBe(
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(response.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-11-10_a_2026-11-20.xlsx');
-    expect([...workbook.matchAll(/<sheet [^>]*name="([^"]+)"/g)].map(([, name]) => name)).toEqual([
-      'Resumo',
-      'Série',
-      'Especialidades',
-      'Exames',
+    expect(workbook.names).toEqual(['Resumo', 'Série', 'Especialidades', 'Exames']);
+    expect(summary[1]).toEqual(['Período', '10/11/2026 a 20/11/2026']);
+    expect(summary[4]).toEqual(['Indicador', 'Consultas', 'Exames']);
+    expect(indicator('Total')).toEqual([report.appointments.total, report.exams.total]);
+    expect(indicator('Aguardando registro')).toEqual([report.appointments.awaitingRecord, report.exams.awaitingRecord]);
+    expect(indicator('Taxa de faltas')).toEqual([report.appointments.noShowRate, null]);
+    expect(indicator('Cancelados pelo paciente')).toEqual([
+      report.appointments.cancelledBy.patient,
+      report.exams.cancelledBy.patient,
     ]);
-    for (const text of ['Comparecimento', 'Cardiologia', 'Glicemia', '10/11/2026 a 20/11/2026']) {
-      expect(strings).toContain(text);
-    }
-    expect(summary).toContain('<v>13</v>');
-    expect(summary).toContain('<v>0.667</v>');
-    expect(series.match(/<row /g)).toHaveLength(12);
-    expect(strings).not.toContain(PATIENT);
+    expect(indicator('Cancelamentos tardios')).toEqual([
+      report.appointments.lateCancellations,
+      report.exams.lateCancellations,
+    ]);
+    expect(workbook.sheet(2).slice(1)).toEqual(
+      report.series.map((bucket) => [
+        Date.parse(`${bucket.start}T00:00:00Z`) / DAY_MS + EXCEL_EPOCH,
+        bucket.total,
+        bucket.completed,
+        bucket.noShow,
+        bucket.cancelled,
+        bucket.confirmed,
+        bucket.pending,
+        bucket.awaitingRecord,
+        bucket.expired,
+      ]),
+    );
+    expect(workbook.sheet(3).slice(1)).toEqual(report.topSpecialties.map(({ name, total }) => [name, total]));
+    expect(workbook.sheet(4).slice(1)).toEqual(report.topExamTypes.map(({ name, total }) => [name, total]));
+    expect(workbook.text).not.toContain(PATIENT);
   });
 
   it('refuses the same periods as the report and a missing or unknown format', async () => {
