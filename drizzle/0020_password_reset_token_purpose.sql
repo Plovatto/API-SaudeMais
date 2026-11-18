@@ -1,0 +1,2 @@
+ALTER TABLE "password_reset_tokens" ADD COLUMN "purpose" text DEFAULT 'reset' NOT NULL;--> statement-breakpoint
+ALTER TABLE "password_reset_tokens" ADD CONSTRAINT "password_reset_tokens_purpose_check" CHECK (purpose in ('reset', 'welcome'));

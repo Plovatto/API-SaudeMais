@@ -2,7 +2,7 @@ import type { AfterCommit, Database } from '../../database/pg-client.js';
 import type { AuditEntry } from '../../lib/audit.js';
 import { AppError } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
-import { CLINIC_TIME_ZONE, MINUTE, startOfDayIn } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, HOUR, MINUTE, startOfDayIn } from '../../lib/time.js';
 import type { MailQueue } from '../../mail/index.js';
 import { hashPassword } from '../users/user.password.js';
 import type { UserRepository } from '../users/user.repository.js';
@@ -36,7 +36,7 @@ export class PasswordResetService {
     requestedBy: string | null,
     audit?: AuditEntry,
   ): Promise<boolean> {
-    const { link, ...token } = this.newToken(RESET_TOKEN_MINUTES);
+    const { link, ...token } = this.newToken(RESET_TOKEN_MINUTES * MINUTE);
     const issued = await this.resets.issue({
       userId: user.id,
       requestedBy,
@@ -53,18 +53,18 @@ export class PasswordResetService {
     user: { id: string; email: string },
     requestedBy: string,
   ): Promise<AfterCommit> {
-    const { link, ...token } = this.newToken(WELCOME_TOKEN_HOURS * 60);
-    await this.resets.store(tx, { userId: user.id, requestedBy, ...token });
+    const { link, ...token } = this.newToken(WELCOME_TOKEN_HOURS * HOUR);
+    await this.resets.store(tx, { userId: user.id, requestedBy, purpose: 'welcome', ...token });
     return () => this.mail.enqueue(welcomeEmail(user.email, link, WELCOME_TOKEN_HOURS));
   }
 
-  private newToken(minutes: number) {
+  private newToken(lifetimeMs: number) {
     const now = this.clock.now();
     const { token, tokenHash } = createSessionToken();
     return {
       tokenHash,
       now,
-      expiresAt: new Date(now.getTime() + minutes * MINUTE),
+      expiresAt: new Date(now.getTime() + lifetimeMs),
       link: `${this.appUrl}/redefinir-senha#token=${token}`,
     };
   }

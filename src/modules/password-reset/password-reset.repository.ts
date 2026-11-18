@@ -1,6 +1,6 @@
 import { and, eq, gt, gte, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
-import { passwordResetTokens } from '../../database/schema/password-reset-tokens.js';
+import { passwordResetTokens, type ResetTokenPurpose } from '../../database/schema/password-reset-tokens.js';
 import { users } from '../../database/schema/users.js';
 import { recordAudit, type AuditEntry } from '../../lib/audit.js';
 import { applyNewPassword } from '../users/user.repository.js';
@@ -20,6 +20,7 @@ export interface NewResetToken {
   now: Date;
   expiresAt: Date;
   dayStart: Date;
+  purpose?: ResetTokenPurpose;
   audit?: AuditEntry | undefined;
 }
 
@@ -38,7 +39,7 @@ export class PasswordResetRepository {
       const since = recentSince < dayStart ? recentSince : dayStart;
       const [today] = await tx
         .select({
-          total: sql<number>`count(*) filter (where ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
+          total: sql<number>`count(*) filter (where ${passwordResetTokens.purpose} = 'reset' and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
           forUser: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
           recent: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} > ${recentSince})::int`,
         })
@@ -64,11 +65,11 @@ export class PasswordResetRepository {
 
   async store(
     db: Pick<Database, 'insert'>,
-    { userId, requestedBy, tokenHash, now, expiresAt }: Omit<NewResetToken, 'dayStart' | 'audit'>,
+    { userId, requestedBy, tokenHash, now, expiresAt, purpose }: Omit<NewResetToken, 'dayStart' | 'audit'>,
   ): Promise<void> {
     await db
       .insert(passwordResetTokens)
-      .values({ userId, requestedBy, tokenHash, createdAt: now, expiresAt, sentAt: now });
+      .values({ userId, requestedBy, tokenHash, purpose, createdAt: now, expiresAt, sentAt: now });
   }
 
   consume(tokenHash: string, passwordHash: string, now: Date): Promise<string | undefined> {

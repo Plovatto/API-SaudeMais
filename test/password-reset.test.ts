@@ -124,6 +124,34 @@ describe('POST /api/password-reset/request', () => {
     expect(results).toEqual([true, true, false]);
   });
 
+  it('leaves welcome links out of the daily total for the whole site', async () => {
+    const context = await buildUsersApp();
+    const ids: string[] = [];
+    for (const email of ['a@email.com', 'b@email.com', 'c@email.com']) {
+      const created = await request(context.app).post('/api/users/register').send(registration({ email }));
+      ids.push((created.body as { id: string }).id);
+    }
+    const resets = new PasswordResetRepository(context.db, {
+      perUserPerDay: 3,
+      globalPerDay: 1,
+      minIntervalMs: 15 * MINUTE,
+    });
+    const now = context.clock.now();
+    const token = (index: number) => ({
+      requestedBy: null,
+      tokenHash: String(index).repeat(64),
+      now,
+      expiresAt: new Date(now.getTime() + 30 * MINUTE),
+    });
+    const [first, second, third] = ids as [string, string, string];
+
+    await resets.store(context.db, { userId: first, purpose: 'welcome', ...token(1) });
+    await resets.store(context.db, { userId: second, purpose: 'welcome', ...token(2) });
+    const dayStart = startOfDayIn('America/Sao_Paulo', now);
+
+    expect(await resets.issue({ userId: third, ...token(3), dayStart })).toBe(true);
+  });
+
   it('invalidates the previous link when a new one is sent', async () => {
     const context = await withAccount();
     await requestReset(context.app);
