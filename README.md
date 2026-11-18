@@ -92,7 +92,7 @@ A API estará disponível em:
 http://localhost:3001
 ```
 
-As migrations rodam ao iniciar. Para criar dados de exemplo (especialidades, unidades, exames, médicos e pacientes), rode `npm run db:seed`.
+As migrations rodam ao iniciar. Para criar dados de exemplo (especialidades, unidades, exames, médicos e pacientes), rode `npm run db:seed`. O seed também cria, só se ainda não existirem, as contas de exemplo `paciente@saudemais.test` (senha `paciente-demo-123`) e `medico@saudemais.test` (senha `medico-demo-123`, com perfil de médico, agenda e agendamentos de amostra). São contas comuns, com os mesmos limites e regras de qualquer outra, e nada nelas é restaurado depois.
 
 ## Variáveis de Ambiente
 
@@ -116,7 +116,6 @@ SMTP_USER=
 SMTP_PASS=
 MAIL_FROM=
 APP_PUBLIC_URL=http://localhost:5173
-DEMO_ACCOUNTS_ENABLED=true
 LAB_API_URL=http://localhost:3001
 LAB_API_KEY=
 ```
@@ -124,8 +123,6 @@ LAB_API_KEY=
 `ADMIN_EMAIL` e `ADMIN_PASSWORD` criam o primeiro administrador ao iniciar (senha com 12 ou mais caracteres).
 
 `MAIL_DRIVER=console` escreve os e-mails no log; em produção, use `smtp` com `SMTP_USER`, `SMTP_PASS` e `MAIL_FROM`.
-
-`DEMO_ACCOUNTS_ENABLED` mantém as contas públicas de paciente e médico e restaura os dados delas uma vez por dia.
 
 `LAB_API_URL` e `LAB_API_KEY` são usadas só pelo simulador do laboratório. A chave é criada em Configurações → Integrações, na área do administrador, e aparece uma única vez.
 
@@ -144,7 +141,7 @@ A API roda em Docker na [Northflank](https://northflank.com/), com o banco no [N
 
 O `Dockerfile` tem dois estágios e usuário sem privilégios. A imagem já define `NODE_ENV=production` e escuta na porta `8080`. Em produção, `TRUST_PROXY_HOPS`, `CORS_ORIGIN` (só a origem do front, ex.: `https://saudemais.plovatto.dev`), `APP_PUBLIC_URL` (endereço do front usado nos links dos e-mails), `DATABASE_URL` e `MAIL_DRIVER=smtp` com `SMTP_USER`, `SMTP_PASS` e `MAIL_FROM` são obrigatórias. `SMTP_HOST` e `SMTP_PORT` têm padrão `smtp.gmail.com` e `465`.
 
-A manutenção (pedidos expirados, conclusões automáticas, limpeza e restauração das contas de demonstração) roda dentro da própria API. O simulador do laboratório é um job agendado com a mesma imagem, comando `node dist/scripts/lab-simulator.js`, frequência `0 9 * * *` (UTC, 06:00 em São Paulo) e as variáveis `LAB_API_URL` e `LAB_API_KEY`. Para rodar a manutenção como job em vez de dentro da API, use o comando `node dist/jobs/run.js maintenance` e defina `MAINTENANCE_SCHEDULER=false` no serviço.
+A manutenção (pedidos expirados, conclusões automáticas, lembretes e limpeza) roda dentro da própria API. O simulador do laboratório é um job agendado com a mesma imagem, comando `node dist/scripts/lab-simulator.js`, frequência `0 9 * * *` (UTC, 06:00 em São Paulo) e as variáveis `LAB_API_URL` e `LAB_API_KEY`. Para rodar a manutenção como job em vez de dentro da API, use o comando `node dist/jobs/run.js maintenance` e defina `MAINTENANCE_SCHEDULER=false` no serviço.
 
 ## Testes
 
@@ -167,7 +164,7 @@ A suíte em `test-pg/` (`npm run test:pg`) roda em PostgreSQL real e cobre exclu
 | `npm run test:coverage`        | Executa os testes com relatório de cobertura             |
 | `npm run test:pg`              | Executa a suíte em PostgreSQL real                       |
 | `npm run db:generate`          | Gera uma migration a partir do schema                    |
-| `npm run db:seed`              | Cria os dados de demonstração                            |
+| `npm run db:seed`              | Cria os dados e as contas de exemplo que faltam          |
 | `npm run jobs:run maintenance` | Executa a manutenção uma vez (usa `dist`)                |
 | `npm run lab:simulate`         | Publica resultados simulados do laboratório (usa `dist`) |
 
