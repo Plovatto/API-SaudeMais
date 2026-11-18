@@ -1,55 +1,44 @@
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import {
-  errorResponse,
-  internalErrorResponse,
-  jsonBody,
-  serverBusyResponse,
-  tooManyRequestsResponse,
-  validationErrorResponse,
-} from '../../docs/common-schemas.js';
-import { registry } from '../../docs/registry.js';
+import { errorResponse, serverBusyResponse } from '../../docs/common-schemas.js';
+import { documentOperation } from '../../docs/operation.js';
+import { publicSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import { resetConfirmSchema, resetRequestSchema } from './password-reset.model.js';
 import { INVALID_RESET_TOKEN_MESSAGE, type PasswordResetService } from './password-reset.service.js';
 
-registry.registerPath({
+documentOperation({
   method: 'post',
   path: '/api/password-reset/request',
   operationId: 'requestPasswordReset',
-  tags: [tags.accounts.name],
+  tag: tags.accounts.name,
   summary: 'Pedir link para redefinir a senha',
   description:
     'Envia ao e-mail um link válido por 30 minutos. A resposta é sempre 204, exista ou não a conta. Cada conta recebe no máximo um link a cada 15 minutos e 3 por dia; contas desativadas não recebem. Pedir de novo invalida o link anterior. Limite: 10 pedidos por IP a cada 15 minutos.',
-  request: { body: jsonBody(resetRequestSchema) },
-  responses: {
-    204: { description: 'Pedido recebido.' },
-    400: validationErrorResponse,
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
-  },
+  auth: publicSecurity,
+  body: resetRequestSchema,
+  success: { status: 204, description: 'Pedido recebido.' },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'post',
   path: '/api/password-reset/confirm',
   operationId: 'confirmPasswordReset',
-  tags: [tags.accounts.name],
+  tag: tags.accounts.name,
   summary: 'Criar uma nova senha com o link',
   description:
     'Troca a senha usando o token do link, seja o de redefinição ou o de criação de senha enviado quando um administrador cadastra a conta. O token vale uma vez só; depois da troca, todas as sessões da conta são encerradas. Limite: 20 tentativas por IP a cada 15 minutos.',
-  request: { body: jsonBody(resetConfirmSchema) },
-  responses: {
-    204: { description: 'Senha redefinida.' },
+  auth: publicSecurity,
+  body: resetConfirmSchema,
+  success: { status: 204, description: 'Senha redefinida.' },
+  errors: {
     400: errorResponse('Dados inválidos, ou link inválido, usado ou vencido (`INVALID_RESET_TOKEN`).', {
       message: INVALID_RESET_TOKEN_MESSAGE,
       code: 'INVALID_RESET_TOKEN',
       fields: { token: INVALID_RESET_TOKEN_MESSAGE },
     }),
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
     503: serverBusyResponse,
   },
 });

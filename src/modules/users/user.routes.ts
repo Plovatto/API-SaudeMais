@@ -1,17 +1,8 @@
 import { Router, type Request, type RequestHandler } from 'express';
 import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
-import {
-  errorResponse,
-  internalErrorResponse,
-  jsonBody,
-  serverBusyResponse,
-  jsonResponse,
-  notFoundResponse,
-  tooManyRequestsResponse,
-  unauthenticatedResponse,
-  validationErrorResponse,
-} from '../../docs/common-schemas.js';
-import { registry, sessionSecurity } from '../../docs/registry.js';
+import { errorResponse, notFoundResponse, serverBusyResponse } from '../../docs/common-schemas.js';
+import { documentOperation } from '../../docs/operation.js';
+import { publicSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
 import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
@@ -39,41 +30,39 @@ function emailOf(req: Request): string {
 
 const ipOf = (req: Request) => ipKeyGenerator(req.ip ?? '');
 
-registry.registerPath({
+documentOperation({
   method: 'post',
   path: '/api/users/register',
   operationId: 'registerUser',
-  tags: [tags.accounts.name],
+  tag: tags.accounts.name,
   summary: 'Criar conta',
   description:
     'Cria uma conta de paciente e registra o aceite dos termos de uso e da política de privacidade em vigor. O e-mail é comparado sem distinguir maiúsculas. Para entrar, use depois o login. Limite: 10 cadastros por hora por IP.',
-  request: { body: jsonBody(registerSchema) },
-  responses: {
-    201: jsonResponse('Conta criada, só com o perfil de paciente.', publicUserSchema),
-    400: validationErrorResponse,
+  auth: publicSecurity,
+  body: registerSchema,
+  success: { status: 201, description: 'Conta criada, só com o perfil de paciente.', schema: publicUserSchema },
+  errors: {
     409: errorResponse('E-mail já cadastrado (`EMAIL_TAKEN`).', {
       message: 'Este e-mail já está cadastrado.',
       code: 'EMAIL_TAKEN',
       fields: { email: 'Este e-mail já está cadastrado.' },
     }),
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
     503: serverBusyResponse,
   },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'post',
   path: '/api/users/login',
   operationId: 'login',
-  tags: [tags.accounts.name],
+  tag: tags.accounts.name,
   summary: 'Entrar',
   description:
     'Confere e-mail e senha e devolve um token de sessão. Sem "Lembrar de mim", a sessão expira após 12 horas sem uso; com ele, dura 7 dias. Nenhuma sessão passa de 7 dias. Senha errada e e-mail inexistente recebem a mesma resposta. Limites: 30 tentativas por IP e 5 senhas erradas por e-mail e IP a cada 15 minutos, e 50 senhas erradas por e-mail por hora.',
-  request: { body: jsonBody(loginSchema) },
-  responses: {
-    200: jsonResponse('Login feito.', loginResponseSchema),
-    400: validationErrorResponse,
+  auth: publicSecurity,
+  body: loginSchema,
+  success: { status: 200, description: 'Login feito.', schema: loginResponseSchema },
+  errors: {
     401: errorResponse('E-mail ou senha incorretos (`INVALID_CREDENTIALS`).', {
       message: 'E-mail ou senha incorretos.',
       code: 'INVALID_CREDENTIALS',
@@ -82,156 +71,107 @@ registry.registerPath({
       message: 'Esta conta está desativada.',
       code: 'USER_INACTIVE',
     }),
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
     503: serverBusyResponse,
   },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'post',
   path: '/api/users/logout',
   operationId: 'logout',
-  tags: [tags.accounts.name],
+  tag: tags.accounts.name,
   summary: 'Sair',
   description: 'Encerra a sessão do token enviado. As outras sessões da conta continuam valendo.',
-  ...sessionSecurity,
-  responses: {
-    204: { description: 'Sessão encerrada.' },
-    401: unauthenticatedResponse,
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
-  },
+  success: { status: 204, description: 'Sessão encerrada.' },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'get',
   path: '/api/me',
   operationId: 'getProfile',
-  tags: [tags.profile.name],
+  tag: tags.profile.name,
   summary: 'Ver os próprios dados',
   description:
     'Devolve os dados e os perfis da conta dona do token, com a data de nascimento e a data da última troca de senha. Limite: 120 leituras de perfil por minuto por IP.',
-  ...sessionSecurity,
-  responses: {
-    200: jsonResponse('Dados da conta.', profileSchema),
-    401: unauthenticatedResponse,
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
-  },
+  success: { status: 200, description: 'Dados da conta.', schema: profileSchema },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'patch',
   path: '/api/me',
   operationId: 'updateProfile',
-  tags: [tags.profile.name],
+  tag: tags.profile.name,
   summary: 'Alterar nome, telefone ou nascimento',
   description:
     'Altera só os campos enviados. A data de nascimento não pode ser no futuro (fuso de São Paulo) nem antes de 1900. O e-mail não pode ser alterado nesta versão. Limite: 120 requisições de perfil por minuto por IP.',
-  ...sessionSecurity,
-  request: { body: jsonBody(updateProfileSchema) },
-  responses: {
-    200: jsonResponse('Dados atualizados.', profileSchema),
-    400: validationErrorResponse,
-    401: unauthenticatedResponse,
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
-  },
+  body: updateProfileSchema,
+  success: { status: 200, description: 'Dados atualizados.', schema: profileSchema },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'post',
   path: '/api/me/password',
   operationId: 'changePassword',
-  tags: [tags.profile.name],
+  tag: tags.profile.name,
   summary: 'Trocar a senha',
   description:
     'Exige a senha atual. Depois da troca, todas as outras sessões da conta são encerradas; a sessão atual continua. Limites: 10 tentativas por IP e 5 senhas atuais erradas por conta a cada 15 minutos.',
-  ...sessionSecurity,
-  request: { body: jsonBody(changePasswordSchema) },
-  responses: {
-    204: { description: 'Senha trocada.' },
-    400: validationErrorResponse,
-    401: unauthenticatedResponse,
+  body: changePasswordSchema,
+  success: { status: 204, description: 'Senha trocada.' },
+  errors: {
     422: errorResponse('Senha atual incorreta (`INVALID_CURRENT_PASSWORD`).', {
       message: 'A senha atual está incorreta.',
       code: 'INVALID_CURRENT_PASSWORD',
       fields: { currentPassword: 'A senha atual está incorreta.' },
     }),
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
     503: serverBusyResponse,
   },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'get',
   path: '/api/me/sessions',
   operationId: 'listSessions',
-  tags: [tags.profile.name],
+  tag: tags.profile.name,
   summary: 'Listar sessões ativas',
   description:
     'Lista as sessões que ainda valem, da usada mais recentemente para a mais antiga, marcando a atual. Limite: 120 requisições de perfil por minuto por IP.',
-  ...sessionSecurity,
-  responses: {
-    200: jsonResponse('Sessões ativas.', z.array(sessionSchema)),
-    401: unauthenticatedResponse,
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
-  },
+  success: { status: 200, description: 'Sessões ativas.', schema: z.array(sessionSchema) },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'delete',
   path: '/api/me/sessions',
   operationId: 'logoutEverywhere',
-  tags: [tags.profile.name],
+  tag: tags.profile.name,
   summary: 'Sair de todas as sessões',
   description: 'Encerra todas as sessões da conta, inclusive a atual.',
-  ...sessionSecurity,
-  responses: {
-    204: { description: 'Sessões encerradas.' },
-    401: unauthenticatedResponse,
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
-  },
+  success: { status: 204, description: 'Sessões encerradas.' },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'delete',
   path: '/api/me/sessions/others',
   operationId: 'endOtherSessions',
-  tags: [tags.profile.name],
+  tag: tags.profile.name,
   summary: 'Encerrar as outras sessões',
   description: 'Encerra todas as sessões da conta menos a atual. Limite: 60 requisições de sessão por minuto por IP.',
-  ...sessionSecurity,
-  responses: {
-    204: { description: 'Outras sessões encerradas.' },
-    401: unauthenticatedResponse,
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
-  },
+  success: { status: 204, description: 'Outras sessões encerradas.' },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'delete',
   path: '/api/me/sessions/{id}',
   operationId: 'endSession',
-  tags: [tags.profile.name],
+  tag: tags.profile.name,
   summary: 'Encerrar uma sessão',
   description:
     'Encerra uma sessão da própria conta, como a de um aparelho que a pessoa não reconhece. A sessão atual não pode ser encerrada por aqui: use o logout. Sessão de outra conta responde 404, sem revelar se existe. Limite: 60 requisições de sessão por minuto por IP.',
-  ...sessionSecurity,
-  request: { params: idParams },
-  responses: {
-    204: { description: 'Sessão encerrada.' },
-    400: validationErrorResponse,
-    401: unauthenticatedResponse,
+  params: idParams,
+  success: { status: 204, description: 'Sessão encerrada.' },
+  errors: {
     404: notFoundResponse(sessionNotFound),
     422: errorResponse(`É a sessão em uso (\`${currentSession.code}\`).`, currentSession),
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
   },
 });
 
