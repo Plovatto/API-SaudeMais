@@ -5,7 +5,7 @@ import { systemActor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { civilDate, CLINIC_TIME_ZONE, DAY, HOUR, instantOfWallClock, MINUTE, wallClockIn } from '../../lib/time.js';
-import { WORKDAYS } from '../../lib/week.js';
+import { isWorkday } from '../../lib/week.js';
 import type { DoctorScheduleService } from '../doctor-schedule/doctor-schedule.service.js';
 import { newPublicCode } from '../exam-bookings/exam-bookings.code.js';
 import type { LabIntegrationService } from '../lab-integration/lab-integration.service.js';
@@ -38,7 +38,7 @@ function sampleDay(now: Date, dayOffset: number): number {
   const step = dayOffset < 0 ? -DAY : DAY;
   const wallNow = wallClockIn(CLINIC_TIME_ZONE, now);
   let day = wallNow - (wallNow % DAY) + dayOffset * DAY;
-  while (!(WORKDAYS as readonly number[]).includes(new Date(day).getUTCDay())) day += step;
+  while (!isWorkday(new Date(day).getUTCDay())) day += step;
   return day;
 }
 

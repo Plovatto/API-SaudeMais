@@ -4,6 +4,10 @@ import { z } from 'zod';
 export const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 export const WORKDAYS = [1, 2, 3, 4, 5] as const;
 
+export function isWorkday(day: number): boolean {
+  return (WORKDAYS as readonly number[]).includes(day);
+}
+
 export const weekday = z.int().min(0).max(6).openapi({ description: '0 = domingo, 6 = sábado.', example: 1 });
 
 const minuteOfDay = (min: number, max: number) =>
