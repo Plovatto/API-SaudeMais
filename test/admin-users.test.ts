@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
 import { as, buildUsersApp, HOUR, login, registration } from './support/users.js';
 
 const anyText = expect.any(String) as unknown;
@@ -168,6 +169,29 @@ describe('edit, deactivate and reactivate', () => {
     const response = await call(context, context.admin.token, 'get', `/api/admin/users/${id}/deactivation-impact`);
 
     expect(response.body).toEqual({ futureAppointmentsAsPatient: 0, futureAppointmentsAsDoctor: 0 });
+  });
+});
+
+describe('example accounts', () => {
+  it('can be edited, promoted and deactivated like any account', async () => {
+    const context = await withAdmin();
+    await context.modules.seed.service.seed();
+    const example = await login(context.app, { email: EXAMPLE_PATIENT.email, password: EXAMPLE_PATIENT.password });
+    const id = (example.body as { user: { id: string } }).user.id;
+
+    const edited = await call(context, context.admin.token, 'patch', `/api/admin/users/${id}`, {
+      fullName: 'Outro Nome',
+    });
+    const promoted = await call(context, context.admin.token, 'post', `/api/admin/users/${id}/roles/admin`);
+    const deactivated = await call(context, context.admin.token, 'post', `/api/admin/users/${id}/deactivate`);
+
+    expect(edited.status).toBe(200);
+    expect(edited.body).toMatchObject({ fullName: 'Outro Nome' });
+    expect(promoted.status).toBe(200);
+    expect(deactivated.status).toBe(200);
+    expect((await login(context.app, { email: EXAMPLE_PATIENT.email, password: EXAMPLE_PATIENT.password })).status).toBe(
+      403,
+    );
   });
 });
 
@@ -553,7 +577,6 @@ describe('POST /api/admin/users', () => {
       fields: { email: 'Este e-mail já está cadastrado.' },
     });
     expect(former.status).toBe(201);
-    expect(former.body).not.toHaveProperty('isProtected');
   });
 
   it('e-mails a link that creates the password, and login fails until then', async () => {
