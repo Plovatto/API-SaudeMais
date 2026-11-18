@@ -123,6 +123,9 @@ export const unitExamOffers = pgTable(
   ],
 );
 
+export const DEFAULT_ACTIVE_LIMIT = 5;
+export const MAX_ACTIVE_LIMIT = 50;
+
 export const settings = pgTable(
   'settings',
   {
@@ -132,6 +135,9 @@ export const settings = pgTable(
     maxReschedules: smallint('max_reschedules').notNull().default(2),
     bookingHorizonDays: smallint('booking_horizon_days').notNull().default(60),
     minLeadMinutes: integer('min_lead_minutes').notNull().default(60),
+    maxActiveBookings: smallint('max_active_bookings').notNull().default(DEFAULT_ACTIVE_LIMIT),
+    maxActiveAppointments: smallint('max_active_appointments').notNull().default(DEFAULT_ACTIVE_LIMIT),
+    maxActiveExams: smallint('max_active_exams').notNull().default(DEFAULT_ACTIVE_LIMIT),
     updatedBy: uuid('updated_by'),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
   },
@@ -145,5 +151,11 @@ export const settings = pgTable(
     check('settings_max_reschedules_check', sql`max_reschedules between 0 and 10`),
     check('settings_booking_horizon_days_check', sql`booking_horizon_days between 1 and 365`),
     check('settings_min_lead_minutes_check', sql`min_lead_minutes between 0 and 10080`),
+    check('settings_max_active_bookings_check', sql.raw(`max_active_bookings between 1 and ${MAX_ACTIVE_LIMIT}`)),
+    check(
+      'settings_max_active_appointments_check',
+      sql.raw(`max_active_appointments between 1 and ${MAX_ACTIVE_LIMIT}`),
+    ),
+    check('settings_max_active_exams_check', sql.raw(`max_active_exams between 1 and ${MAX_ACTIVE_LIMIT}`)),
   ],
 );

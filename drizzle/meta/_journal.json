@@ -162,6 +162,13 @@
       "when": 1795003843122,
       "tag": "0022_drop_users_is_protected",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795007564672,
+      "tag": "0023_settings_active_booking_limits",
+      "breakpoints": true
     }
   ]
 }
