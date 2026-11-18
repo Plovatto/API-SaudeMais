@@ -2,6 +2,7 @@ import { and, eq, gt, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-or
 import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
 import { sessions } from '../../database/schema/sessions.js';
 import { termsAcceptances, userRoles, users, type Role } from '../../database/schema/users.js';
+import { isoOrNull } from '../../lib/time.js';
 import type { Profile, PublicUser } from './user.model.js';
 
 const userColumns = { id: users.id, fullName: users.fullName, email: users.email, phone: users.phone };
@@ -117,7 +118,7 @@ export class UserRepository {
       .select({ ...publicUserColumns, birthDate: users.birthDate, passwordChangedAt: users.passwordChangedAt })
       .from(users)
       .where(eq(users.id, id));
-    return row && { ...row, passwordChangedAt: row.passwordChangedAt?.toISOString() ?? null };
+    return row && { ...row, passwordChangedAt: isoOrNull(row.passwordChangedAt) };
   }
 
   async findPasswordHash(id: string): Promise<string | undefined> {

@@ -6,7 +6,7 @@ import { examResults, examResultVersions } from '../../database/schema/exam-resu
 import { integrationClients } from '../../database/schema/integration-clients.js';
 import { recordAudit, type Actor, type AuditActor } from '../../lib/audit.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
-import type { DayRange } from '../../lib/time.js';
+import { isoOrNull, type DayRange } from '../../lib/time.js';
 import { hasResult } from '../bookings/bookings.repository.js';
 import type { IntegrationClient, Worklist } from './lab-integration.model.js';
 
@@ -38,10 +38,9 @@ interface ClientRow {
   revokedAt: Date | null;
 }
 
-const iso = (date: Date | null) => date?.toISOString() ?? null;
 
 function viewOf({ createdAt, lastUsedAt, revokedAt, ...client }: ClientRow): IntegrationClient {
-  return { ...client, createdAt: createdAt.toISOString(), lastUsedAt: iso(lastUsedAt), revokedAt: iso(revokedAt) };
+  return { ...client, createdAt: createdAt.toISOString(), lastUsedAt: isoOrNull(lastUsedAt), revokedAt: isoOrNull(revokedAt) };
 }
 
 const eligibleAt = (now: Date) =>

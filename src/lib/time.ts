@@ -2,6 +2,10 @@ export const MINUTE = 60_000;
 export const HOUR = 60 * MINUTE;
 export const DAY = 24 * HOUR;
 
+export function isoOrNull(date: Date | null): string | null {
+  return date?.toISOString() ?? null;
+}
+
 export const CLINIC_TIME_ZONE = 'America/Sao_Paulo';
 
 export const clinicDateTime = new Intl.DateTimeFormat('pt-BR', {
