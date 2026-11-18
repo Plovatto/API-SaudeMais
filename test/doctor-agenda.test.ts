@@ -301,9 +301,18 @@ describe('GET /api/doctor/appointments filters', () => {
       expect(page.total).toBe(3);
       expect(page.counts).toEqual(counts);
     }
-    expect(await listed({ tab: 'all', search: '%' })).toEqual([]);
+    for (const search of ['%', '_', '\\']) {
+      expect(await listed({ tab: 'all', search }), search).toEqual([]);
+    }
     expect(await listed({ tab: 'all', search: 'Maria' })).toEqual([]);
     expect((await agenda({ tab: 'all', search: '   ' })).total).toBe(5);
+  });
+
+  it('pages the all tab in the same order', async () => {
+    const second = await agenda({ tab: 'all', page: '2', pageSize: '2' });
+
+    expect(second).toMatchObject({ page: 2, pageSize: 2, total: 5 });
+    expect(ids(second.items)).toEqual([confirmed.id, cancelled.id]);
   });
 
   it('combines the tab, the period and the search', async () => {
