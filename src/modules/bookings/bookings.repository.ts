@@ -8,6 +8,7 @@ import {
   isActiveFuture,
   isAwaitingRecord,
   isLateCancellation,
+  type BookingKind,
   type BookingStatus,
   type CancellerRole,
 } from '../../database/schema/bookings.js';
@@ -205,8 +206,36 @@ export function asPatient<T>(
   });
 }
 
-export function activeFutureCount(db: Pick<Database, '$count'>, patientId: string, now: Date): Promise<number> {
-  return db.$count(bookings, and(eq(bookings.patientId, patientId), isActiveFuture(now)));
+export interface ActiveLimits {
+  maxActiveBookings: number;
+  maxActiveAppointments: number;
+  maxActiveExams: number;
+}
+
+export async function activeLimits(db: Pick<Database, 'select'>): Promise<ActiveLimits> {
+  const [row] = await db
+    .select({
+      maxActiveBookings: settings.maxActiveBookings,
+      maxActiveAppointments: settings.maxActiveAppointments,
+      maxActiveExams: settings.maxActiveExams,
+    })
+    .from(settings);
+  if (!row) throw new Error('Settings row is missing');
+  return row;
+}
+
+export async function activeFutureCounts(
+  db: Pick<Database, 'select'>,
+  patientId: string,
+  now: Date,
+): Promise<Record<BookingKind, number>> {
+  const rows = await db
+    .select({ kind: bookings.kind, total: count() })
+    .from(bookings)
+    .where(and(eq(bookings.patientId, patientId), isActiveFuture(now)))
+    .groupBy(bookings.kind);
+  const totalOf = (kind: BookingKind) => rows.find((row) => row.kind === kind)?.total ?? 0;
+  return { appointment: totalOf('appointment'), exam: totalOf('exam') };
 }
 
 export async function recordCreated(tx: Transaction, { bookingId, patientId, status, now }: CreatedBooking) {
