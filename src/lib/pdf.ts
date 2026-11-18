@@ -1,7 +1,7 @@
 import PDFDocument from 'pdfkit';
+import { BRAND, BRAND_COLOR } from './brand.js';
 
-export const BRAND = 'Saúde+';
-export const PDF_COLORS = { brand: '#0c7c7e', ink: '#132322', mute: '#637372', line: '#d0d9d9', band: '#edf4f4' };
+export const PDF_COLORS = { brand: BRAND_COLOR, ink: '#132322', mute: '#637372', line: '#d0d9d9', band: '#edf4f4' };
 export const PDF_MARGIN = 48;
 
 const REPLACEMENTS: Record<string, string> = {
@@ -33,7 +33,7 @@ export interface PdfColumn {
   align?: 'left' | 'right';
 }
 
-export type PdfCell = string | { text: string; color?: string; bold?: boolean };
+type PdfCell = string | { text: string; color?: string; bold?: boolean };
 
 export function openPdf(info: PDFKit.DocumentInfo) {
   const doc = new PDFDocument({ size: 'A4', margin: PDF_MARGIN, bufferPages: true, info: { Author: BRAND, ...info } });
@@ -119,5 +119,5 @@ export function openPdf(info: PDFKit.DocumentInfo) {
     return done;
   };
 
-  return { doc, width, rule, pair, header, keepSpace, table, finish };
+  return { doc, width, pair, header, keepSpace, table, finish };
 }
