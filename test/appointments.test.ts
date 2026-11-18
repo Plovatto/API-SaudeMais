@@ -241,6 +241,18 @@ describe('POST /api/appointments', () => {
     }
   });
 
+  it('keeps the active limit when a protected patient books a real doctor', async () => {
+    const times = ['11:00', '11:30', '12:00', '12:30', '13:00'];
+    for (const time of times) {
+      await book(context.demoPatient, appointment(demoDoctor, slot('2026-12-04', time))).expect(201);
+    }
+
+    const response = await book(context.demoPatient, appointment(carlos, slot('2026-12-04', '14:00')));
+
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({ code: 'ACTIVE_LIMIT' });
+  });
+
   it('hides the demo doctor and unknown doctors from regular patients with 404', async () => {
     const hidden = await book(context.patient, appointment(demoDoctor, slot('2026-12-03', '11:00')));
     const unknown = await book(

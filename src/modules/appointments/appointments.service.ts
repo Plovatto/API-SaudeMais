@@ -156,7 +156,6 @@ export class AppointmentsService {
     { doctorId, specialtyId, visitType, notes, ...input }: BookAppointmentInput,
   ) {
     const now = this.clock.now();
-    await this.bookings.ensureActiveLimit(tx, patientId, patient, now);
     const context = await this.repository.lockDoctor(tx, {
       doctorId,
       specialtyId,
@@ -164,6 +163,7 @@ export class AppointmentsService {
       now,
     });
     if (!context) throw notFound(doctorNotFound);
+    await this.bookings.ensureActiveLimit(tx, patientId, patient.isProtected && context.isProtected, now);
     if (context.specialtyId !== specialtyId) throw unprocessableField(appointmentRules.specialtyMismatch);
     const startsAt = new Date(input.startsAt);
     const endsAt = slotEnd(context, startsAt, now);
