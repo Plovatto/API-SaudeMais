@@ -5,10 +5,11 @@ import { createDb } from '@/database/pg-client.js';
 import { WEEKDAYS } from '@/lib/week.js';
 import { DoctorScheduleRepository } from '@/modules/doctor-schedule/doctor-schedule.repository.js';
 import { DoctorScheduleService } from '@/modules/doctor-schedule/doctor-schedule.service.js';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR } from '@/modules/users/user.seed.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { createCleanPool } from './support/pg-test-pool.js';
+import { seedWithoutSamples } from '../test/support/doctors.js';
 
 const week = (weekday: number, ranges: { startMin: number; endMin: number }[]) =>
   WEEKDAYS.map((day) => ({
@@ -25,8 +26,8 @@ describe('doctor schedule on PostgreSQL', () => {
     pool = await createCleanPool();
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool) });
-    await context.modules.demo.service.ensure();
-    const row = await pool.query<{ id: string }>('select id from users where email = $1', [DEMO_DOCTOR.email]);
+    await seedWithoutSamples(context.modules);
+    const row = await pool.query<{ id: string }>('select id from users where email = $1', [EXAMPLE_DOCTOR.email]);
     doctorId = row.rows[0]?.id ?? '';
   });
 

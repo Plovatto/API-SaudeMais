@@ -5,7 +5,7 @@ import { systemClock } from '@/lib/clock.js';
 import { WEEKDAYS, WORKDAYS } from '@/lib/week.js';
 import { DoctorScheduleRepository } from '@/modules/doctor-schedule/doctor-schedule.repository.js';
 import { DEFAULT_SCHEDULE, DoctorScheduleService } from '@/modules/doctor-schedule/doctor-schedule.service.js';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR } from '@/modules/users/user.seed.js';
 import { as, buildUsersApp, login, registerAndLogin, registration } from './support/users.js';
 
 type Context = Awaited<ReturnType<typeof buildUsersApp>>;
@@ -28,7 +28,7 @@ function week(ranges: Partial<Record<number, Range[]>>, inactive: number[] = [])
 
 async function withDoctor(): Promise<Context & { token: string; doctorId: string }> {
   const context = await buildUsersApp();
-  await context.modules.demo.service.ensure();
+  await context.modules.seed.service.seed();
   await registerAndLogin(context.app);
   await context.db.execute(sql`
     insert into doctor_profiles (user_id, specialty_id, council, unit_id, registry_number, registry_uf)
@@ -48,8 +48,8 @@ const save = (context: { app: Context['app']; token: string }, body: object) =>
 
 const read = (context: { app: Context['app']; token: string }) => request(context.app).get(PATH).set(as(context.token));
 
-async function demoDoctorToken(context: Context) {
-  const response = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password }).expect(200);
+async function exampleDoctorToken(context: Context) {
+  const response = await login(context.app, { email: EXAMPLE_DOCTOR.email, password: EXAMPLE_DOCTOR.password }).expect(200);
   return (response.body as { token: string }).token;
 }
 
@@ -69,10 +69,10 @@ describe('access', () => {
     expect((await read(context)).status).toBe(200);
   });
 
-  it('lets the demo doctor read the default schedule and save a new one', async () => {
+  it('lets the example doctor read the default schedule and save a new one', async () => {
     const context = await buildUsersApp();
-    await context.modules.demo.service.ensure();
-    const token = await demoDoctorToken(context);
+    await context.modules.seed.service.seed();
+    const token = await exampleDoctorToken(context);
 
     const schedule = await read({ app: context.app, token });
     const attempt = await save({ app: context.app, token }, week({ 1: [MORNING] }));
@@ -336,23 +336,22 @@ describe('default schedule', () => {
     return rows.rows[0];
   };
 
-  it('gives the demo and sample doctors Mon–Fri 08:00–12:00 and 13:00–17:00 once', async () => {
+  it('gives the example and sample doctors Mon–Fri 08:00–12:00 and 13:00–17:00 once', async () => {
     const context = await buildUsersApp();
 
-    await context.modules.demo.service.seed();
-    await context.modules.demo.service.seed();
+    await context.modules.seed.service.seed();
+    await context.modules.seed.service.seed();
 
     expect(await totals(context)).toEqual({ days: 35, ranges: 50 });
   });
 
   it('never overwrites a schedule the doctor changed', async () => {
     const context = await buildUsersApp();
-    await context.modules.demo.service.seed();
+    await context.modules.seed.service.seed();
     await context.db.execute(sql`delete from doctor_schedule_ranges where weekday = 1`);
     await context.db.execute(sql`update doctor_schedule_days set is_active = false where weekday = 1`);
 
-    await context.modules.demo.service.seed();
-    await context.modules.demo.service.ensure();
+    await context.modules.seed.service.seed();
 
     expect(await totals(context)).toEqual({ days: 35, ranges: 40 });
   });

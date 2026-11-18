@@ -7,6 +7,7 @@ import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { as, signUp, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
+import { seedWithoutSamples } from '../test/support/doctors.js';
 
 const CAPACITY = 3;
 const STARTS_AT = '2026-11-23T13:00:00.000Z';
@@ -26,8 +27,7 @@ describe('exam bookings on PostgreSQL', () => {
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await seedWithoutSamples(context.modules);
     const rows = await pool.query<{ unit_id: string; exam_type_id: string }>(
       `update unit_exam_offers o set capacity_per_slot = $1
        from units u, exam_types e

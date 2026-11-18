@@ -9,7 +9,7 @@ import { EXCEL_EPOCH, workbookOf } from './support/xlsx.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PATIENT = 'ana.silva@email.com';
-const DEMO_PATIENT = 'paciente@saudemais.test';
+const EXAMPLE_PATIENT = 'paciente@saudemais.test';
 
 let context: Clinic;
 let admin: string;
@@ -129,7 +129,7 @@ beforeAll(async () => {
   await appointment('2026-11-20T17:00:00Z', 'cancelled', { role: 'patient', late: true });
   await appointment('2026-11-21T02:59:00Z', 'cancelled', { role: 'patient' });
   await appointment('2026-11-21T03:00:00Z', 'pending');
-  await appointment('2026-11-12T16:00:00Z', 'completed', { email: DEMO_PATIENT });
+  await appointment('2026-11-12T16:00:00Z', 'completed', { email: EXAMPLE_PATIENT });
   await exam('hemograma', 'EX-AAAAA1', '2026-11-11T12:00:00Z', 'completed');
   await exam('hemograma', 'EX-AAAAA2', '2026-11-13T12:00:00Z', 'completed');
   await exam('glicemia', 'EX-AAAAA3', '2026-11-16T12:00:00Z', 'cancelled', { role: 'patient' });
@@ -138,24 +138,24 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('GET /api/admin/reports', () => {
-  it('totals the bookings of the period by current status, split by kind, without the demo ones', async () => {
+  it('totals the bookings of the period by current status, split by kind, example accounts included', async () => {
     const response = await reports({ from: '2026-11-10', to: '2026-11-20' }).expect(200);
     const report = response.body as Report;
 
     expect(response.headers['cache-control']).toBe('no-store');
     expect(report.period).toEqual({ from: '2026-11-10', to: '2026-11-20', granularity: 'day' });
     expect(report.appointments).toEqual({
-      total: 13,
+      total: 14,
       pending: 1,
       confirmed: 1,
       awaitingRecord: 1,
-      completed: 2,
+      completed: 3,
       noShow: 1,
       cancelled: 5,
       expired: 2,
       lateCancellations: 1,
       cancelledBy: { patient: 2, doctor: 1, admin: 1, system: 1 },
-      noShowRate: 0.333,
+      noShowRate: 0.25,
     });
     expect(report.exams).toEqual({
       ...zero,
@@ -176,7 +176,7 @@ describe('GET /api/admin/reports', () => {
     const report = await reportOf({ from: '2026-11-10', to: '2026-11-20' });
 
     expect(report.topSpecialties.map(({ name, total }) => ({ name, total }))).toEqual([
-      { name: 'Cardiologia', total: 7 },
+      { name: 'Cardiologia', total: 8 },
       { name: 'Nutrição', total: 5 },
       { name: 'Dermatologia', total: 1 },
     ]);
@@ -201,7 +201,7 @@ describe('GET /api/admin/reports', () => {
     for (const totals of report.series) expect(bucketSum(totals)).toBe(totals.total);
     expect(report.series[0]).toEqual({ ...zero, start: '2026-11-10', total: 1, completed: 1 });
     expect(report.series[1]).toEqual({ ...zero, start: '2026-11-11', total: 1, completed: 1 });
-    expect(report.series[2]).toEqual({ ...zero, start: '2026-11-12', total: 2, completed: 1, noShow: 1 });
+    expect(report.series[2]).toEqual({ ...zero, start: '2026-11-12', total: 3, completed: 2, noShow: 1 });
     expect(report.series[4]).toEqual({ ...zero, start: '2026-11-14' });
     expect(report.series[10]).toEqual({
       ...zero,
@@ -220,7 +220,7 @@ describe('GET /api/admin/reports', () => {
     expect(report.period.granularity).toBe('week');
     expect(report.series).toHaveLength(12);
     expect(report.series.map(({ start }) => start).slice(-3)).toEqual(['2026-11-03', '2026-11-10', '2026-11-17']);
-    expect(report.series.slice(-3).map(({ total }) => total)).toEqual([1, 8, 9]);
+    expect(report.series.slice(-3).map(({ total }) => total)).toEqual([1, 9, 9]);
     expect(report.series.slice(0, 9).every(({ total }) => total === 0)).toBe(true);
     expect((await reportOf({ from: '2026-09-20', to: '2026-11-20' })).period.granularity).toBe('day');
   });
@@ -230,7 +230,7 @@ describe('GET /api/admin/reports', () => {
 
     expect(report.period).toEqual({ from: '2026-10-22', to: '2026-11-20', granularity: 'day' });
     expect(report.series).toHaveLength(30);
-    expect(report.appointments.total).toBe(14);
+    expect(report.appointments.total).toBe(15);
     expect((await reportOf({ to: '2026-11-15' })).period).toEqual({
       from: '2026-10-17',
       to: '2026-11-15',

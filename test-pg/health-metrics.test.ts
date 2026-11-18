@@ -16,9 +16,7 @@ describe('health_metrics on PostgreSQL', () => {
     pool = await createCleanPool();
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
-    await context.modules.maintenance.run({ restoreDemo: true });
+    await context.modules.seed.service.seed();
     const completed = await pool.query<{ id: string; kind: string }>(
       "select distinct on (kind) id, kind from bookings where status = 'completed' order by kind, starts_at",
     );

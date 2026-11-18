@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR } from '@/modules/users/user.seed.js';
 import {
   agendaHelpers,
   ids,
@@ -509,7 +509,9 @@ describe('POST /api/appointments/:id/confirm', () => {
 
   it('answers 404 to other doctors, exams and unknown ids and 403 to accounts without the doctor profile', async () => {
     const booked = await book(patient, owner, slot('2026-12-03', '11:00'));
-    const other = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password }).expect(200);
+    const other = await login(context.app, { email: EXAMPLE_DOCTOR.email, password: EXAMPLE_DOCTOR.password }).expect(
+      200,
+    );
     const body = { startsAt: booked.startsAt };
 
     const otherDoctor = await confirm((other.body as { token: string }).token, booked.id, body);
@@ -532,14 +534,15 @@ describe('POST /api/appointments/:id/confirm', () => {
     expect(byPatient.body).toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('lets the demo doctor confirm requests of protected patients', async () => {
-    const demoDoctor = await doctorNamed(context, DEMO_DOCTOR.fullName);
+  it('lets the example doctor confirm requests of the example patient', async () => {
+    const exampleDoctor = await doctorNamed(context, EXAMPLE_DOCTOR.fullName);
     const token = (
-      (await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password }).expect(200)).body as {
+      (await login(context.app, { email: EXAMPLE_DOCTOR.email, password: EXAMPLE_DOCTOR.password }).expect(200))
+        .body as {
         token: string;
       }
     ).token;
-    const booked = await book(context.demoPatient, demoDoctor, slot('2026-12-04', '11:00'));
+    const booked = await book(context.examplePatient, exampleDoctor, slot('2026-12-04', '11:00'));
 
     const response = await confirm(token, booked.id, { startsAt: booked.startsAt });
 

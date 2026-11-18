@@ -3,13 +3,13 @@ import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { aboutItem } from '@/modules/exam-results/exam-results.glossary.js';
 import { parseReferenceRange } from '@/modules/exam-results/reference-range.js';
-import { DEMO_DOCTOR, DEMO_PATIENT } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR, EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
 import { UNKNOWN_ID } from './support/agenda.js';
 import { binary } from './support/binary.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
 import { insertExam, offerOf, type Offer } from './support/exams.js';
 import { createLabKey, ISSUED_AT, publishResult, rowsOf, valueOf, type Exam } from './support/lab.js';
-import { as, createAdmin, createPatient, HOUR, login, START } from './support/users.js';
+import { as, buildUsersApp, createAdmin, createPatient, HOUR, login, START } from './support/users.js';
 
 interface Version {
   version: number;
@@ -345,34 +345,71 @@ describe('doctor exam results', () => {
   });
 });
 
-const restoreDemo = async () => {
-  await context.db.execute(sql`delete from audit_logs where action = 'demo.restored'`);
-  return context.modules.demo.service.restore();
-};
+const SAMPLE_LAB = 'Laboratório de exemplo';
 
-const demoResults = () =>
+const exampleResults = (db: Clinic['db']) =>
   rowsOf<{ version: number }>(
-    context.db,
+    db,
     sql`select v.version from exam_result_versions v join exam_results r on r.id = v.result_id
-      join bookings b on b.id = r.booking_id join users u on u.id = b.patient_id where u.is_protected`,
+      join bookings b on b.id = r.booking_id join users u on u.id = b.patient_id where u.email = ${EXAMPLE_PATIENT.email}`,
   );
 
-describe('demo exam results', () => {
-  it('gives the demo patient a corrected result that the demo doctor can review', async () => {
-    await context.modules.demo.service.restore();
-    const page = await request(context.app)
+const exampleBookings = async (db: Clinic['db']) =>
+  (
+    await rowsOf<{ total: number }>(
+      db,
+      sql`select count(*)::int as total from bookings b join users u on u.id = b.patient_id
+        where u.email = ${EXAMPLE_PATIENT.email}`,
+    )
+  )[0]?.total ?? 0;
+
+async function idOf(db: Clinic['db'], email: string) {
+  const [row] = await rowsOf<{ id: string }>(db, sql`select id from users where email = ${email}`);
+  return row?.id ?? null;
+}
+
+async function seedWithSampleLab(createdBy: 'system' | 'admin', revoked: boolean) {
+  const fresh = await buildUsersApp();
+  if (createdBy === 'admin') await createAdmin(fresh, 'admin.lab@email.com');
+  const adminId = createdBy === 'admin' ? await idOf(fresh.db, 'admin.lab@email.com') : null;
+  await fresh.db.execute(sql`
+    insert into integration_clients (name, key_prefix, api_key_hash, created_by, revoked_at)
+    values (${SAMPLE_LAB}, 'abcdefgh', ${'a'.repeat(64)}, ${adminId}, ${revoked ? new Date() : null})
+  `);
+  await fresh.modules.seed.service.seed();
+  return fresh;
+}
+
+describe('sample exam results', () => {
+  let sample: Awaited<ReturnType<typeof buildUsersApp>>;
+
+  beforeAll(async () => {
+    sample = await buildUsersApp();
+    await sample.modules.seed.service.seed();
+  }, 60_000);
+
+  const tokenOf = async ({ email, password }: { email: string; password: string }) =>
+    ((await login(sample.app, { email, password }).expect(200)).body as { token: string }).token;
+
+  it('gives the example patient a corrected result that the example doctor can review', async () => {
+    const patient = await tokenOf(EXAMPLE_PATIENT);
+    const page = await request(sample.app)
       .get('/api/patient/bookings')
       .query({ scope: 'past', kind: 'exam' })
-      .set(as(context.demoPatient))
+      .set(as(patient))
       .expect(200);
     const resulted = (page.body as { items: { id: string; hasResult: boolean }[] }).items.filter(
       (item) => item.hasResult,
     );
     expect(resulted).toHaveLength(1);
 
-    const result = await patientRead(context.demoPatient, resulted[0]?.id ?? '').expect(200);
-    const demoDoctor = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password });
-    const reviewed = await doctorRead((demoDoctor.body as { token: string }).token, await userId(DEMO_PATIENT.email));
+    const result = await request(sample.app)
+      .get(`/api/patient/exam-results/${resulted[0]?.id ?? ''}`)
+      .set(as(patient))
+      .expect(200);
+    const reviewed = await request(sample.app)
+      .get(`/api/doctor/patients/${(await idOf(sample.db, EXAMPLE_PATIENT.email)) ?? ''}/exam-results`)
+      .set(as(await tokenOf(EXAMPLE_DOCTOR)));
 
     expect(result.body).toMatchObject({
       booking: { examType: { name: 'Glicemia' } },
@@ -387,41 +424,36 @@ describe('demo exam results', () => {
     expect(reviewed.body).toMatchObject({ total: 1, items: [{ booking: { id: resulted[0]?.id } }] });
   });
 
-  it('creates the demo integration as the system', async () => {
+  it('creates the sample integration as the system', async () => {
     const [client] = await rowsOf<{ created_by: string | null; actor_type: string; actor_id: string | null }>(
-      context.db,
+      sample.db,
       sql`select c.created_by, a.actor_type, a.actor_id from integration_clients c
         join audit_logs a on a.entity_id = c.id::text and a.action = 'integration_client.created'
-        where c.name = 'Laboratório de demonstração'`,
+        where c.name = ${SAMPLE_LAB}`,
     );
 
     expect(client).toEqual({ created_by: null, actor_type: 'system', actor_id: null });
   });
 
-  it('skips the results when the demo integration was revoked or not created by the system', async () => {
-    const demoLab = sql`name = 'Laboratório de demonstração'`;
-    const adminId = await userId('admin.resultados@email.com');
-    await context.db.execute(sql`update integration_clients set revoked_at = now() where ${demoLab}`);
-    await expect(restoreDemo()).resolves.toBeDefined();
-    expect(await demoResults()).toEqual([]);
+  it.each([
+    ['revoked', 'system', true],
+    ['not created by the system', 'admin', false],
+  ] as const)('skips the results when the sample integration was %s', async (_case, createdBy, revoked) => {
+    const fresh = await seedWithSampleLab(createdBy, revoked);
 
-    await context.db.execute(
-      sql`update integration_clients set revoked_at = null, created_by = ${adminId} where ${demoLab}`,
-    );
-    await expect(restoreDemo()).resolves.toBeDefined();
-    expect(await demoResults()).toEqual([]);
-
-    await context.db.execute(sql`update integration_clients set created_by = null where ${demoLab}`);
+    expect(await exampleBookings(fresh.db)).toBeGreaterThan(0);
+    expect(await exampleResults(fresh.db)).toEqual([]);
   });
 
-  it('still restores the demo bookings when publishing a result fails', async () => {
-    await context.db.execute(sql`update exam_types set kind = 'imaging' where code = 'glicemia'`);
-    const restored = await restoreDemo();
-    await context.db.execute(sql`update exam_types set kind = 'lab' where code = 'glicemia'`);
+  it('still creates the sample bookings when publishing a result fails', async () => {
+    const fresh = await buildUsersApp();
+    await fresh.db.execute(sql`
+      insert into exam_types (code, name, kind, duration_min) values ('glicemia', 'Glicemia', 'imaging', 10)
+    `);
 
-    expect(restored).toMatchObject({ created: expect.any(Number) as unknown });
-    expect(await demoResults()).toEqual([]);
-    await restoreDemo();
-    expect((await demoResults()).map(({ version }) => version).sort()).toEqual([1, 2]);
+    await fresh.modules.seed.service.seed();
+
+    expect(await exampleBookings(fresh.db)).toBeGreaterThan(0);
+    expect(await exampleResults(fresh.db)).toEqual([]);
   });
 });

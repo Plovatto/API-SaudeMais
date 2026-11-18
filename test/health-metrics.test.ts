@@ -2,10 +2,10 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DAY } from '@/lib/time.js';
-import { DEMO_PATIENT } from '@/modules/users/user.demo.js';
+import { EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
 import { agendaHelpers, slot, type Attending } from './support/agenda.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
-import { as, HOUR, login, signUp, START } from './support/users.js';
+import { as, buildUsersApp, HOUR, login, signUp, START } from './support/users.js';
 
 let context: Clinic;
 let party: Attending;
@@ -175,34 +175,34 @@ describe('GET /api/patient/home metrics', () => {
   });
 });
 
-describe('demo restore with metrics', () => {
-  it('seeds metrics for the completed demo appointment and replaces them on the next restore', async () => {
-    const demo = await setupClinic();
-    const restore = () => demo.modules.maintenance.run({ restoreDemo: true });
-    const demoMetrics = async () => {
+describe('sample metrics', () => {
+  it('seeds metrics for the completed sample appointment once and keeps them through maintenance', async () => {
+    const clinic = await buildUsersApp();
+    await clinic.modules.seed.service.seed();
+    const exampleMetrics = async () => {
       const { token } = (
-        await login(demo.app, { email: DEMO_PATIENT.email, password: DEMO_PATIENT.password }).expect(200)
+        await login(clinic.app, { email: EXAMPLE_PATIENT.email, password: EXAMPLE_PATIENT.password }).expect(200)
       ).body as { token: string };
       return (
-        (await request(demo.app).get('/api/patient/home').set(as(token)).expect(200)).body as {
+        (await request(clinic.app).get('/api/patient/home').set(as(token)).expect(200)).body as {
           metrics: { bloodPressure: unknown; weight: unknown };
         }
       ).metrics;
     };
     const total = async () =>
-      (await demo.db.execute<{ total: number }>(sql`select count(*)::int as total from health_metrics`)).rows[0]?.total;
+      (await clinic.db.execute<{ total: number }>(sql`select count(*)::int as total from health_metrics`)).rows[0]
+        ?.total;
 
-    await restore();
-    const first = await demoMetrics();
-    demo.clock.advance(DAY);
-    const second = await restore();
+    const first = await exampleMetrics();
+    clinic.clock.advance(DAY);
+    await clinic.modules.maintenance.run();
+    await clinic.modules.seed.service.seed();
 
     expect(first).toMatchObject({
       bloodPressure: { systolic: 118, diastolic: 76 },
       weight: { kg: 72.4 },
     });
-    expect(second.demoRestored).toMatchObject({ deleted: expect.any(Number) as number });
-    expect(await demoMetrics()).toMatchObject({ bloodPressure: { systolic: 118 }, weight: { kg: 72.4 } });
+    expect(await exampleMetrics()).toEqual(first);
     expect(await total()).toBe(1);
   }, 60_000);
 });

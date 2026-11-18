@@ -9,7 +9,7 @@ import {
   type Clinic,
   type Doctor,
 } from './support/doctors.js';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR } from '@/modules/users/user.seed.js';
 import { bookedBy, rescheduleOn, slot } from './support/bookings.js';
 import { as, createAdmin, login, START } from './support/users.js';
 
@@ -266,13 +266,13 @@ describe('POST /api/appointments/:id/reschedule', () => {
   });
 
   it('refuses the doctor confirmation of the old start after a reschedule', async () => {
-    const demoDoctor = await doctorNamed(context, DEMO_DOCTOR.fullName);
-    const credentials = { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password };
+    const exampleDoctor = await doctorNamed(context, EXAMPLE_DOCTOR.fullName);
+    const credentials = { email: EXAMPLE_DOCTOR.email, password: EXAMPLE_DOCTOR.password };
     const doctor = ((await login(context.app, credentials).expect(200)).body as { token: string }).token;
     const from = slot('2026-12-29', '11:00');
     const to = slot('2026-12-29', '11:30');
-    const booking = (await book(context.demoPatient, demoDoctor, from).expect(201)).body as Appointment;
-    await reschedule(context.demoPatient, booking.id, { startsAt: from, newStartsAt: to }).expect(200);
+    const booking = (await book(context.examplePatient, exampleDoctor, from).expect(201)).body as Appointment;
+    await reschedule(context.examplePatient, booking.id, { startsAt: from, newStartsAt: to }).expect(200);
     const confirmAt = (startsAt: string) =>
       request(context.app).post(`/api/appointments/${booking.id}/confirm`).set(as(doctor)).send({ startsAt });
 
