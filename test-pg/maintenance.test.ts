@@ -4,15 +4,16 @@ import type pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
-import { DEMO_BOOKINGS } from '@/modules/demo/demo.data.js';
+import { SAMPLE_BOOKINGS } from '@/modules/seed/seed.data.js';
+import { EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
 import { registerSchema } from '@/modules/users/user.model.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { registration, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
+import { seedWithoutSamples } from '../test/support/doctors.js';
 
 const MAINTENANCE_LOCK = 727_004;
-const OPTIONS = { restoreDemo: false };
 
 const runJob = (...args: string[]) =>
   promisify(execFile)(process.execPath, ['--import', 'tsx', 'src/jobs/run.ts', ...args], { env: process.env });
@@ -25,8 +26,7 @@ describe('maintenance on PostgreSQL', () => {
     pool = await createCleanPool();
     await runMigrations(pool);
     context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await seedWithoutSamples(context.modules);
     await pool.query(`
       insert into bookings (kind, patient_id, unit_id, doctor_id, specialty_id, visit_type, starts_at, ends_at, status)
       select 'appointment', patient.id, p.unit_id, p.user_id, p.specialty_id, 'routine',
@@ -52,33 +52,38 @@ describe('maintenance on PostgreSQL', () => {
     await other.query('begin');
     await other.query('select pg_advisory_xact_lock($1, 0)', [MAINTENANCE_LOCK]);
 
-    await expect(context.modules.maintenance.runExclusive(OPTIONS)).resolves.toBeUndefined();
+    await expect(context.modules.maintenance.runExclusive()).resolves.toBeUndefined();
     expect(await expiredNotices()).toBe(0);
 
     await other.query('commit');
     other.release();
-    await expect(context.modules.maintenance.runExclusive(OPTIONS)).resolves.toMatchObject({ expired: 1 });
+    await expect(context.modules.maintenance.runExclusive()).resolves.toMatchObject({ expired: 1 });
     expect(await expiredNotices()).toBe(1);
   });
 
   it('lets only one of two simultaneous runners do the work', async () => {
     const reports = await Promise.all([
-      context.modules.maintenance.runExclusive(OPTIONS),
-      context.modules.maintenance.runExclusive(OPTIONS),
+      context.modules.maintenance.runExclusive(),
+      context.modules.maintenance.runExclusive(),
     ]);
 
     expect(reports.reduce((total, report) => total + (report?.expired ?? 0), 0)).toBe(1);
     expect(await expiredNotices()).toBe(1);
   });
 
-  it('restores the demo bookings only once when two restorations race', async () => {
-    const results = await Promise.all([context.modules.demo.service.restore(), context.modules.demo.service.restore()]);
+  it('creates the sample bookings only once when two seeds race on a fresh database', async () => {
+    await pool.end();
+    pool = await createCleanPool();
+    await runMigrations(pool);
+    const seeder = () => buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) }).modules.seed.service.seed();
 
-    expect(results.filter(Boolean)).toHaveLength(1);
-    const demo = await pool.query<{ total: number }>(
-      'select count(*)::int as total from bookings b join users u on u.id = b.patient_id where u.is_protected',
+    await Promise.all([seeder(), seeder()]);
+
+    const sample = await pool.query<{ total: number }>(
+      'select count(*)::int as total from bookings b join users u on u.id = b.patient_id where u.email = $1',
+      [EXAMPLE_PATIENT.email],
     );
-    expect(demo.rows[0]?.total).toBe(DEMO_BOOKINGS.length);
+    expect(sample.rows[0]?.total).toBe(SAMPLE_BOOKINGS.length);
   });
 
   it('sends one reminder when two runners claim the same booking', async () => {

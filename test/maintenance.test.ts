@@ -10,8 +10,7 @@ import {
   users,
   type BookingStatus,
 } from '@/database/schema/index.js';
-import { DEMO_BOOKINGS } from '@/modules/demo/demo.data.js';
-import { DEMO_PATIENT } from '@/modules/users/user.demo.js';
+import { EXAMPLE_PATIENT } from '@/modules/users/user.seed.js';
 import { doctorNamed, setupClinic, type Clinic } from './support/doctors.js';
 import { insertExam, offerOf } from './support/exams.js';
 import { as, HOUR, registration, START } from './support/users.js';
@@ -19,10 +18,6 @@ import { as, HOUR, registration, START } from './support/users.js';
 const MINUTE = 60_000;
 const DAY = 24 * HOUR;
 const NOTHING_PURGED = { sessions: 0, resetTokens: 0, notifications: 0, auditLogs: 0 };
-const DEMO_RESULTS = DEMO_BOOKINGS.reduce(
-  (total, seed) => total + (seed.kind === 'exam' ? (seed.results?.length ?? 0) : 0),
-  0,
-);
 
 let context: Clinic;
 
@@ -30,7 +25,7 @@ beforeEach(async () => {
   context = await setupClinic();
 }, 60_000);
 
-const run = (restoreDemo = false) => context.modules.maintenance.run({ restoreDemo });
+const run = () => context.modules.maintenance.run();
 const later = (ms: number) => new Date(context.clock.now().getTime() + ms);
 
 async function userId(email: string): Promise<string> {
@@ -201,67 +196,24 @@ describe('maintenance', () => {
     expect((await run()).purged).toEqual(NOTHING_PURGED);
   });
 
-  it('restores the demo bookings once per São Paulo day and keeps everyone else’s', async () => {
-    const demoPatient = await userId(DEMO_PATIENT.email);
-    const visitorId = await userId(registration().email);
-    const visitor = await appointment(visitorId, 'pending', later(2 * DAY));
-    const visitorExam = await exam(visitorId, new Date('2026-11-23T11:00:00.000Z'));
-    const demoVisit = await appointment(demoPatient, 'pending', later(3 * DAY));
-    await context.db
-      .insert(notifications)
-      .values({ userId: demoPatient, audienceRole: 'patient', type: 'appointment_confirmed', bookingId: demoVisit });
-    const unread = async () =>
-      (
-        await request(context.app)
-          .get('/api/notifications/unread-count')
-          .query({ role: 'patient' })
-          .set(as(context.demoPatient))
-          .expect(200)
-      ).body as { count: number };
-    expect(await unread()).toEqual({ count: 1 });
-    const demoBookings = async () =>
+  it('treats the example patient like any other account and never restores its bookings', async () => {
+    const examplePatient = await userId(EXAMPLE_PATIENT.email);
+    const ownVisit = await appointment(examplePatient, 'pending', later(3 * DAY));
+    const bookingsOfExample = async () =>
       (
         await context.db
-          .select({ kind: bookings.kind, status: bookings.status })
+          .select({ id: bookings.id, status: bookings.status })
           .from(bookings)
-          .where(eq(bookings.patientId, demoPatient))
-      )
-        .map(({ kind, status }) => `${kind}:${status}`)
-        .sort();
+          .where(eq(bookings.patientId, examplePatient))
+      ).toSorted((a, b) => a.id.localeCompare(b.id));
+    const before = await bookingsOfExample();
 
-    expect((await run(true)).demoRestored).toEqual({ deleted: 1, created: DEMO_BOOKINGS.length });
-
-    expect([await statusOf(visitor), await statusOf(visitorExam), await statusOf(demoVisit)]).toEqual([
-      'pending',
-      'confirmed',
-      undefined,
-    ]);
-    expect(await unread()).toEqual({ count: DEMO_RESULTS });
-    const lanes = await context.db
-      .select({ lane: bookings.lane })
-      .from(bookings)
-      .where(eq(bookings.startsAt, new Date('2026-11-23T11:00:00.000Z')));
-    expect(lanes.map(({ lane }) => lane).sort()).toEqual([1, 2]);
-    expect(await demoBookings()).toEqual([
-      'appointment:completed',
-      'appointment:completed',
-      'appointment:confirmed',
-      'appointment:confirmed',
-      'appointment:pending',
-      'exam:completed',
-      'exam:confirmed',
-    ]);
-    const timeline = await context.db
-      .select({ eventType: bookingEvents.eventType })
-      .from(bookingEvents)
-      .innerJoin(bookings, eq(bookings.id, bookingEvents.bookingId))
-      .where(eq(bookings.patientId, demoPatient));
-    expect(timeline).toHaveLength(DEMO_BOOKINGS.reduce((total, seed) => total + seed.history.length, DEMO_RESULTS));
-    expect((await run(true)).demoRestored).toBeNull();
-
+    const report = await run();
     context.clock.advance(DAY);
-    expect((await run(true)).demoRestored).toEqual({ deleted: DEMO_BOOKINGS.length, created: DEMO_BOOKINGS.length });
-    expect(await statusOf(visitor)).toBe('pending');
-    expect((await run(false)).demoRestored).toBeNull();
+    await run();
+
+    expect(report).not.toHaveProperty('demoRestored');
+    expect(await statusOf(ownVisit)).toBe('pending');
+    expect((await bookingsOfExample()).map(({ id }) => id)).toEqual(before.map(({ id }) => id));
   });
 });

@@ -8,6 +8,7 @@ import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { as, signUp, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
+import { seedWithoutSamples } from '../test/support/doctors.js';
 
 const TARGET = '2026-11-23T13:00:00.000Z';
 
@@ -27,8 +28,7 @@ describe('reschedules on PostgreSQL', () => {
     await runMigrations(pool);
     context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await seedWithoutSamples(context.modules);
     const doctors = await pool.query<Doctor>(
       `select u.id, p.specialty_id from users u join doctor_profiles p on p.user_id = u.id
        where u.full_name = 'Dr. Carlos Mendes'`,

@@ -2,7 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { bookings, isLateCancellation } from '@/database/schema/bookings.js';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR } from '@/modules/users/user.seed.js';
 import {
   availability,
   doctorNamed,
@@ -34,15 +34,15 @@ const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 
 let context: Clinic;
 let carlos: Doctor;
-let demoDoctor: Doctor;
+let exampleDoctor: Doctor;
 let doctorToken: string;
 let admin: string;
 
 beforeAll(async () => {
   context = await setupClinic();
   carlos = await doctorNamed(context, 'Dr. Carlos Mendes');
-  demoDoctor = await doctorNamed(context, DEMO_DOCTOR.fullName);
-  const doctorLogin = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password });
+  exampleDoctor = await doctorNamed(context, EXAMPLE_DOCTOR.fullName);
+  const doctorLogin = await login(context.app, { email: EXAMPLE_DOCTOR.email, password: EXAMPLE_DOCTOR.password });
   doctorToken = (doctorLogin.body as { token: string }).token;
   admin = await createAdmin(context, 'admin.reservas@email.com');
 }, 60_000);
@@ -392,7 +392,7 @@ describe('POST /api/appointments/:id/cancel', () => {
   });
 
   it('requires a reason from the doctor, never flags it late and notifies the patient', async () => {
-    const booked = await book(context.demoPatient, slot('2026-11-23', '11:00'), demoDoctor);
+    const booked = await book(context.examplePatient, slot('2026-11-23', '11:00'), exampleDoctor);
     await confirm(booked.id);
 
     const missing = await cancel(doctorToken, booked.id, { startsAt: booked.startsAt, reason: '   ' });
@@ -426,14 +426,14 @@ describe('POST /api/appointments/:id/cancel', () => {
         params: { startsAt: booked.startsAt, cancelledByRole: 'doctor' },
       },
     ]);
-    const patientHome = (await home(context.demoPatient).expect(200)).body as {
+    const patientHome = (await home(context.examplePatient).expect(200)).body as {
       lastNotification: { type: string; bookingId: string };
     };
     expect(patientHome.lastNotification).toMatchObject({ type: 'appointment_cancelled', bookingId: booked.id });
   });
 
   it('answers 404 to other users and 403 to accounts without a patient or doctor profile', async () => {
-    const booked = await book(context.demoPatient, slot('2026-12-14', '12:00'), demoDoctor);
+    const booked = await book(context.examplePatient, slot('2026-12-14', '12:00'), exampleDoctor);
     const body = { startsAt: booked.startsAt, reason: 'Motivo.' };
 
     const carlosBooking = await book(context.patient, slot('2026-12-04', '11:00'));
