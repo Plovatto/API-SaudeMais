@@ -112,7 +112,7 @@ export class ExamBookingsService {
 
   private async create(tx: Transaction, patientId: string, { unitId, examTypeId, notes, ...input }: BookExamInput) {
     const now = this.clock.now();
-    await this.bookings.ensureActiveLimit(tx, patientId, now);
+    await this.bookings.ensureActiveLimit(tx, patientId, 'exam', now);
     const offer = { unitId, examTypeId };
     const context = await this.repository.lockOffer(tx, offer);
     if (!context) throw notFound(examOfferNotFound);

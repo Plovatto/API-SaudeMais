@@ -1,6 +1,6 @@
 import { and, eq, type SQL } from 'drizzle-orm';
 import { runAfterCommit, type AfterCommit, type Database, type Transaction } from '../../database/pg-client.js';
-import { bookings } from '../../database/schema/bookings.js';
+import { bookings, type BookingKind } from '../../database/schema/bookings.js';
 import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -8,10 +8,11 @@ import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Delivery, NotificationsService } from '../notifications/notifications.service.js';
 import type { BookingActions } from './booking-policy.js';
-import { ACTIVE_LIMIT, activeLimit, notStarted, rescheduleConflicts, sameSlot } from './bookings.messages.js';
+import { activeLimit, notStarted, rescheduleConflicts, sameSlot } from './bookings.messages.js';
 import {
   actionsAt,
-  activeFutureCount,
+  activeFutureCounts,
+  activeLimits,
   asPatient,
   cancelActiveFuture,
   completeEndedExams,
@@ -136,9 +137,13 @@ export class BookingsService {
     return { ...moved, fromStartsAt: booking.startsAt };
   }
 
-  async ensureActiveLimit(tx: Transaction, patientId: string, now: Date) {
-    if ((await activeFutureCount(tx, patientId, now)) >= ACTIVE_LIMIT) {
-      throw unprocessableField(activeLimit);
+  async ensureActiveLimit(tx: Transaction, patientId: string, kind: BookingKind, now: Date) {
+    const limits = await activeLimits(tx);
+    const active = await activeFutureCounts(tx, patientId, now);
+    const kindLimit = kind === 'exam' ? limits.maxActiveExams : limits.maxActiveAppointments;
+    if (active[kind] >= kindLimit) throw unprocessableField(activeLimit(kind, kindLimit));
+    if (active.appointment + active.exam >= limits.maxActiveBookings) {
+      throw unprocessableField(activeLimit('total', limits.maxActiveBookings));
     }
   }
 

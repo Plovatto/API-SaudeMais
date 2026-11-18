@@ -66,6 +66,9 @@ const policyColumns = {
   maxReschedules: settings.maxReschedules,
   bookingHorizonDays: settings.bookingHorizonDays,
   minLeadMinutes: settings.minLeadMinutes,
+  maxActiveBookings: settings.maxActiveBookings,
+  maxActiveAppointments: settings.maxActiveAppointments,
+  maxActiveExams: settings.maxActiveExams,
   updatedAt: settings.updatedAt,
 };
 
