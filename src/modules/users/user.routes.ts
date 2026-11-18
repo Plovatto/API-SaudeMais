@@ -18,7 +18,6 @@ import { MINUTE } from '../../lib/time.js';
 import { authOf, noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { UserController } from './user.controller.js';
-import { isDemoEmail } from './user.demo.js';
 import { currentSession, sessionNotFound } from './user.messages.js';
 import { z } from 'zod';
 import {
@@ -189,8 +188,7 @@ registry.registerPath({
   operationId: 'logoutEverywhere',
   tags: [tags.profile.name],
   summary: 'Sair de todas as sessões',
-  description:
-    'Encerra todas as sessões da conta, inclusive a atual. Na conta de demonstração, encerra só a sessão de quem pediu.',
+  description: 'Encerra todas as sessões da conta, inclusive a atual.',
   ...sessionSecurity,
   responses: {
     204: { description: 'Sessões encerradas.' },
@@ -206,8 +204,7 @@ registry.registerPath({
   operationId: 'endOtherSessions',
   tags: [tags.profile.name],
   summary: 'Encerrar as outras sessões',
-  description:
-    'Encerra todas as sessões da conta menos a atual. Na conta de demonstração, compartilhada entre visitantes, não encerra nada. Limite: 60 requisições de sessão por minuto por IP.',
+  description: 'Encerra todas as sessões da conta menos a atual. Limite: 60 requisições de sessão por minuto por IP.',
   ...sessionSecurity,
   responses: {
     204: { description: 'Outras sessões encerradas.' },
@@ -259,7 +256,6 @@ export function createUserRouter({ controller, requireAuth }: UserRouterDeps): R
     limit: 50,
     skipSuccessfulRequests: true,
     keyGenerator: (req) => emailOf(req) || `ip:${ipOf(req)}`,
-    skip: (req) => isDemoEmail(emailOf(req)),
   });
   const sessionLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
   const profileLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });

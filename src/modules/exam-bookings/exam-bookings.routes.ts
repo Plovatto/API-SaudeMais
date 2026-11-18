@@ -45,7 +45,7 @@ documentOperation({
   operationId: 'bookExam',
   tag: tags.scheduling.name,
   summary: 'Agendar um exame',
-  description: `Agenda o exame do paciente logado, que já nasce confirmado (\`confirmed\`) e recebe um código público (\`EX-\` e seis letras ou números) para apresentar na unidade. \`startsAt\` precisa ser o início de uma vaga devolvida por \`GET /api/exam-availability\`; o fim vem da duração atual do tipo de exame. O exame ocupa o menor lugar livre da vaga, até a capacidade da oferta. Contas comuns têm no máximo ${ACTIVE_LIMIT} agendamentos ativos futuros, somando consultas e exames. Se o último lugar é disputado ao mesmo tempo, só um paciente consegue; os outros recebem \`NO_CAPACITY\`. Limite: 60 requisições por minuto por IP.`,
+  description: `Agenda o exame do paciente logado, que já nasce confirmado (\`confirmed\`) e recebe um código público (\`EX-\` e seis letras ou números) para apresentar na unidade. \`startsAt\` precisa ser o início de uma vaga devolvida por \`GET /api/exam-availability\`; o fim vem da duração atual do tipo de exame. O exame ocupa o menor lugar livre da vaga, até a capacidade da oferta. Cada paciente tem no máximo ${ACTIVE_LIMIT} agendamentos ativos futuros, somando consultas e exames, sem exceção. Se o último lugar é disputado ao mesmo tempo, só um paciente consegue; os outros recebem \`NO_CAPACITY\`. Limite: 60 requisições por minuto por IP.`,
   body: bookExamSchema,
   success: { status: 201, description: 'Exame agendado.', schema: examBookingSchema },
   errors: {
@@ -80,7 +80,7 @@ documentOperation({
   tag: tags.scheduling.name,
   summary: 'Cancelar um exame',
   description:
-    'Cancela um exame confirmado que ainda não começou e libera o lugar na vaga. Só o paciente dele cancela. Envie em `startsAt` o início que a tela mostrava: se o exame mudou, já começou ou já foi encerrado, a resposta é `INVALID_STATE` e nada muda. Dentro da janela da política (`examLateWindowHours`), o cancelamento fica marcado como tardio. As contas de demonstração também cancelam, porque os agendamentos delas são restaurados todo dia. Responde o detalhe atualizado; para os demais usuários, responde como inexistente. Limite: 60 requisições por minuto por IP.',
+    'Cancela um exame confirmado que ainda não começou e libera o lugar na vaga. Só o paciente dele cancela. Envie em `startsAt` o início que a tela mostrava: se o exame mudou, já começou ou já foi encerrado, a resposta é `INVALID_STATE` e nada muda. Dentro da janela da política (`examLateWindowHours`), o cancelamento fica marcado como tardio. Responde o detalhe atualizado; para os demais usuários, responde como inexistente. Limite: 60 requisições por minuto por IP.',
   params: idParams,
   body: cancelExamSchema,
   success: { status: 200, description: 'Exame cancelado.', schema: examBookingSchema },

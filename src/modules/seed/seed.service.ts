@@ -4,37 +4,36 @@ import { AppError } from '../../lib/app-error.js';
 import { systemActor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
-import { civilDate, CLINIC_TIME_ZONE, DAY, HOUR, instantOfWallClock, MINUTE, startOfDayIn, wallClockIn } from '../../lib/time.js';
+import { civilDate, CLINIC_TIME_ZONE, DAY, HOUR, instantOfWallClock, MINUTE, wallClockIn } from '../../lib/time.js';
 import { WORKDAYS } from '../../lib/week.js';
 import type { DoctorScheduleService } from '../doctor-schedule/doctor-schedule.service.js';
 import { newPublicCode } from '../exam-bookings/exam-bookings.code.js';
 import type { LabIntegrationService } from '../lab-integration/lab-integration.service.js';
-import type { NotificationsService } from '../notifications/notifications.service.js';
-import { DEMO_ACCOUNTS, DEMO_DOCTOR, DEMO_PATIENT, type SeedAccount } from '../users/user.demo.js';
-import { SeedAccountConflictError, type UserService } from '../users/user.service.js';
+import { EXAMPLE_DOCTOR, EXAMPLE_PATIENT, type SeedAccount } from '../users/user.seed.js';
+import type { UserService } from '../users/user.service.js';
 import {
-  DEMO_BOOKINGS,
-  DEMO_DOCTOR_PROFILE,
-  DEMO_LAB,
-  DEMO_TIME_OFF,
   EXAM_TYPES,
+  EXAMPLE_DOCTOR_PROFILE,
   OFFERS,
+  SAMPLE_BOOKINGS,
   SAMPLE_DOCTORS,
+  SAMPLE_LAB,
   SAMPLE_PATIENTS,
+  SAMPLE_TIME_OFF,
   SPECIALTIES,
   UNITS,
-  type DemoBookingSeed,
   type DoctorProfileTarget,
-} from './demo.data.js';
-import type { DemoBooking, DemoRepository, RestoredDemo } from './demo.repository.js';
+  type SampleBookingSeed,
+} from './seed.data.js';
+import type { SampleBooking, SeedRepository } from './seed.repository.js';
 
 const randomPassword = () => randomBytes(24).toString('base64url');
 
-type DemoDoctor = NonNullable<Awaited<ReturnType<DemoRepository['demoDoctor']>>>;
+type ExampleDoctor = NonNullable<Awaited<ReturnType<SeedRepository['exampleDoctor']>>>;
 
 const SYSTEM = { actorType: 'system' as const, actorUserId: null };
 
-function demoDay(now: Date, dayOffset: number): number {
+function sampleDay(now: Date, dayOffset: number): number {
   const step = dayOffset < 0 ? -DAY : DAY;
   const wallNow = wallClockIn(CLINIC_TIME_ZONE, now);
   let day = wallNow - (wallNow % DAY) + dayOffset * DAY;
@@ -42,38 +41,21 @@ function demoDay(now: Date, dayOffset: number): number {
   return day;
 }
 
-function demoStart(now: Date, { dayOffset, minute }: DemoBookingSeed): Date {
-  return instantOfWallClock(CLINIC_TIME_ZONE, demoDay(now, dayOffset) + minute * MINUTE);
+function sampleStart(now: Date, { dayOffset, minute }: SampleBookingSeed): Date {
+  return instantOfWallClock(CLINIC_TIME_ZONE, sampleDay(now, dayOffset) + minute * MINUTE);
 }
 
-export class DemoService {
+export class SeedService {
   constructor(
-    private readonly repository: DemoRepository,
+    private readonly repository: SeedRepository,
     private readonly users: UserService,
     private readonly schedules: DoctorScheduleService,
     private readonly clock: Clock,
-    private readonly notifications: NotificationsService,
     private readonly lab: LabIntegrationService,
   ) {}
 
-  async ensure(): Promise<string[]> {
-    try {
-      await this.users.ensureAccount(DEMO_DOCTOR);
-    } catch (error) {
-      if (error instanceof SeedAccountConflictError) return [error.message];
-      throw error;
-    }
-    const userId = await this.repository.userIdByEmail(DEMO_DOCTOR.email);
-    if (!userId) return [];
-    let warnings: string[] = [];
-    if (await this.repository.hasDoctorProfile(userId)) await this.repository.grantDoctorRole(userId, this.clock.now());
-    else warnings = await this.grantProfile(userId, DEMO_DOCTOR.email, DEMO_DOCTOR_PROFILE);
-    await this.schedules.ensureDefault(userId);
-    return warnings;
-  }
-
   async seed(): Promise<string[]> {
-    const warnings = await this.ensure();
+    const warnings = await this.ensureExampleDoctor();
     for (const specialty of SPECIALTIES) await this.repository.ensureSpecialty(specialty);
     for (const unit of UNITS) await this.repository.ensureUnit(unit);
     const examTypeIds = new Map<string, string>();
@@ -93,82 +75,85 @@ export class DemoService {
       if (userId) await this.schedules.ensureDefault(userId);
     }
     for (const patient of SAMPLE_PATIENTS) await this.createSampleAccount(patient);
+    await this.ensureExamplePatient();
     return warnings;
   }
 
-  async restore(): Promise<RestoredDemo | undefined> {
-    const now = this.clock.now();
-    if (await this.repository.restoredSince(startOfDayIn(CLINIC_TIME_ZONE, now))) return undefined;
-    for (const account of [...DEMO_ACCOUNTS, DEMO_DOCTOR]) await this.users.restoreAccount(account);
-    await this.ensure();
-    const patientId = await this.repository.demoUserId(DEMO_PATIENT.email);
-    const doctor = await this.repository.demoDoctor(DEMO_DOCTOR.email);
-    if (!patientId || !doctor) return undefined;
-    const demoBookings: DemoBooking[] = [];
-    for (const seed of DEMO_BOOKINGS) {
-      const demoBooking = await this.demoBooking(seed, patientId, doctor, now);
-      if (demoBooking) demoBookings.push(demoBooking);
-    }
-    const timeOff = {
-      doctorId: doctor.id,
-      date: civilDate(demoDay(now, DEMO_TIME_OFF.dayOffset)),
-      reason: DEMO_TIME_OFF.reason,
-      createdAt: now,
-    };
-    const restoration = await this.repository.restoreBookings(
-      startOfDayIn(CLINIC_TIME_ZONE, now),
-      now,
-      demoBookings,
-      timeOff,
-    );
-    if (!restoration) return undefined;
-    this.notifications.forget(restoration.recipients);
-    await this.publishResults(demoBookings, restoration.examCodes, now).catch((error: unknown) => {
-      logger.warn(
-        { code: error instanceof AppError ? error.code : 'UNEXPECTED_ERROR' },
-        'Demo exam results not published',
-      );
-    });
-    return restoration.restored;
+  private async ensureExampleDoctor(): Promise<string[]> {
+    if (await this.repository.userIdByEmail(EXAMPLE_DOCTOR.email)) return [];
+    const userId = await this.users.createSeedAccount(EXAMPLE_DOCTOR);
+    if (!userId) return [];
+    const warnings = await this.grantProfile(userId, EXAMPLE_DOCTOR.email, EXAMPLE_DOCTOR_PROFILE);
+    if (warnings.length === 0) await this.schedules.ensureDefault(userId);
+    return warnings;
   }
 
-  private async publishResults(demoBookings: DemoBooking[], examCodes: string[], now: Date) {
-    const publications = demoBookings.flatMap(({ booking: { publicCode, endsAt }, results }) =>
+  private async ensureExamplePatient(): Promise<void> {
+    if (await this.repository.userIdByEmail(EXAMPLE_PATIENT.email)) return;
+    const patientId = await this.users.createSeedAccount(EXAMPLE_PATIENT);
+    const doctor = await this.repository.exampleDoctor(EXAMPLE_DOCTOR.email);
+    if (!patientId || !doctor) return;
+    const now = this.clock.now();
+    await this.repository.addTimeOff({
+      doctorId: doctor.id,
+      date: civilDate(sampleDay(now, SAMPLE_TIME_OFF.dayOffset)),
+      reason: SAMPLE_TIME_OFF.reason,
+      createdAt: now,
+    });
+    const sampleBookings: SampleBooking[] = [];
+    for (const seed of SAMPLE_BOOKINGS) {
+      const sampleBooking = await this.sampleBooking(seed, patientId, doctor, now);
+      if (sampleBooking) sampleBookings.push(sampleBooking);
+    }
+    const examCodes = await this.repository.insertSampleBookings(sampleBookings);
+    await this.publishResults(sampleBookings, examCodes, now).catch((error: unknown) => {
+      logger.warn(
+        { code: error instanceof AppError ? error.code : 'UNEXPECTED_ERROR' },
+        'Sample exam results not published',
+      );
+    });
+  }
+
+  private async publishResults(sampleBookings: SampleBooking[], examCodes: string[], now: Date) {
+    const publications = sampleBookings.flatMap(({ booking: { publicCode, endsAt }, results }) =>
       publicCode && examCodes.includes(publicCode)
         ? results.map((result, index) => ({
             ...result,
-            externalId: `DEMO-${publicCode}`,
+            externalId: `SAMPLE-${publicCode}`,
             examCode: publicCode,
             issuedAt: new Date(Math.min(now.getTime(), endsAt.getTime() + (index + 1) * HOUR)).toISOString(),
           }))
         : [],
     );
     if (publications.length === 0) return;
-    const clientId = await this.demoLabClient();
+    const clientId = await this.sampleLabClient();
     if (!clientId) return;
     for (const publication of publications) await this.lab.publish(publication, { clientId, ip: null });
   }
 
-  private async demoLabClient(): Promise<string | undefined> {
-    const client = await this.repository.integrationClient(DEMO_LAB);
-    if (!client) return (await this.lab.createClient({ name: DEMO_LAB }, systemActor)).id;
+  private async sampleLabClient(): Promise<string | undefined> {
+    const client = await this.repository.integrationClient(SAMPLE_LAB);
+    if (!client) return (await this.lab.createClient({ name: SAMPLE_LAB }, systemActor)).id;
     if (!client.revokedAt && !client.createdBy) return client.id;
-    logger.warn({ code: client.revokedAt ? 'DEMO_LAB_REVOKED' : 'DEMO_LAB_NOT_SYSTEM' }, 'Demo exam results skipped');
+    logger.warn(
+      { code: client.revokedAt ? 'SAMPLE_LAB_REVOKED' : 'SAMPLE_LAB_NOT_SYSTEM' },
+      'Sample exam results skipped',
+    );
     return undefined;
   }
 
-  private async demoBooking(
-    seed: DemoBookingSeed,
+  private async sampleBooking(
+    seed: SampleBookingSeed,
     patientId: string,
-    doctor: DemoDoctor,
+    doctor: ExampleDoctor,
     now: Date,
-  ): Promise<DemoBooking | undefined> {
-    const startsAt = demoStart(now, seed);
+  ): Promise<SampleBooking | undefined> {
+    const startsAt = sampleStart(now, seed);
     const [initial, ...transitions] = seed.history;
     const offer = seed.kind === 'exam' ? await this.repository.examOffer(doctor.unitId, seed.examType) : undefined;
     const endsAt = new Date(startsAt.getTime() + (offer?.durationMin ?? doctor.durationMin) * MINUTE);
     const columns = { patientId, unitId: doctor.unitId, startsAt, endsAt, status: transitions.at(-1) ?? initial };
-    let placement: Pick<DemoBooking, 'booking' | 'exam' | 'results'>;
+    let placement: Pick<SampleBooking, 'booking' | 'exam' | 'results'>;
     if (seed.kind === 'appointment') {
       const { visitType } = seed;
       placement = {
@@ -211,14 +196,7 @@ export class DemoService {
 
   private async createSampleAccount({ fullName, email }: Pick<SeedAccount, 'fullName' | 'email'>) {
     if (await this.repository.userIdByEmail(email)) return undefined;
-    await this.users.ensureAccount({
-      fullName,
-      email,
-      password: randomPassword(),
-      roles: ['patient'],
-      isProtected: false,
-    });
-    return this.repository.userIdByEmail(email);
+    return this.users.createSeedAccount({ fullName, email, password: randomPassword(), roles: ['patient'] });
   }
 
   private unit(name: string) {

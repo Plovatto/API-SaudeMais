@@ -15,7 +15,7 @@ export class AdminHomeRepository {
       .select({ total: countDistinct(users.id) })
       .from(users)
       .innerJoin(userRoles, eq(userRoles.userId, users.id))
-      .where(and(eq(userRoles.role, role), isNull(users.deactivatedAt), eq(users.isProtected, false)));
+      .where(and(eq(userRoles.role, role), isNull(users.deactivatedAt)));
     return row?.total ?? 0;
   }
 
@@ -23,15 +23,7 @@ export class AdminHomeRepository {
     const [row] = await this.db
       .select({ total: count() })
       .from(bookings)
-      .innerJoin(users, eq(users.id, bookings.patientId))
-      .where(
-        and(
-          eq(bookings.kind, 'appointment'),
-          inArray(effectiveStatus(now), countedToday),
-          eq(users.isProtected, false),
-          startsWithin(day),
-        ),
-      );
+      .where(and(eq(bookings.kind, 'appointment'), inArray(effectiveStatus(now), countedToday), startsWithin(day)));
     return row?.total ?? 0;
   }
 }

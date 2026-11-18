@@ -94,7 +94,7 @@ export const OFFERS: readonly { unit: string; examType: string; capacityPerSlot:
   { unit: 'Unidade Sul', examType: 'ultrassom', capacityPerSlot: 1 },
 ];
 
-export const DEMO_DOCTOR_PROFILE: DoctorProfileTarget = {
+export const EXAMPLE_DOCTOR_PROFILE: DoctorProfileTarget = {
   specialty: 'Clínica Geral',
   unit: 'Unidade Central',
   registryNumber: '999999',
@@ -143,13 +143,13 @@ export const SAMPLE_PATIENTS: readonly { fullName: string; email: string }[] = [
   { fullName: 'Paulo Silva', email: 'paulo.silva@saudemais.test' },
 ];
 
-export const DEMO_LAB = 'Laboratório de demonstração';
+export const SAMPLE_LAB = 'Laboratório de exemplo';
 
-export type DemoResultSeed = Pick<ResultInput, 'status' | 'items' | 'report'>;
+export type SampleResultSeed = Pick<ResultInput, 'status' | 'items' | 'report'>;
 
 type Transition = Extract<BookingStatus, 'confirmed' | 'completed'>;
 
-export type DemoBookingSeed = { dayOffset: number; minute: number } & (
+export type SampleBookingSeed = { dayOffset: number; minute: number } & (
   | {
       kind: 'appointment';
       visitType: VisitType;
@@ -160,13 +160,13 @@ export type DemoBookingSeed = { dayOffset: number; minute: number } & (
       kind: 'exam';
       examType: string;
       history: readonly ['confirmed', ...Extract<Transition, 'completed'>[]];
-      results?: readonly DemoResultSeed[];
+      results?: readonly SampleResultSeed[];
     }
 );
 
-export const DEMO_TIME_OFF = { dayOffset: 13, reason: 'Congresso médico' } as const;
+export const SAMPLE_TIME_OFF = { dayOffset: 13, reason: 'Congresso médico' } as const;
 
-export const DEMO_BOOKINGS: readonly DemoBookingSeed[] = [
+export const SAMPLE_BOOKINGS: readonly SampleBookingSeed[] = [
   { kind: 'appointment', visitType: 'routine', dayOffset: 2, minute: 9 * 60, history: ['pending'] },
   { kind: 'appointment', visitType: 'follow_up', dayOffset: 6, minute: 14 * 60, history: ['pending', 'confirmed'] },
   { kind: 'appointment', visitType: 'first_visit', dayOffset: 0, minute: 8 * 60, history: ['pending', 'confirmed'] },

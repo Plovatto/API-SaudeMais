@@ -9,7 +9,6 @@ import { users } from '../../database/schema/users.js';
 const doctorUsers = alias(users, 'doctor_users');
 
 const wantsEmail = (topic: EmailTopic) => and(
-  eq(users.isProtected, false),
   isNull(users.deactivatedAt),
   sql`not exists (select 1 from ${emailPreferences} where ${emailPreferences.userId} = ${users.id} and ${emailPreferences.topic} = ${topic} and not ${emailPreferences.enabled})`,
 );

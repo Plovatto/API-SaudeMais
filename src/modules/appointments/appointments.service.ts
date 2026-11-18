@@ -5,7 +5,7 @@ import { CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotAt } from '../../lib/time-slots.js';
 import { forbidden } from '../../middleware/auth.js';
 import { patientConflict } from '../bookings/bookings.messages.js';
-import type { BookingSide, LockedPatient, Outcome, SeenBooking } from '../bookings/bookings.repository.js';
+import type { BookingSide, Outcome, SeenBooking } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { SlotContext } from '../doctors/doctors.repository.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
@@ -50,8 +50,8 @@ export class AppointmentsService {
 
   async book(patientId: string, input: BookAppointmentInput): Promise<Appointment> {
     if (input.doctorId === patientId) throw unprocessableField(appointmentRules.selfBooking);
-    const { id, afterCommit } = await this.bookings.writeAsPatient(patientId, exclusionConflicts, (tx, patient) =>
-      this.create(tx, patient, patientId, input),
+    const { id, afterCommit } = await this.bookings.writeAsPatient(patientId, exclusionConflicts, (tx) =>
+      this.create(tx, patientId, input),
     );
     runAfterCommit(afterCommit);
     return this.detail(id, patientViewer(patientId));
@@ -107,9 +107,9 @@ export class AppointmentsService {
     const party = await this.repository.partyOf(id, viewer);
     if (!party) throw notFound(appointmentNotFound);
     const target = new Date(newStartsAt);
-    const afterCommit = await this.bookings.rescheduleAsPatient(patientId, exclusionConflicts, async (tx, patient) => {
+    const afterCommit = await this.bookings.rescheduleAsPatient(patientId, exclusionConflicts, async (tx) => {
       const now = this.clock.now();
-      const context = await this.repository.lockDoctor(tx, { ...party, includeProtected: patient.isProtected, now });
+      const context = await this.repository.lockDoctor(tx, { ...party, now });
       if (!context) throw conflictError(appointmentConflicts.notReschedulable);
       const moved = await this.bookings.moveSeen(
         tx,
@@ -151,19 +151,13 @@ export class AppointmentsService {
 
   private async create(
     tx: Transaction,
-    patient: LockedPatient,
     patientId: string,
     { doctorId, specialtyId, visitType, notes, ...input }: BookAppointmentInput,
   ) {
     const now = this.clock.now();
-    const context = await this.repository.lockDoctor(tx, {
-      doctorId,
-      specialtyId,
-      includeProtected: patient.isProtected,
-      now,
-    });
+    const context = await this.repository.lockDoctor(tx, { doctorId, specialtyId, now });
     if (!context) throw notFound(doctorNotFound);
-    await this.bookings.ensureActiveLimit(tx, patientId, patient.isProtected && context.isProtected, now);
+    await this.bookings.ensureActiveLimit(tx, patientId, now);
     if (context.specialtyId !== specialtyId) throw unprocessableField(appointmentRules.specialtyMismatch);
     const startsAt = new Date(input.startsAt);
     const endsAt = slotEnd(context, startsAt, now);

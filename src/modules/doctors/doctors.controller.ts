@@ -7,7 +7,7 @@ import type { DoctorsService } from './doctors.service.js';
 export function createDoctorsController(service: DoctorsService) {
   return {
     page: (async (req, res) => {
-      res.json(await service.page(doctorsQuery.parse(req.query), authOf(req).isProtected));
+      res.json(await service.page(doctorsQuery.parse(req.query)));
     }) satisfies RequestHandler,
     availability: (async (req, res) => {
       const { id } = idParams.parse(req.params);
