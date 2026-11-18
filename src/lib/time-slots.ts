@@ -1,4 +1,4 @@
-import { civilDate, DAY, HOUR, instantOfWallClock, MINUTE, wallClockIn } from './time.js';
+import { civilDate, civilDateIn, DAY, HOUR, instantOfWallClock, MINUTE, wallClockIn } from './time.js';
 
 export interface WeekdayRange {
   weekday: number;
@@ -33,6 +33,7 @@ export interface SlotRequest {
   durationMin: number;
   minLeadMinutes: number;
   bookingHorizonDays: number;
+  blockedDates?: readonly string[];
   now: Date;
   from: string;
   to: string;
@@ -67,6 +68,8 @@ export function slotDays(request: SlotRequest): SlotDay[] {
   for (let day = Date.parse(request.from); day <= Date.parse(request.to); day += DAY) {
     if (day - OFFSET_SLACK > latest) break;
     if (day + DAY + OFFSET_SLACK < earliest) continue;
+    const date = civilDate(day);
+    if (request.blockedDates?.includes(date)) continue;
     const weekday = new Date(day).getUTCDay();
     const hours = request.unitHours.find((entry) => entry.weekday === weekday);
     if (!hours) continue;
@@ -89,13 +92,13 @@ export function slotDays(request: SlotRequest): SlotDay[] {
         previousEnd = endsAt;
       }
     }
-    if (slots.length > 0) days.push({ date: civilDate(day), slots });
+    if (slots.length > 0) days.push({ date, slots });
   }
   return days;
 }
 
 export function slotAt(request: Omit<SlotRequest, 'from' | 'to' | 'busy'>, startsAt: Date): Slot | undefined {
-  const date = civilDate(wallClockIn(request.timeZone, startsAt));
+  const date = civilDateIn(request.timeZone, startsAt);
   return slotDays({ ...request, from: date, to: date, busy: [] })
     .flatMap((day) => day.slots)
     .find((slot) => slot.startsAt === startsAt.toISOString());

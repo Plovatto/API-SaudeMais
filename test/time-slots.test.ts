@@ -43,6 +43,17 @@ describe('slotDays', () => {
     expect(days[0]?.slots.at(-1)).toEqual({ startsAt: '2026-11-23T14:30:00.000Z', endsAt: '2026-11-23T15:00:00.000Z' });
   });
 
+  it('skips the blocked dates and keeps the other days', () => {
+    const input = request({
+      ranges: [1, 2, 3].map((weekday) => ({ weekday, startMin: 480, endMin: 540 })),
+      unitHours: allDay,
+      to: '2026-11-25',
+      blockedDates: ['2026-11-24', '2026-11-30'],
+    });
+
+    expect(slotDays(input).map((day) => day.date)).toEqual(['2026-11-23', '2026-11-25']);
+  });
+
   it('aligns to the range start and keeps only slots inside the unit hours', () => {
     const input = request({ ranges: [{ weekday: 1, startMin: 360, endMin: 600 }], durationMin: 40 });
 
