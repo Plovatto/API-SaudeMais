@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR } from '@/modules/seed/seed.data.js';
 import {
   availability,
   doctorNamed,
@@ -13,7 +13,13 @@ import {
 } from './support/doctors.js';
 import { as, createAdmin } from './support/users.js';
 
-const SAMPLE_NAMES = ['Dr. Carlos Mendes', 'Dr. Rafael Costa', 'Dra. Ana Ferreira', 'Dra. Beatriz Lima'];
+const SAMPLE_NAMES = [
+  'Dr. Carlos Mendes',
+  'Dr. João Silveira',
+  'Dr. Rafael Costa',
+  'Dra. Ana Ferreira',
+  'Dra. Beatriz Lima',
+];
 const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 
 const namesOf = (response: request.Response) => (response.body as DoctorPage).items.map((item) => item.fullName);
@@ -45,7 +51,7 @@ describe('GET /api/doctors', () => {
     const carlos = page.items.find((item) => item.fullName === 'Dr. Carlos Mendes');
 
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(page).toMatchObject({ page: 1, pageSize: 20, total: 4 });
+    expect(page).toMatchObject({ page: 1, pageSize: 20, total: 5 });
     expect(namesOf(response).toSorted()).toEqual(SAMPLE_NAMES);
     expect(carlos).toEqual({
       id: expect.any(String) as unknown,
@@ -61,12 +67,13 @@ describe('GET /api/doctors', () => {
     });
   });
 
-  it('shows the demo doctor only to protected patients', async () => {
-    const visitor = await listDoctors(context, context.patient, { search: 'joao' }).expect(200);
-    const demo = await listDoctors(context, context.demoPatient).expect(200);
+  it('shows the example doctor to every patient', async () => {
+    const patient = await listDoctors(context, context.patient).expect(200);
+    const example = await listDoctors(context, context.examplePatient).expect(200);
 
-    expect((visitor.body as DoctorPage).total).toBe(0);
-    expect(namesOf(demo).toSorted()).toEqual([...SAMPLE_NAMES, DEMO_DOCTOR.fullName].toSorted());
+    expect(namesOf(patient).toSorted()).toEqual(SAMPLE_NAMES);
+    expect(namesOf(example)).toEqual(namesOf(patient));
+    expect(SAMPLE_NAMES).toContain(EXAMPLE_DOCTOR.fullName);
   });
 
   it('filters by specialty', async () => {
@@ -81,11 +88,11 @@ describe('GET /api/doctors', () => {
     expect(namesOf(await listDoctors(context, context.patient, { search: 'BEATRIZ' }).expect(200))).toEqual([
       'Dra. Beatriz Lima',
     ]);
-    expect(namesOf(await listDoctors(context, context.demoPatient, { search: 'joao' }).expect(200))).toEqual([
-      DEMO_DOCTOR.fullName,
+    expect(namesOf(await listDoctors(context, context.patient, { search: 'joao' }).expect(200))).toEqual([
+      EXAMPLE_DOCTOR.fullName,
     ]);
-    expect(namesOf(await listDoctors(context, context.demoPatient, { search: 'JOÃO' }).expect(200))).toEqual([
-      DEMO_DOCTOR.fullName,
+    expect(namesOf(await listDoctors(context, context.patient, { search: 'JOÃO' }).expect(200))).toEqual([
+      EXAMPLE_DOCTOR.fullName,
     ]);
     expect(namesOf(await listDoctors(context, context.patient, { search: '%' }).expect(200))).toEqual([]);
     expect(namesOf(await listDoctors(context, context.patient, { search: 'Dr_' }).expect(200))).toEqual([]);
@@ -97,8 +104,8 @@ describe('GET /api/doctors', () => {
       .body as DoctorPage;
 
     expect(first.items).toHaveLength(3);
-    expect(second).toMatchObject({ page: 2, pageSize: 3, total: 4 });
-    expect(second.items).toHaveLength(1);
+    expect(second).toMatchObject({ page: 2, pageSize: 3, total: 5 });
+    expect(second.items).toHaveLength(2);
     expect([...first.items, ...second.items].map((item) => item.fullName).toSorted()).toEqual(SAMPLE_NAMES);
   });
 
@@ -179,19 +186,17 @@ describe('GET /api/doctors/:id/availability', () => {
     expect(invalidId.status).toBe(400);
   });
 
-  it('answers 404 for unknown doctors and hides the demo doctor from visitors', async () => {
-    const demoDoctor = await doctorNamed(context, DEMO_DOCTOR.fullName);
+  it('answers 404 for unknown doctors and shows the example doctor to any patient', async () => {
+    const exampleDoctor = await doctorNamed(context, EXAMPLE_DOCTOR.fullName);
     const period = { from: '2026-11-23', to: '2026-11-23' };
     const patientId = ((await request(context.app).get('/api/me').set(as(context.patient))).body as { id: string }).id;
 
     const unknown = await availability(context, context.patient, UNKNOWN_ID, period);
-    const hidden = await availability(context, context.patient, demoDoctor.id, period);
     const notDoctor = await availability(context, context.patient, patientId, period);
-    const shown = await availability(context, context.demoPatient, demoDoctor.id, period);
+    const shown = await availability(context, context.patient, exampleDoctor.id, period);
 
     expect(unknown.status).toBe(404);
     expect(unknown.body).toEqual({ message: 'Médico não encontrado.', code: 'NOT_FOUND' });
-    expect(hidden.status).toBe(404);
     expect(notDoctor.status).toBe(404);
     expect(shown.status).toBe(200);
     expect((shown.body as Availability).days[0]?.slots).toHaveLength(16);
@@ -202,13 +207,14 @@ describe('GET /api/doctors/:id/availability', () => {
     const beatriz = await doctorNamed(context, 'Dra. Beatriz Lima');
     const rafael = await doctorNamed(context, 'Dr. Rafael Costa');
     const ana = await doctorNamed(context, 'Dra. Ana Ferreira');
+    const joao = await doctorNamed(context, EXAMPLE_DOCTOR.fullName);
     const patientId = ((await request(context.app).get('/api/me').set(as(context.patient))).body as { id: string }).id;
     const week = { from: '2026-11-23', to: '2026-11-27' };
 
     await context.db.execute(
       sql`update doctor_schedule_days set is_active = false where doctor_id = ${carlos.id} and weekday = 1`,
     );
-    await context.db.execute(sql`update users set deactivated_at = now() where id = ${beatriz.id}`);
+    await context.db.execute(sql`update users set deactivated_at = now() where id in (${beatriz.id}, ${joao.id})`);
     await context.db.execute(sql`update specialties set is_active = false where id = ${rafael.specialty.id}`);
     await context.db.execute(sql`
       with closed as (
@@ -224,7 +230,7 @@ describe('GET /api/doctors/:id/availability', () => {
     const withoutProfile = namesOf(await listDoctors(context, context.patient, { search: 'Ana Maria' }).expect(200));
 
     expect(days.map((day) => day.date)).toEqual(['2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27']);
-    for (const id of [beatriz.id, rafael.id, ana.id, patientId]) {
+    for (const id of [beatriz.id, joao.id, rafael.id, ana.id, patientId]) {
       expect((await availability(context, context.patient, id, week)).status).toBe(404);
     }
     expect(listed).toEqual(['Dr. Carlos Mendes']);

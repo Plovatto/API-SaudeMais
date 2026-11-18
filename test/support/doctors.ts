@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
-import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
+import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { as, buildUsersApp, login, registerAndLogin, signUp } from './users.js';
 
 export interface Doctor {
@@ -24,12 +24,14 @@ export interface Availability {
 
 export async function setupClinic() {
   const context = await buildUsersApp();
-  await context.modules.users.bootstrap(undefined);
-  await context.modules.demo.service.seed();
+  await context.modules.users.service.ensureAccount(EXAMPLE_PATIENT);
+  await context.modules.seed.service.seed();
   const patient = await registerAndLogin(context.app);
-  const demo = DEMO_ACCOUNTS[0];
-  const demoLogin = await login(context.app, { email: demo?.email, password: demo?.password }).expect(200);
-  return { ...context, patient, demoPatient: (demoLogin.body as { token: string }).token };
+  const exampleLogin = await login(context.app, {
+    email: EXAMPLE_PATIENT.email,
+    password: EXAMPLE_PATIENT.password,
+  }).expect(200);
+  return { ...context, patient, examplePatient: (exampleLogin.body as { token: string }).token };
 }
 
 export type Clinic = Awaited<ReturnType<typeof setupClinic>>;
@@ -40,7 +42,7 @@ export const listDoctors = (context: Clinic, token: string, query: Record<string
 export const availability = (context: Clinic, token: string, id: string, query: Record<string, string>) =>
   request(context.app).get(`/api/doctors/${id}/availability`).query(query).set(as(token));
 
-export async function doctorNamed(context: Clinic, fullName: string, token = context.demoPatient): Promise<Doctor> {
+export async function doctorNamed(context: Clinic, fullName: string, token = context.examplePatient): Promise<Doctor> {
   const page = (await listDoctors(context, token, { search: fullName }).expect(200)).body as DoctorPage;
   const doctor = page.items.find((item) => item.fullName === fullName);
   if (!doctor) throw new Error(`${fullName} is not listed`);

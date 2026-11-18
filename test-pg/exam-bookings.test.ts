@@ -26,8 +26,7 @@ describe('exam bookings on PostgreSQL', () => {
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await context.modules.seed.service.seed();
     const rows = await pool.query<{ unit_id: string; exam_type_id: string }>(
       `update unit_exam_offers o set capacity_per_slot = $1
        from units u, exam_types e

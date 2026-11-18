@@ -27,8 +27,7 @@ describe('reschedules on PostgreSQL', () => {
     await runMigrations(pool);
     context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await context.modules.seed.service.seed();
     const doctors = await pool.query<Doctor>(
       `select u.id, p.specialty_id from users u join doctor_profiles p on p.user_id = u.id
        where u.full_name = 'Dr. Carlos Mendes'`,

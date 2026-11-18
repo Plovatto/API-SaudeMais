@@ -21,8 +21,7 @@ describe('lab results on PostgreSQL', () => {
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await context.modules.seed.service.seed();
     await pool.query(
       `insert into integration_clients (name, key_prefix, api_key_hash, created_by)
        select 'Laboratório Central', '0a1b2c3d', $1, id from users order by created_at limit 1`,

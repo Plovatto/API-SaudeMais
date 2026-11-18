@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { buildUsersApp, login, registration } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
@@ -13,7 +14,7 @@ async function withAdmin() {
 }
 
 describe('GET /api/admin/home', () => {
-  it('counts only active, non-demo accounts per role', async () => {
+  it('counts only active accounts per role', async () => {
     const context = await withAdmin();
     for (const email of ['ana@email.com', 'bruno@email.com', 'carla@email.com']) {
       await request(context.app).post('/api/users/register').send(registration({ email })).expect(201);
@@ -31,20 +32,21 @@ describe('GET /api/admin/home', () => {
     expect(response.body).toEqual({ patients: 3, doctors: 1, appointmentsToday: 0 });
   });
 
-  it('leaves protected demo accounts out of the counts', async () => {
+  it('counts the example accounts like any other account', async () => {
     const context = await withAdmin();
+    await context.modules.users.service.ensureAccount(EXAMPLE_PATIENT);
     await context.db.execute(
       sql`insert into user_roles (user_id, role) select id, 'doctor' from users where email = 'paciente@saudemais.test'`,
     );
 
     const response = await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${context.token}`);
 
-    expect(response.body).toEqual({ patients: 1, doctors: 0, appointmentsToday: 0 });
+    expect(response.body).toEqual({ patients: 2, doctors: 1, appointmentsToday: 0 });
   });
 
-  it('counts the appointments of the São Paulo day, without the cancelled, the expired and the demo ones', async () => {
+  it('counts the appointments of the São Paulo day, without the cancelled and the expired ones', async () => {
     const context = await withAdmin();
-    await context.modules.demo.service.seed();
+    await context.modules.seed.service.seed();
     await request(context.app)
       .post('/api/users/register')
       .send(registration({ email: 'ana@email.com' }))
@@ -70,7 +72,7 @@ describe('GET /api/admin/home', () => {
 
     const response = await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${context.token}`);
 
-    expect(response.body).toMatchObject({ appointmentsToday: 4 });
+    expect(response.body).toMatchObject({ appointmentsToday: 6 });
   });
 
   it('is only for admins', async () => {

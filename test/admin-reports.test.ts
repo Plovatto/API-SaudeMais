@@ -9,7 +9,6 @@ import { EXCEL_EPOCH, workbookOf } from './support/xlsx.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PATIENT = 'ana.silva@email.com';
-const DEMO_PATIENT = 'paciente@saudemais.test';
 
 let context: Clinic;
 let admin: string;
@@ -129,7 +128,6 @@ beforeAll(async () => {
   await appointment('2026-11-20T17:00:00Z', 'cancelled', { role: 'patient', late: true });
   await appointment('2026-11-21T02:59:00Z', 'cancelled', { role: 'patient' });
   await appointment('2026-11-21T03:00:00Z', 'pending');
-  await appointment('2026-11-12T16:00:00Z', 'completed', { email: DEMO_PATIENT });
   await exam('hemograma', 'EX-AAAAA1', '2026-11-11T12:00:00Z', 'completed');
   await exam('hemograma', 'EX-AAAAA2', '2026-11-13T12:00:00Z', 'completed');
   await exam('glicemia', 'EX-AAAAA3', '2026-11-16T12:00:00Z', 'cancelled', { role: 'patient' });
@@ -138,7 +136,7 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('GET /api/admin/reports', () => {
-  it('totals the bookings of the period by current status, split by kind, without the demo ones', async () => {
+  it('totals the bookings of the period by current status, split by kind', async () => {
     const response = await reports({ from: '2026-11-10', to: '2026-11-20' }).expect(200);
     const report = response.body as Report;
 

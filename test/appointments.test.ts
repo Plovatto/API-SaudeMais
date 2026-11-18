@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { ACTIVE_LIMIT } from '@/modules/bookings/bookings.messages.js';
+import { activeFutureCount } from '@/modules/bookings/bookings.repository.js';
+import { EXAMPLE_DOCTOR } from '@/modules/seed/seed.data.js';
 import {
   availability,
   doctorNamed,
@@ -33,14 +35,14 @@ const MONDAY_FIRST_SLOT = '2026-11-23T11:00:00.000Z';
 let context: Clinic;
 let carlos: Doctor;
 let ana: Doctor;
-let demoDoctor: Doctor;
+let exampleDoctor: Doctor;
 let admin: string;
 
 beforeAll(async () => {
   context = await setupClinic();
   carlos = await doctorNamed(context, 'Dr. Carlos Mendes');
   ana = await doctorNamed(context, 'Dra. Ana Ferreira');
-  demoDoctor = await doctorNamed(context, DEMO_DOCTOR.fullName);
+  exampleDoctor = await doctorNamed(context, EXAMPLE_DOCTOR.fullName);
   admin = await createAdmin(context, 'admin.teste@email.com');
 }, 60_000);
 
@@ -233,44 +235,43 @@ describe('POST /api/appointments', () => {
     expect(response.body).toMatchObject({ code: 'ACTIVE_LIMIT' });
   });
 
-  it('lets protected patients book the demo doctor without the active limit', async () => {
-    const times = ['11:00', '11:30', '12:00', '12:30', '13:00', '13:30'];
-
+  it('applies the same active limit to the example patient', async () => {
+    const me = await request(context.app).get('/api/me').set(as(context.examplePatient)).expect(200);
+    const active = await activeFutureCount(context.db, (me.body as { id: string }).id, context.clock.now());
+    const times = ['11:00', '11:30', '12:00', '12:30', '13:00', '13:30'].slice(0, ACTIVE_LIMIT - active + 1);
+    const statuses = [];
     for (const time of times) {
-      await book(context.demoPatient, appointment(demoDoctor, slot('2026-12-02', time))).expect(201);
-    }
-  });
-
-  it('keeps the active limit when a protected patient books a real doctor', async () => {
-    const times = ['11:00', '11:30', '12:00', '12:30', '13:00'];
-    for (const time of times) {
-      await book(context.demoPatient, appointment(demoDoctor, slot('2026-12-04', time))).expect(201);
+      statuses.push((await book(context.examplePatient, appointment(exampleDoctor, slot('2026-12-02', time)))).status);
     }
 
-    const response = await book(context.demoPatient, appointment(carlos, slot('2026-12-04', '14:00')));
+    const response = await book(context.examplePatient, appointment(carlos, slot('2026-12-04', '14:00')));
 
+    expect(statuses).toEqual([...times.slice(1).map(() => 201), 422]);
     expect(response.status).toBe(422);
     expect(response.body).toMatchObject({ code: 'ACTIVE_LIMIT' });
   });
 
-  it('hides the demo doctor and unknown doctors from regular patients with 404', async () => {
-    const hidden = await book(context.patient, appointment(demoDoctor, slot('2026-12-03', '11:00')));
+  it('lets any patient book the example doctor and answers 404 for unknown doctors', async () => {
+    const patient = await signUp(context.app, 'qualquer@email.com');
+    const booked = await book(patient, appointment(exampleDoctor, slot('2026-12-08', '11:00')));
     const unknown = await book(
       context.patient,
       appointment(carlos, slot('2026-12-03', '11:00'), { doctorId: UNKNOWN_ID }),
     );
 
-    expect(hidden.status).toBe(404);
-    expect(hidden.body).toEqual({ message: 'Médico não encontrado.', code: 'NOT_FOUND' });
+    expect(booked.status).toBe(201);
     expect(unknown.status).toBe(404);
+    expect(unknown.body).toEqual({ message: 'Médico não encontrado.', code: 'NOT_FOUND' });
   });
 
   it('answers 422 SELF_BOOKING when the doctor books with himself', async () => {
-    const doctor = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password }).expect(200);
+    const doctor = await login(context.app, { email: EXAMPLE_DOCTOR.email, password: EXAMPLE_DOCTOR.password }).expect(
+      200,
+    );
 
     const response = await book(
       (doctor.body as { token: string }).token,
-      appointment(demoDoctor, slot('2026-12-03', '11:00')),
+      appointment(exampleDoctor, slot('2026-12-03', '11:00')),
     );
 
     expect(response.status).toBe(422);
@@ -303,16 +304,16 @@ describe('GET /api/appointments/:id', () => {
   it('shows the appointment to its patient and its doctor only', async () => {
     const created = (
       await book(
-        context.demoPatient,
-        appointment(demoDoctor, slot('2026-12-07', '11:00'), { notes: 'Retorno anual.' }),
+        context.patient,
+        appointment(exampleDoctor, slot('2026-12-07', '11:00'), { notes: 'Retorno anual.' }),
       ).expect(201)
     ).body as Appointment;
-    const doctorLogin = await login(context.app, { email: DEMO_DOCTOR.email, password: DEMO_DOCTOR.password });
+    const doctorLogin = await login(context.app, { email: EXAMPLE_DOCTOR.email, password: EXAMPLE_DOCTOR.password });
     const doctor = (doctorLogin.body as { token: string }).token;
 
-    const asPatient = await show(context.demoPatient, created.id);
+    const asPatient = await show(context.patient, created.id);
     const asDoctor = await show(doctor, created.id);
-    const asStranger = await show(context.patient, created.id);
+    const asStranger = await show(context.examplePatient, created.id);
 
     expect(asPatient.status).toBe(200);
     expect(asPatient.headers['cache-control']).toBe('no-store');
