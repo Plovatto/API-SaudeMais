@@ -91,6 +91,21 @@ describe('GET /docs/openapi.json', () => {
     });
     expect(JSON.stringify(document.components.schemas)).not.toMatch(/"allOf":\[\{"\$ref":"[^"]+"\},\{"type":\[/);
   });
+
+  it('documents the doctor agenda filters with examples', async () => {
+    const { document } = await fetchDocument();
+    const operation = document.paths['/api/doctor/appointments']?.get as {
+      parameters: { name: string; description?: string; schema: { enum?: string[]; example?: string } }[];
+    };
+    const parameter = (name: string) => operation.parameters.find((item) => item.name === name);
+
+    expect(parameter('tab')?.schema.enum).toEqual(['pending', 'confirmed', 'awaiting', 'history', 'all']);
+    for (const name of ['from', 'to', 'search']) {
+      expect(parameter(name)?.description, name).toBeTruthy();
+      expect(parameter(name)?.schema.example, name).toBeTruthy();
+    }
+    expect(parameter('search')?.schema).toMatchObject({ maxLength: 120 });
+  });
 });
 
 describe('GET /docs', () => {

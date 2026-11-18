@@ -33,3 +33,8 @@ export const unavailable = {
   specialty: { code: 'SPECIALTY_UNAVAILABLE', field: 'specialtyId', message: 'Escolha uma especialidade ativa.' },
   unit: { code: 'UNIT_UNAVAILABLE', field: 'unitId', message: 'Escolha uma unidade ativa.' },
 } satisfies Record<string, FieldConflict>;
+
+export const inDoctorProfile = (conflict: FieldConflict): FieldConflict => ({
+  ...conflict,
+  field: `doctorProfile.${conflict.field}`,
+});

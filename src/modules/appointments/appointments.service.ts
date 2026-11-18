@@ -109,7 +109,7 @@ export class AppointmentsService {
     const target = new Date(newStartsAt);
     const afterCommit = await this.bookings.rescheduleAsPatient(patientId, exclusionConflicts, async (tx, patient) => {
       const now = this.clock.now();
-      const context = await this.repository.lockDoctor(tx, { ...party, includeProtected: patient.isProtected });
+      const context = await this.repository.lockDoctor(tx, { ...party, includeProtected: patient.isProtected, now });
       if (!context) throw conflictError(appointmentConflicts.notReschedulable);
       const moved = await this.bookings.moveSeen(
         tx,
@@ -161,6 +161,7 @@ export class AppointmentsService {
       doctorId,
       specialtyId,
       includeProtected: patient.isProtected,
+      now,
     });
     if (!context) throw notFound(doctorNotFound);
     if (context.specialtyId !== specialtyId) throw unprocessableField(appointmentRules.specialtyMismatch);

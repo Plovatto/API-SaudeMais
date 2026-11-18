@@ -50,6 +50,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`INVALID_RESET_TOKEN\` | 400 | Link de redefinição de senha inválido, usado ou vencido |
 | \`INVALID_CURRENT_PASSWORD\` | 422 | A senha atual informada na troca de senha está errada |
 | \`NOT_FOUND\` | 404 | O registro pedido não existe |
+| \`EMAIL_TAKEN\` | 409 | O e-mail já pertence a outra conta, sem distinguir maiúsculas |
 | \`NAME_TAKEN\` | 409 | Já existe um cadastro com esse nome, sem distinguir maiúsculas |
 | \`CODE_TAKEN\` | 409 | Já existe um tipo de exame com esse código |
 | \`EXAM_TYPE_INACTIVE\` | 409 | O tipo de exame está inativo e não pode ter oferta ativa |
@@ -61,6 +62,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`DOCTOR_PROFILE_EXISTS\` | 409 | A conta já tem perfil médico |
 | \`HAS_FUTURE_APPOINTMENTS\` | 409 | O médico tem consultas futuras que impedem a mudança |
 | \`RESET_NOT_SENT\` | 409 | Um link de redefinição foi enviado há pouco ou o limite do dia foi atingido |
+| \`TIME_OFF_EXISTS\` | 409 | O médico já bloqueou esse dia |
 | \`SLOT_TAKEN\` | 409 | O horário escolhido acabou de ser ocupado na agenda do médico |
 | \`NO_CAPACITY\` | 409 | Não há mais lugares na vaga de exame escolhida |
 | \`PATIENT_CONFLICT\` | 409 | O paciente já tem um agendamento ativo que coincide com o horário |
@@ -74,7 +76,9 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`SPECIALTY_UNAVAILABLE\`, \`UNIT_UNAVAILABLE\` | 422 | A especialidade ou a unidade escolhida está inativa ou não existe |
 | \`OVERLAP\` | 422 | Faixas de horário do mesmo dia se sobrepõem; veja \`fields\` |
 | \`OUTSIDE_UNIT_HOURS\` | 422 | A faixa de horário fica fora do horário da unidade; veja \`fields\` |
-| \`OUTSIDE_AVAILABILITY\` | 422 | O horário não é uma vaga gerada pela agenda do médico ou, no exame, pelo horário da unidade |
+| \`OUTSIDE_AVAILABILITY\` | 422 | O horário não é uma vaga gerada pela agenda do médico, cai num dia bloqueado por ele ou, no exame, não é uma vaga do horário da unidade |
+| \`PAST_DATE\` | 422 | O dia escolhido para bloquear ou desbloquear já passou |
+| \`DATE_TOO_FAR\` | 422 | O dia escolhido para bloquear fica a mais de 365 dias |
 | \`SAME_SLOT\` | 422 | O novo horário pedido no reagendamento é o horário atual |
 | \`ACTIVE_LIMIT\` | 422 | O paciente já tem 5 agendamentos ativos futuros |
 | \`SPECIALTY_MISMATCH\` | 422 | O médico escolhido não atende a especialidade escolhida |

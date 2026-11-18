@@ -5,19 +5,30 @@ import {
   errorResponse,
   forbiddenResponse,
   notFoundResponse,
+  serverBusyResponse,
 } from '../../docs/common-schemas.js';
 import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
+import type { FieldConflict } from '../../lib/app-error.js';
 import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { WELCOME_TOKEN_HOURS } from '../password-reset/password-reset.service.js';
 import { updateProfileSchema } from '../users/user.model.js';
+import { emailConflicts } from '../users/user.messages.js';
 import type { AdminUserController } from './admin-users.controller.js';
-import { adminConflicts, doctorProfileNotFound, unavailable, userNotFound } from './admin-users.messages.js';
+import {
+  adminConflicts,
+  doctorProfileNotFound,
+  inDoctorProfile,
+  unavailable,
+  userNotFound,
+} from './admin-users.messages.js';
 import {
   adminUserDetailSchema,
   adminUserPageSchema,
+  createUserSchema,
   deactivationImpactSchema,
   doctorProfileInputSchema,
   roleParams,
@@ -26,22 +37,21 @@ import {
 } from './admin-users.model.js';
 
 const userMissing = notFoundResponse(userNotFound);
-const unavailableResponse = errorResponse(
-  'Especialidade ou unidade inativa ou inexistente (`SPECIALTY_UNAVAILABLE`, `UNIT_UNAVAILABLE`).',
-  {
-    message: unavailable.specialty.message,
-    code: unavailable.specialty.code,
-    fields: { specialtyId: unavailable.specialty.message },
-  },
-);
+const unavailableResponse = ({ code, field, message }: FieldConflict) =>
+  errorResponse('Especialidade ou unidade inativa ou inexistente (`SPECIALTY_UNAVAILABLE`, `UNIT_UNAVAILABLE`).', {
+    message,
+    code,
+    fields: { [field]: message },
+  });
 
 interface Operation extends Omit<OperationDoc, 'tag' | 'errors'> {
   notFound?: string;
   conflict?: ReturnType<typeof conflictResponse>;
-  unprocessable?: boolean;
+  unprocessable?: FieldConflict;
+  busy?: boolean;
 }
 
-function document({ notFound, conflict, unprocessable, ...operation }: Operation) {
+function document({ notFound, conflict, unprocessable, busy, ...operation }: Operation) {
   documentOperation({
     ...operation,
     tag: tags.administration.name,
@@ -49,7 +59,8 @@ function document({ notFound, conflict, unprocessable, ...operation }: Operation
       403: forbiddenResponse,
       ...(operation.params && { 404: notFound ? notFoundResponse(notFound) : userMissing }),
       ...(conflict && { 409: conflict }),
-      ...(unprocessable && { 422: unavailableResponse }),
+      ...(unprocessable && { 422: unavailableResponse(unprocessable) }),
+      ...(busy && { 503: serverBusyResponse }),
     },
   });
 }
@@ -65,6 +76,18 @@ document({
     'Lista paginada em ordem alfabética. `search` procura no nome (sem distinguir acentos) e no e-mail; `role` e `status` filtram por perfil e por conta ativa ou desativada. Nunca mostra senhas, observações nem resultados.',
   query: usersQuery,
   success: { status: 200, description: 'Página de usuários.', schema: adminUserPageSchema },
+});
+document({
+  method: 'post',
+  path: '/api/admin/users',
+  operationId: 'adminCreateUser',
+  summary: 'Cadastrar usuário',
+  description: `Cria uma conta de paciente, médico ou administrador. Toda conta também é paciente; para \`doctor\`, envie \`doctorProfile\` (o conselho vem da especialidade). A conta nasce sem senha utilizável: entrar antes de criar a senha responde \`INVALID_CREDENTIALS\`. Depois de salvar, a pessoa recebe por e-mail um link válido por ${WELCOME_TOKEN_HOURS} horas para criar a senha em \`POST /api/password-reset/confirm\`; esse link conta nos limites por conta de \`POST /api/admin/users/{id}/password-reset\`. Fica no registro de auditoria (\`user.created\`) e, ao contrário do autocadastro, não gera o aviso \`user_registered\` para os administradores.`,
+  body: createUserSchema,
+  conflict: conflictResponse(emailConflicts.users_email_key, inDoctorProfile(adminConflicts.registryTaken)),
+  unprocessable: inDoctorProfile(unavailable.specialty),
+  busy: true,
+  success: { status: 201, description: 'Usuário cadastrado.', ...detail },
 });
 document({
   method: 'get',
@@ -155,7 +178,7 @@ document({
   params: idParams,
   body: doctorProfileInputSchema,
   conflict: conflictResponse(adminConflicts.registryTaken, adminConflicts.profileExists, adminConflicts.inactive),
-  unprocessable: true,
+  unprocessable: unavailable.specialty,
   success: { status: 201, description: 'Perfil médico criado.', ...detail },
 });
 document({
@@ -169,7 +192,7 @@ document({
   body: updateDoctorProfileSchema,
   notFound: doctorProfileNotFound,
   conflict: conflictResponse(adminConflicts.registryTaken, adminConflicts.futureAppointments),
-  unprocessable: true,
+  unprocessable: unavailable.specialty,
   success: { status: 200, description: 'Perfil médico atualizado.', ...detail },
 });
 document({
@@ -196,6 +219,7 @@ export function createAdminUserRouter({ controller, requireAuth, requireAdmin }:
 
   const router = Router();
   router.get('/api/admin/users', adminLimit, ...adminOnly, controller.page);
+  router.post('/api/admin/users', adminLimit, ...adminOnly, controller.create);
   router.get('/api/admin/users/:id', adminLimit, ...adminOnly, controller.detail);
   router.patch('/api/admin/users/:id', adminLimit, ...adminOnly, controller.update);
   router.get('/api/admin/users/:id/deactivation-impact', adminLimit, ...adminOnly, controller.impact);

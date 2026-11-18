@@ -39,7 +39,7 @@ registry.registerPath({
   tags: [tags.accounts.name],
   summary: 'Criar uma nova senha com o link',
   description:
-    'Troca a senha usando o token do link. O token vale uma vez só; depois da troca, todas as sessões da conta são encerradas. Limite: 20 tentativas por IP a cada 15 minutos.',
+    'Troca a senha usando o token do link, seja o de redefinição ou o de criação de senha enviado quando um administrador cadastra a conta. O token vale uma vez só; depois da troca, todas as sessões da conta são encerradas. Limite: 20 tentativas por IP a cada 15 minutos.',
   request: { body: jsonBody(resetConfirmSchema) },
   responses: {
     204: { description: 'Senha redefinida.' },

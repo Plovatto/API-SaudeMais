@@ -164,6 +164,8 @@ export type DemoBookingSeed = { dayOffset: number; minute: number } & (
     }
 );
 
+export const DEMO_TIME_OFF = { dayOffset: 13, reason: 'Congresso médico' } as const;
+
 export const DEMO_BOOKINGS: readonly DemoBookingSeed[] = [
   { kind: 'appointment', visitType: 'routine', dayOffset: 2, minute: 9 * 60, history: ['pending'] },
   { kind: 'appointment', visitType: 'follow_up', dayOffset: 6, minute: 14 * 60, history: ['pending', 'confirmed'] },

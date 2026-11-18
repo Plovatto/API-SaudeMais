@@ -6,7 +6,7 @@ import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
 import { uuidParam } from '../../lib/params.js';
 import { searchText } from '../../lib/search.js';
-import { publicUserSchema } from '../users/user.model.js';
+import { email, optionalPhone, personName, publicUserSchema } from '../users/user.model.js';
 
 const ufs = [
   'AC',
@@ -67,6 +67,49 @@ export const doctorProfileInputSchema = registry.register(
   z.strictObject({ specialtyId: uuidParam, unitId: uuidParam, registryNumber, registryUf }),
 );
 
+export const createUserSchema = registry.register(
+  'CreateUserInput',
+  z
+    .strictObject({
+      fullName: personName,
+      email,
+      phone: optionalPhone,
+      role: z.enum(roles, { error: 'Escolha o perfil: paciente, médico ou administrador.' }).openapi({
+        description:
+          'Perfil da nova conta. Toda conta também é paciente; `doctor` e `admin` somam o próprio perfil ao de paciente.',
+        example: 'doctor',
+      }),
+      doctorProfile: doctorProfileInputSchema.optional().openapi({
+        description: 'Especialidade, unidade e registro. Obrigatório quando `role` é `doctor`; proibido nos outros perfis.',
+      }),
+    })
+    .superRefine(({ role, doctorProfile }, context) => {
+      if ((role === 'doctor') === (doctorProfile !== undefined)) return;
+      context.addIssue({
+        code: 'custom',
+        path: ['doctorProfile'],
+        message:
+          role === 'doctor'
+            ? 'Informe especialidade, unidade e registro do médico.'
+            : 'Envie o perfil médico só para o perfil de médico.',
+      });
+    })
+    .openapi({
+      example: {
+        fullName: 'Carla Mendes',
+        email: 'carla.mendes@email.com',
+        phone: '(11) 98765-4321',
+        role: 'doctor',
+        doctorProfile: {
+          specialtyId: '0190f6a1-0000-7000-8000-000000000001',
+          unitId: '0190f6a1-0000-7000-8000-000000000002',
+          registryNumber: '123456',
+          registryUf: 'SP',
+        },
+      },
+    }),
+);
+
 export const updateDoctorProfileSchema = registry.register(
   'UpdateDoctorProfileInput',
   z
@@ -122,6 +165,7 @@ export const deactivationImpactSchema = registry.register(
 );
 
 export type UsersQuery = z.infer<typeof usersQuery>;
+export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type DoctorProfileInput = z.infer<typeof doctorProfileInputSchema>;
 export type UpdateDoctorProfileInput = z.infer<typeof updateDoctorProfileSchema>;
 export type DoctorProfile = z.infer<typeof doctorProfileSchema>;

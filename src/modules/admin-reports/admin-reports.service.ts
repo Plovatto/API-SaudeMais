@@ -1,5 +1,5 @@
 import type { Clock } from '../../lib/clock.js';
-import { civilDate, civilPeriodIn, CLINIC_TIME_ZONE, DAY, wallClockIn } from '../../lib/time.js';
+import { civilDate, civilDateIn, civilPeriodIn, CLINIC_TIME_ZONE, DAY } from '../../lib/time.js';
 import { noStatusTotals } from '../bookings/bookings.repository.js';
 import {
   DEFAULT_REPORT_DAYS,
@@ -27,7 +27,7 @@ export class AdminReportsService {
 
   async report(query: ReportsQuery): Promise<AdminReport> {
     const now = this.clock.now();
-    const to = query.to ?? civilDate(wallClockIn(CLINIC_TIME_ZONE, now));
+    const to = query.to ?? civilDateIn(CLINIC_TIME_ZONE, now);
     const period = reportPeriod.parse({ from: query.from ?? shiftDays(to, 1 - DEFAULT_REPORT_DAYS), to });
     const length = (Date.parse(period.to) - Date.parse(period.from)) / DAY + 1;
     const days = length > MAX_DAILY_DAYS ? 7 : 1;

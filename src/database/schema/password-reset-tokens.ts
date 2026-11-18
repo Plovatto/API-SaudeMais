@@ -1,7 +1,10 @@
 import { sql } from 'drizzle-orm';
 import { check, foreignKey, index, pgTable, text, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { timestamptz, uuidv7Id } from './columns.js';
+import { isOneOf, timestamptz, uuidv7Id } from './columns.js';
 import { users } from './users.js';
+
+export const resetTokenPurposes = ['reset', 'welcome'] as const;
+export type ResetTokenPurpose = (typeof resetTokenPurposes)[number];
 
 export const passwordResetTokens = pgTable(
   'password_reset_tokens',
@@ -10,6 +13,7 @@ export const passwordResetTokens = pgTable(
     userId: uuid('user_id').notNull(),
     tokenHash: text('token_hash').notNull(),
     requestedBy: uuid('requested_by'),
+    purpose: text('purpose', { enum: resetTokenPurposes }).notNull().default('reset'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     expiresAt: timestamptz('expires_at').notNull(),
     sentAt: timestamptz('sent_at'),
@@ -33,6 +37,7 @@ export const passwordResetTokens = pgTable(
       .where(sql`used_at is null and revoked_at is null`),
     index('password_reset_tokens_user_id_created_at_idx').on(table.userId, table.createdAt),
     index('password_reset_tokens_created_at_idx').on(table.createdAt),
+    check('password_reset_tokens_purpose_check', isOneOf('purpose', resetTokenPurposes)),
     check('password_reset_tokens_token_hash_check', sql`token_hash ~ '^[0-9a-f]{64}$'`),
     check('password_reset_tokens_period_check', sql`expires_at > created_at`),
     check('password_reset_tokens_single_outcome_check', sql`used_at is null or revoked_at is null`),

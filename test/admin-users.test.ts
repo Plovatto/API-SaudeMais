@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
-import { as, buildUsersApp, login, registration } from './support/users.js';
+import { as, buildUsersApp, HOUR, login, registration } from './support/users.js';
 
+const anyText = expect.any(String) as unknown;
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 
 async function adminSession(context: Awaited<ReturnType<typeof buildUsersApp>>, credentials = ADMIN) {
@@ -395,5 +397,234 @@ describe('POST /api/admin/users/:id/password-reset', () => {
 
     expect(again.status).toBe(409);
     expect(again.body).toMatchObject({ code: 'RESET_NOT_SENT' });
+  });
+});
+
+describe('POST /api/admin/users', () => {
+  const person = { fullName: 'Carla Mendes', email: 'carla.mendes@email.com', phone: '(11) 98765-4321' };
+  const create = (context: Context, body: object, token = context.admin.token) =>
+    call(context, token, 'post', '/api/admin/users', body);
+  const accountsWith = async (context: Context, email: string) =>
+    (await context.db.execute(sql`select 1 from users where email = ${email}`)).rows.length;
+
+  async function doctorProfile(context: Context) {
+    return { ...(await catalog(context, context.admin.token)), registryNumber: '123456', registryUf: 'SP' };
+  }
+
+  async function welcomeToken(context: Context) {
+    await context.mail.drain();
+    const message = context.mailer.sent.at(-1);
+    const token = /\/redefinir-senha#token=([A-Za-z0-9_-]{43})/.exec(message?.text ?? '')?.[1];
+    if (!token) throw new Error('No welcome link was sent');
+    return { message, token };
+  }
+
+  const setPassword = (context: Context, token: string) =>
+    request(context.app)
+      .post('/api/password-reset/confirm')
+      .send({ token, password: 'minha-senha-123', passwordConfirmation: 'minha-senha-123' });
+
+  it('registers a patient with the same shape as the detail route, audited and without notices', async () => {
+    const context = await withAdmin();
+
+    const response = await create(context, { ...person, role: 'patient' });
+
+    expect(response.status).toBe(201);
+    const { id } = response.body as { id: string };
+    expect(response.body).toEqual((await call(context, context.admin.token, 'get', `/api/admin/users/${id}`)).body);
+    expect(response.body).toMatchObject({
+      ...person,
+      phone: '+5511987654321',
+      roles: ['patient'],
+      deactivatedAt: null,
+      doctorProfile: null,
+    });
+    const audit = await context.db.execute<{ action: string; actor_id: string; metadata: unknown }>(
+      sql`select action, actor_id, metadata from audit_logs where entity_id = ${id}`,
+    );
+    expect(audit.rows).toEqual([{ action: 'user.created', actor_id: context.admin.id, metadata: { role: 'patient' } }]);
+    const notices = await context.db.execute<{ total: number }>(
+      sql`select count(*)::int as total from notifications where params->>'userId' = ${id}`,
+    );
+    expect(notices.rows[0]?.total).toBe(0);
+  });
+
+  it('registers an admin on top of the patient role, recording who granted it', async () => {
+    const context = await withAdmin();
+
+    const response = await create(context, { ...person, phone: '', role: 'admin' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ phone: null, roles: ['admin', 'patient'] });
+    const granted = await context.db.execute<{ role: string; granted_by: string }>(
+      sql`select role, granted_by from user_roles
+          where user_id = ${(response.body as { id: string }).id} order by role`,
+    );
+    expect(granted.rows).toEqual([
+      { role: 'admin', granted_by: context.admin.id },
+      { role: 'patient', granted_by: context.admin.id },
+    ]);
+  });
+
+  it('registers a doctor with the profile in one step', async () => {
+    const context = await withAdmin();
+    const profile = await doctorProfile(context);
+
+    const response = await create(context, {
+      ...person,
+      role: 'doctor',
+      doctorProfile: { ...profile, registryUf: 'sp' },
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      roles: ['doctor', 'patient'],
+      doctorProfile: { council: 'CRM', registryUf: 'SP', specialtyName: 'Cardiologia', unitName: 'Unidade Central' },
+    });
+    const audit = await context.db.execute<{ metadata: unknown }>(
+      sql`select metadata from audit_logs where action = 'user.created'`,
+    );
+    expect(audit.rows).toEqual([
+      { metadata: { role: 'doctor', specialtyId: profile.specialtyId, unitId: profile.unitId } },
+    ]);
+  });
+
+  it('requires the doctor profile only for doctors and validates it like the profile route', async () => {
+    const context = await withAdmin();
+    const profile = await doctorProfile(context);
+
+    const missing = await create(context, { ...person, role: 'doctor' });
+    const notDoctor = await create(context, { ...person, role: 'patient', doctorProfile: profile });
+    const badRegistry = await create(context, {
+      ...person,
+      role: 'doctor',
+      doctorProfile: { ...profile, registryNumber: '0123' },
+    });
+    const badRole = await create(context, { ...person, role: 'nurse' });
+    const badFields = await create(context, { fullName: 'A', email: 'nao-e-email', role: 'patient' });
+
+    expect(missing.status).toBe(400);
+    expect(missing.body).toMatchObject({ fields: { doctorProfile: anyText } });
+    expect(notDoctor.status).toBe(400);
+    expect(notDoctor.body).toMatchObject({ fields: { doctorProfile: anyText } });
+    expect(badRegistry.body).toMatchObject({ fields: { 'doctorProfile.registryNumber': anyText } });
+    expect(badRole.body).toMatchObject({ fields: { role: anyText } });
+    expect(badFields.body).toMatchObject({ fields: { fullName: anyText, email: anyText } });
+    expect(await accountsWith(context, person.email)).toBe(0);
+  });
+
+  it('rolls everything back when the specialty or unit is unavailable', async () => {
+    const context = await withAdmin();
+    const profile = await doctorProfile(context);
+    const unknownSpecialty = await create(context, {
+      ...person,
+      role: 'doctor',
+      doctorProfile: { ...profile, specialtyId: randomUUID() },
+    });
+    await call(context, context.admin.token, 'patch', `/api/admin/units/${profile.unitId}`, { isActive: false });
+
+    const response = await create(context, { ...person, role: 'doctor', doctorProfile: profile });
+    await context.mail.drain();
+
+    expect(unknownSpecialty.status).toBe(422);
+    expect(unknownSpecialty.body).toMatchObject({
+      code: 'SPECIALTY_UNAVAILABLE',
+      fields: { 'doctorProfile.specialtyId': anyText },
+    });
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({ code: 'UNIT_UNAVAILABLE', fields: { 'doctorProfile.unitId': anyText } });
+    expect(await accountsWith(context, person.email)).toBe(0);
+    expect(context.mailer.sent).toHaveLength(0);
+  });
+
+  it('refuses a registry that already belongs to another doctor', async () => {
+    const context = await withAdmin();
+    const profile = await doctorProfile(context);
+    await create(context, { ...person, role: 'doctor', doctorProfile: profile }).expect(201);
+
+    const response = await create(context, {
+      ...person,
+      email: 'bruno@email.com',
+      role: 'doctor',
+      doctorProfile: profile,
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: 'REGISTRY_TAKEN',
+      fields: { 'doctorProfile.registryNumber': anyText },
+    });
+    expect(await accountsWith(context, 'bruno@email.com')).toBe(0);
+  });
+
+  it('answers EMAIL_TAKEN for an e-mail already in use, whatever the case, and for demo accounts', async () => {
+    const context = await withAdmin();
+    await register(context);
+
+    const duplicate = await create(context, { ...person, email: ' ANA.Silva@Email.COM ', role: 'patient' });
+    const demo = await create(context, { ...person, email: 'medico@saudemais.test', role: 'admin' });
+
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body).toEqual({
+      message: 'Este e-mail já está cadastrado.',
+      code: 'EMAIL_TAKEN',
+      fields: { email: 'Este e-mail já está cadastrado.' },
+    });
+    expect(demo.status).toBe(409);
+    expect(demo.body).toMatchObject({ code: 'EMAIL_TAKEN' });
+  });
+
+  it('e-mails a link that creates the password, and login fails until then', async () => {
+    const context = await withAdmin();
+    const { id } = (await create(context, { ...person, role: 'patient' }).expect(201)).body as { id: string };
+
+    const { message, token } = await welcomeToken(context);
+    const guessed = await login(context.app, { email: person.email, password: 'qualquer-senha' });
+
+    expect(message).toMatchObject({ to: person.email, subject: 'Sua conta no Saúde+ foi criada' });
+    expect(message?.text).toContain('https://app.saudemais.test/redefinir-senha#token=');
+    expect(message?.text).toContain('72 horas');
+    expect(guessed.status).toBe(401);
+    expect(guessed.body).toMatchObject({ code: 'INVALID_CREDENTIALS', message: 'E-mail ou senha incorretos.' });
+    const stored = await context.db.execute<{ requested_by: string; hours: number }>(
+      sql`select requested_by, extract(epoch from expires_at - created_at)::int / 3600 as hours
+          from password_reset_tokens where user_id = ${id}`,
+    );
+    expect(stored.rows).toEqual([{ requested_by: context.admin.id, hours: 72 }]);
+
+    await setPassword(context, token).expect(204);
+    expect((await login(context.app, { email: person.email, password: 'minha-senha-123' })).status).toBe(200);
+    expect((await setPassword(context, token)).status).toBe(400);
+  });
+
+  it('lets the welcome link expire after 72 hours', async () => {
+    const context = await withAdmin();
+    await create(context, { ...person, role: 'patient' }).expect(201);
+    const { token } = await welcomeToken(context);
+
+    context.clock.advance(72 * HOUR);
+
+    expect((await setPassword(context, token)).body).toMatchObject({ code: 'INVALID_RESET_TOKEN' });
+  });
+
+  it('is only for active admins', async () => {
+    const context = await withAdmin();
+    await register(context);
+    const patient = ((await login(context.app).expect(200)).body as { token: string }).token;
+    const formerAdminId = await register(context, { email: 'ex.admin@email.com' });
+
+    const anonymous = await request(context.app).post('/api/admin/users').send({ ...person, role: 'patient' });
+
+    expect(anonymous.status).toBe(401);
+    expect((await create(context, { ...person, role: 'patient' }, patient)).status).toBe(403);
+    await expect(
+      context.modules.adminUsers.service.create(
+        { actorId: formerAdminId, ip: null },
+        { fullName: person.fullName, email: person.email, phone: undefined, role: 'admin' },
+      ),
+    ).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
+    await context.mail.drain();
+    expect(await accountsWith(context, person.email)).toBe(0);
+    expect(context.mailer.sent.map((message) => message.to)).not.toContain(person.email);
   });
 });

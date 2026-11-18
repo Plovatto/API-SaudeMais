@@ -1,10 +1,11 @@
+import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import { AppError, conflictError, invalidData } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
-import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDate, wallClockIn } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDateIn } from '../../lib/time.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import type {
   ChangePasswordInput,
@@ -16,16 +17,12 @@ import type {
   SessionView,
   UpdateProfileInput,
 } from './user.model.js';
-import { birthDateInFuture, currentSession, sessionNotFound } from './user.messages.js';
+import { birthDateInFuture, currentSession, emailConflicts, sessionNotFound } from './user.messages.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
 import { isDemoEmail, type SeedAccount } from './user.demo.js';
-import type { UserRepository } from './user.repository.js';
+import type { NewUser, UserRepository } from './user.repository.js';
 import type { SessionCache } from './user.session-cache.js';
 import { createSessionToken, hashToken, isWellFormedToken } from './user.token.js';
-
-const emailConflicts = {
-  users_email_key: { code: 'EMAIL_TAKEN', field: 'email', message: 'Este e-mail já está cadastrado.' },
-};
 
 export const TERMS_VERSION = '2026-11-13';
 
@@ -67,22 +64,19 @@ export class UserService {
 
   async register({ fullName, email, phone, password }: RegisterInput): Promise<PublicUser> {
     const passwordHash = await hashPassword(password);
-    if (isDemoEmail(email)) throw conflictError(emailConflicts.users_email_key);
+    return this.createAccount(
+      { fullName, email, phone, passwordHash, roles: ['patient'], termsVersion: TERMS_VERSION },
+      (tx, user) => this.notifications.notifyAdmins(tx, { type: 'user_registered', params: { userId: user.id } }),
+    );
+  }
+
+  async createAccount(
+    account: Omit<NewUser, 'isProtected' | 'now'>,
+    onCreated: (tx: Transaction, user: PublicUser) => Promise<AfterCommit>,
+  ): Promise<PublicUser> {
+    if (isDemoEmail(account.email)) throw conflictError(emailConflicts.users_email_key);
     return withConstraintConflicts(
-      () =>
-        this.repository.createUser(
-          {
-            fullName,
-            email,
-            phone,
-            passwordHash,
-            roles: ['patient'],
-            isProtected: false,
-            termsVersion: TERMS_VERSION,
-            now: this.clock.now(),
-          },
-          (tx, user) => this.notifications.notifyAdmins(tx, { type: 'user_registered', params: { userId: user.id } }),
-        ),
+      () => this.repository.createUser({ ...account, isProtected: false, now: this.clock.now() }, onCreated),
       emailConflicts,
     );
   }
@@ -180,7 +174,7 @@ export class UserService {
   }
 
   async updateProfile(userId: string, { fullName, phone, birthDate }: UpdateProfileInput): Promise<Profile> {
-    if (birthDate && birthDate > civilDate(wallClockIn(CLINIC_TIME_ZONE, this.clock.now()))) {
+    if (birthDate && birthDate > civilDateIn(CLINIC_TIME_ZONE, this.clock.now())) {
       throw invalidData(birthDateInFuture);
     }
     await this.repository.updateProfile(userId, definedFields({ fullName, phone, birthDate }));

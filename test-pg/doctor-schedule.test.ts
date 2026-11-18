@@ -4,8 +4,10 @@ import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
 import { WEEKDAYS } from '@/lib/week.js';
 import { DoctorScheduleRepository } from '@/modules/doctor-schedule/doctor-schedule.repository.js';
+import { DoctorScheduleService } from '@/modules/doctor-schedule/doctor-schedule.service.js';
 import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
+import { fixedClock } from '../test/support/fixed-clock.js';
 import { createCleanPool } from './support/pg-test-pool.js';
 
 const week = (weekday: number, ranges: { startMin: number; endMin: number }[]) =>
@@ -69,5 +71,24 @@ describe('doctor schedule on PostgreSQL', () => {
     );
     expect(days.rows[0]?.total).toBe(7);
     expect(ranges.rows).toHaveLength(1);
+  });
+
+  it('blocks a day once when two requests race, answering TIME_OFF_EXISTS to the other', async () => {
+    const service = new DoctorScheduleService(
+      new DoctorScheduleRepository(createDb(pool)),
+      fixedClock(new Date('2026-11-20T12:00:00.000Z')),
+    );
+    const actor = { actorId: doctorId, ip: null };
+
+    const results = await Promise.allSettled(
+      ['Congresso', 'Viagem'].map((reason) => service.block(doctorId, { date: '2026-12-24', reason }, actor)),
+    );
+
+    const rows = await pool.query('select 1 from doctor_time_off where doctor_id = $1', [doctorId]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+      reason: { status: 409, code: 'TIME_OFF_EXISTS' },
+    });
+    expect(rows.rows).toHaveLength(1);
   });
 });

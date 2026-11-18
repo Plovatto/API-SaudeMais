@@ -1,9 +1,21 @@
-import { AppError, unprocessable, type FieldErrors } from '../../lib/app-error.js';
+import { AppError, conflictError, unprocessable, unprocessableField, type FieldErrors } from '../../lib/app-error.js';
 import type { Actor } from '../../lib/audit.js';
+import type { Clock } from '../../lib/clock.js';
 import { isExclusionViolation } from '../../lib/pg-errors.js';
+import { civilDate, civilDateIn, CLINIC_TIME_ZONE, DAY } from '../../lib/time.js';
+import { MAX_BOOKING_HORIZON_DAYS } from '../catalog/catalog.model.js';
 import { WEEKDAYS, WORKDAYS } from '../../lib/week.js';
 import { scheduleMessages } from './doctor-schedule.messages.js';
-import type { SaveScheduleInput, SavedSchedule, Schedule, ScheduleDay, UnitHour } from './doctor-schedule.model.js';
+import type {
+  CreatedTimeOff,
+  CreateTimeOffInput,
+  SaveScheduleInput,
+  SavedSchedule,
+  Schedule,
+  ScheduleDay,
+  TimeOff,
+  UnitHour,
+} from './doctor-schedule.model.js';
 import type { DoctorScheduleRepository } from './doctor-schedule.repository.js';
 
 const DEFAULT_RANGES = [
@@ -21,7 +33,9 @@ const rangeField = (dayIndex: number, rangeIndex: number) => `days.${dayIndex}.r
 const rejection = ({ code, message }: { code: string; message: string }, fields?: FieldErrors) =>
   unprocessable(code, message, fields);
 
-const profileMissing = () => new AppError(404, 'NOT_FOUND', scheduleMessages.profileMissing);
+const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
+
+const profileMissing = () => notFound(scheduleMessages.profileMissing);
 
 function overlaps(days: ScheduleDay[]): FieldErrors {
   const fields: FieldErrors = {};
@@ -58,8 +72,15 @@ const sortDays = (days: ScheduleDay[]): ScheduleDay[] =>
 
 const hasErrors = (fields: FieldErrors) => Object.keys(fields).length > 0;
 
+const today = (now: Date) => civilDateIn(CLINIC_TIME_ZONE, now);
+
+const lastBlockableDay = (now: Date) => civilDate(Date.parse(today(now)) + MAX_BOOKING_HORIZON_DAYS * DAY);
+
 export class DoctorScheduleService {
-  constructor(private readonly repository: DoctorScheduleRepository) {}
+  constructor(
+    private readonly repository: DoctorScheduleRepository,
+    private readonly clock: Clock,
+  ) {}
 
   async schedule(doctorId: string): Promise<Schedule> {
     const schedule = await this.repository.find(doctorId);
@@ -71,11 +92,12 @@ export class DoctorScheduleService {
     const overlapping = overlaps(input.days);
     if (hasErrors(overlapping)) throw rejection(scheduleMessages.overlap, overlapping);
     const days = sortDays(input.days);
-    let unitHours: UnitHour[] | undefined;
+    let replaced: Awaited<ReturnType<DoctorScheduleRepository['replace']>>;
     try {
-      unitHours = await this.repository.replace({
+      replaced = await this.repository.replace({
         doctorId,
         days,
+        appointmentDurationMin: input.appointmentDurationMin,
         actor,
         check: (hours) => {
           const outside = outsideUnitHours(input.days, hours);
@@ -88,8 +110,31 @@ export class DoctorScheduleService {
       }
       throw error;
     }
-    if (!unitHours) throw profileMissing();
-    return { days, unitHours, warnings: [] };
+    if (!replaced) throw profileMissing();
+    return { days, ...replaced, warnings: [] };
+  }
+
+  async timeOff(doctorId: string): Promise<TimeOff[]> {
+    const entries = await this.repository.timeOff(doctorId, today(this.clock.now()));
+    if (!entries) throw profileMissing();
+    return entries;
+  }
+
+  async block(doctorId: string, { date, reason }: CreateTimeOffInput, actor: Actor): Promise<CreatedTimeOff> {
+    const now = this.clock.now();
+    if (date < today(now)) throw unprocessableField(scheduleMessages.pastDate);
+    if (date > lastBlockableDay(now)) throw unprocessableField(scheduleMessages.tooFar);
+    const result = await this.repository.block({ doctorId, date, reason: reason || null, actor, now });
+    if (result === 'missing') throw profileMissing();
+    if (result === 'exists') throw conflictError(scheduleMessages.timeOffExists);
+    return result;
+  }
+
+  async unblock(doctorId: string, date: string, actor: Actor): Promise<void> {
+    if (date < today(this.clock.now())) throw unprocessableField(scheduleMessages.pastDate);
+    const result = await this.repository.unblock({ doctorId, date, actor });
+    if (result === 'missing') throw profileMissing();
+    if (result === 'absent') throw notFound(scheduleMessages.timeOffMissing);
   }
 
   ensureDefault(doctorId: string): Promise<void> {

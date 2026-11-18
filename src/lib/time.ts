@@ -38,6 +38,10 @@ export function civilDate(wallClock: number): string {
   return new Date(wallClock).toISOString().slice(0, 10);
 }
 
+export function civilDateIn(timeZone: string, instant: Date): string {
+  return civilDate(wallClockIn(timeZone, instant));
+}
+
 export function startOfDayIn(timeZone: string, date: Date): Date {
   const wallClock = wallClockIn(timeZone, date);
   return instantOfWallClock(timeZone, wallClock - (wallClock % DAY));
@@ -53,9 +57,10 @@ export function dayRangeIn(timeZone: string, date: Date): DayRange {
   return { start, end: startOfDayIn(timeZone, new Date(start.getTime() + DAY + 2 * HOUR)) };
 }
 
+export function civilDayStartIn(timeZone: string, day: string, daysLater = 0): Date {
+  return instantOfWallClock(timeZone, Date.parse(day) + daysLater * DAY);
+}
+
 export function civilPeriodIn(timeZone: string, { from, to }: { from: string; to: string }): DayRange {
-  return {
-    start: instantOfWallClock(timeZone, Date.parse(from)),
-    end: instantOfWallClock(timeZone, Date.parse(to) + DAY),
-  };
+  return { start: civilDayStartIn(timeZone, from), end: civilDayStartIn(timeZone, to, 1) };
 }

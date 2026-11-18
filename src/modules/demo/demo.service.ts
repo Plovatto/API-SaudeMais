@@ -4,7 +4,7 @@ import { AppError } from '../../lib/app-error.js';
 import { systemActor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
-import { CLINIC_TIME_ZONE, DAY, HOUR, instantOfWallClock, MINUTE, startOfDayIn, wallClockIn } from '../../lib/time.js';
+import { civilDate, CLINIC_TIME_ZONE, DAY, HOUR, instantOfWallClock, MINUTE, startOfDayIn, wallClockIn } from '../../lib/time.js';
 import { WORKDAYS } from '../../lib/week.js';
 import type { DoctorScheduleService } from '../doctor-schedule/doctor-schedule.service.js';
 import { newPublicCode } from '../exam-bookings/exam-bookings.code.js';
@@ -16,6 +16,7 @@ import {
   DEMO_BOOKINGS,
   DEMO_DOCTOR_PROFILE,
   DEMO_LAB,
+  DEMO_TIME_OFF,
   EXAM_TYPES,
   OFFERS,
   SAMPLE_DOCTORS,
@@ -33,12 +34,16 @@ type DemoDoctor = NonNullable<Awaited<ReturnType<DemoRepository['demoDoctor']>>>
 
 const SYSTEM = { actorType: 'system' as const, actorUserId: null };
 
-function demoStart(now: Date, { dayOffset, minute }: DemoBookingSeed): Date {
+function demoDay(now: Date, dayOffset: number): number {
   const step = dayOffset < 0 ? -DAY : DAY;
   const wallNow = wallClockIn(CLINIC_TIME_ZONE, now);
   let day = wallNow - (wallNow % DAY) + dayOffset * DAY;
   while (!(WORKDAYS as readonly number[]).includes(new Date(day).getUTCDay())) day += step;
-  return instantOfWallClock(CLINIC_TIME_ZONE, day + minute * MINUTE);
+  return day;
+}
+
+function demoStart(now: Date, { dayOffset, minute }: DemoBookingSeed): Date {
+  return instantOfWallClock(CLINIC_TIME_ZONE, demoDay(now, dayOffset) + minute * MINUTE);
 }
 
 export class DemoService {
@@ -104,7 +109,18 @@ export class DemoService {
       const demoBooking = await this.demoBooking(seed, patientId, doctor, now);
       if (demoBooking) demoBookings.push(demoBooking);
     }
-    const restoration = await this.repository.restoreBookings(startOfDayIn(CLINIC_TIME_ZONE, now), now, demoBookings);
+    const timeOff = {
+      doctorId: doctor.id,
+      date: civilDate(demoDay(now, DEMO_TIME_OFF.dayOffset)),
+      reason: DEMO_TIME_OFF.reason,
+      createdAt: now,
+    };
+    const restoration = await this.repository.restoreBookings(
+      startOfDayIn(CLINIC_TIME_ZONE, now),
+      now,
+      demoBookings,
+      timeOff,
+    );
     if (!restoration) return undefined;
     this.notifications.forget(restoration.recipients);
     await this.publishResults(demoBookings, restoration.examCodes, now).catch((error: unknown) => {
