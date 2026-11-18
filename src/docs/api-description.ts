@@ -50,6 +50,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`INVALID_RESET_TOKEN\` | 400 | Link de redefinição de senha inválido, usado ou vencido |
 | \`INVALID_CURRENT_PASSWORD\` | 422 | A senha atual informada na troca de senha está errada |
 | \`NOT_FOUND\` | 404 | O registro pedido não existe |
+| \`EMAIL_TAKEN\` | 409 | O e-mail já pertence a outra conta, sem distinguir maiúsculas |
 | \`NAME_TAKEN\` | 409 | Já existe um cadastro com esse nome, sem distinguir maiúsculas |
 | \`CODE_TAKEN\` | 409 | Já existe um tipo de exame com esse código |
 | \`EXAM_TYPE_INACTIVE\` | 409 | O tipo de exame está inativo e não pode ter oferta ativa |

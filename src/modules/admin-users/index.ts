@@ -4,6 +4,7 @@ import type { Clock } from '../../lib/clock.js';
 import { createRequireRole } from '../../middleware/auth.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { PasswordResetService } from '../password-reset/password-reset.service.js';
+import type { UserService } from '../users/user.service.js';
 import type { SessionCache } from '../users/user.session-cache.js';
 import { createAdminUserController } from './admin-users.controller.js';
 import { AdminUserRepository } from './admin-users.repository.js';
@@ -17,6 +18,7 @@ export interface AdminUsersModuleDeps {
   passwordReset: PasswordResetService;
   sessions: SessionCache;
   bookings: BookingsService;
+  users: UserService;
 }
 
 export function createAdminUsersModule({
@@ -26,8 +28,16 @@ export function createAdminUsersModule({
   passwordReset,
   sessions,
   bookings,
+  users,
 }: AdminUsersModuleDeps) {
-  const service = new AdminUserService(new AdminUserRepository(db), passwordReset, bookings, sessions, clock);
+  const service = new AdminUserService(
+    new AdminUserRepository(db),
+    passwordReset,
+    bookings,
+    sessions,
+    clock,
+    users,
+  );
   const router = createAdminUserRouter({
     controller: createAdminUserController(service),
     requireAuth,
