@@ -206,12 +206,133 @@ describe('GET /api/doctor/appointments', () => {
   });
 
   it('rejects invalid filters with 400', async () => {
-    const invalid = [{ tab: 'all' }, { from: '2026-13-01' }, { from: '24/11/2026' }, { pageSize: 51 }, { extra: 1 }];
+    const invalid = [
+      { tab: 'todas' },
+      { from: '2026-13-01' },
+      { from: '24/11/2026' },
+      { to: '2026-11-31' },
+      { search: 'a'.repeat(121) },
+      { pageSize: 51 },
+      { extra: 1 },
+    ];
     for (const query of invalid) {
       const response = await list(doctor, query);
       expect(response.status, JSON.stringify(query)).toBe(400);
       expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR' });
     }
+  });
+});
+
+describe('GET /api/doctor/appointments filters', () => {
+  let doctor: string;
+  let counts: Counts;
+  let past: Item;
+  let joaoSoon: Item;
+  let confirmed: Item;
+  let cancelled: Item;
+  let joaoLater: Item;
+
+  beforeAll(async () => {
+    const created = await createDoctor(context, 'filtros.medico@email.com', 'Dra. Filtros Teste', '700004');
+    doctor = created.token;
+    const owner = created.doctor;
+    const joao = await signUp(context.app, 'joao.filtros@email.com', 'João Conceição');
+
+    past = await book(helper, owner, slot('2026-11-26', '11:00'));
+    await setStatus(past.id, 'completed');
+    await moveTo(past.id, slot('2026-11-16', '11:00'));
+    joaoSoon = await book(joao, owner, slot('2026-11-23', '11:00'));
+    confirmed = await book(helper, owner, slot('2026-11-23', '12:00'));
+    await setStatus(confirmed.id, 'confirmed');
+    cancelled = await book(joao, owner, slot('2026-11-25', '11:00'));
+    await cancel(joao, cancelled.id, cancelled.startsAt);
+    joaoLater = await book(joao, owner, slot('2026-11-27', '11:00'));
+    counts = ((await list(doctor).expect(200)).body as AgendaPage).counts;
+  });
+
+  const agenda = async (query: Record<string, string>) => (await list(doctor, query).expect(200)).body as AgendaPage;
+  const listed = async (query: Record<string, string>) => ids((await agenda(query)).items);
+
+  it('lists every appointment in any status oldest first in the all tab, with the same counts', async () => {
+    const page = await agenda({ tab: 'all' });
+
+    expect(page.items.map((item) => [item.id, item.status])).toEqual([
+      [past.id, 'completed'],
+      [joaoSoon.id, 'pending'],
+      [confirmed.id, 'confirmed'],
+      [cancelled.id, 'cancelled'],
+      [joaoLater.id, 'pending'],
+    ]);
+    expect(page.total).toBe(5);
+    expect(counts).toEqual({
+      pending: 2,
+      confirmed: 1,
+      awaiting: 0,
+      history: 2,
+    });
+    expect(page.counts).toEqual(counts);
+  });
+
+  it('keeps the São Paulo days between from and to, both included', async () => {
+    expect(await listed({ tab: 'all', from: '2026-11-23', to: '2026-11-25' })).toEqual([
+      joaoSoon.id,
+      confirmed.id,
+      cancelled.id,
+    ]);
+    expect(await listed({ tab: 'all', from: '2026-11-23', to: '2026-11-23' })).toEqual([joaoSoon.id, confirmed.id]);
+    expect(await listed({ tab: 'all', to: '2026-11-23' })).toEqual([past.id, joaoSoon.id, confirmed.id]);
+    expect(await listed({ to: '2026-11-26' })).toEqual([joaoSoon.id]);
+
+    await moveTo(cancelled.id, '2026-11-26T02:30:00.000Z');
+    const beforeMidnight = await listed({ tab: 'all', to: '2026-11-25' });
+    await moveTo(cancelled.id, '2026-11-26T03:00:00.000Z');
+    const atMidnight = await listed({ tab: 'all', to: '2026-11-25' });
+    await moveTo(cancelled.id, slot('2026-11-25', '11:00'));
+
+    expect(beforeMidnight).toContain(cancelled.id);
+    expect(atMidnight).not.toContain(cancelled.id);
+  });
+
+  it('searches the patient name ignoring accents, case and surrounding spaces, without changing the counts', async () => {
+    const joaos = [joaoSoon.id, cancelled.id, joaoLater.id];
+    for (const search of ['joao', 'JOÃO', '  conceicao  ', 'joão conceição']) {
+      const page = await agenda({ tab: 'all', search });
+      expect(ids(page.items), search).toEqual(joaos);
+      expect(page.total).toBe(3);
+      expect(page.counts).toEqual(counts);
+    }
+    for (const search of ['%', '_', '\\']) {
+      expect(await listed({ tab: 'all', search }), search).toEqual([]);
+    }
+    expect(await listed({ tab: 'all', search: 'Maria' })).toEqual([]);
+    expect((await agenda({ tab: 'all', search: '   ' })).total).toBe(5);
+  });
+
+  it('pages the all tab in the same order', async () => {
+    const second = await agenda({ tab: 'all', page: '2', pageSize: '2' });
+
+    expect(second).toMatchObject({ page: 2, pageSize: 2, total: 5 });
+    expect(ids(second.items)).toEqual([confirmed.id, cancelled.id]);
+  });
+
+  it('combines the tab, the period and the search', async () => {
+    expect(await listed({ search: 'joao', from: '2026-11-23', to: '2026-11-25' })).toEqual([joaoSoon.id]);
+    expect(await listed({ tab: 'history', search: 'joao' })).toEqual([cancelled.id]);
+    expect(await listed({ tab: 'all', search: 'paciente', from: '2026-11-17' })).toEqual([confirmed.id]);
+  });
+
+  it('rejects a to before from with 400', async () => {
+    const response = await list(doctor, {
+      tab: 'all',
+      from: '2026-11-25',
+      to: '2026-11-24',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      fields: { to: 'A data final precisa ser igual ou posterior à inicial.' },
+    });
   });
 });
 

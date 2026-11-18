@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, sql, type SQL } from 'drizzle-orm';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import {
   bookings,
@@ -9,8 +9,9 @@ import {
 } from '../../database/schema/bookings.js';
 import { specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
-import { pageOf, type Pagination } from '../../lib/pagination.js';
-import { CLINIC_TIME_ZONE, instantOfWallClock, type DayRange } from '../../lib/time.js';
+import { pageOf } from '../../lib/pagination.js';
+import { unaccentMatch } from '../../lib/search.js';
+import { civilDayStartIn, CLINIC_TIME_ZONE, type DayRange } from '../../lib/time.js';
 import { doctorActions } from '../bookings/booking-policy.js';
 import {
   cancellationColumns,
@@ -31,6 +32,7 @@ const tabs: Record<AgendaTab, (now: Date) => { where: SQL | undefined; order: SQ
   confirmed: (now) => ({ where: futureWith('confirmed', now), order: asc(bookings.startsAt) }),
   awaiting: (now) => ({ where: isAwaitingRecord(now), order: asc(bookings.startsAt) }),
   history: (now) => ({ where: notActiveFuture(now), order: desc(bookings.startsAt) }),
+  all: () => ({ where: undefined, order: asc(bookings.startsAt) }),
 };
 
 const ofDoctor = (doctorId: string) => and(eq(bookings.doctorId, doctorId), eq(bookings.kind, 'appointment'));
@@ -40,19 +42,22 @@ const reachablePhone = (now: Date) =>
     string | null
   >`case when ${effectiveStatus(now)} in ('pending', 'confirmed', 'completed', 'no_show') then ${users.phone} end`;
 
-interface Listing extends Pagination {
+const patientNamed = (tx: Transaction, search: string) =>
+  inArray(bookings.patientId, tx.select({ id: users.id }).from(users).where(unaccentMatch(users.fullName, search)));
+
+interface Listing extends DoctorAppointmentsQuery {
   doctorId: string;
-  tab: AgendaTab;
-  from?: string | undefined;
   now: Date;
 }
 
-async function list(tx: Transaction, { doctorId, tab, from, now, ...pagination }: Listing) {
+async function list(tx: Transaction, { doctorId, tab, from, to, search, now, ...pagination }: Listing) {
   const { where: inTab, order } = tabs[tab](now);
   const where = and(
     ofDoctor(doctorId),
     inTab,
-    from ? gte(bookings.startsAt, instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(from))) : undefined,
+    from ? gte(bookings.startsAt, civilDayStartIn(CLINIC_TIME_ZONE, from)) : undefined,
+    to ? lt(bookings.startsAt, civilDayStartIn(CLINIC_TIME_ZONE, to, 1)) : undefined,
+    search ? patientNamed(tx, search) : undefined,
   );
   const select = tx
     .select({
@@ -104,14 +109,10 @@ async function todayOf(tx: Transaction, doctorId: string, day: DayRange, now: Da
 export class DoctorAgendaRepository {
   constructor(private readonly db: Database) {}
 
-  page(
-    doctorId: string,
-    { tab, from, ...pagination }: DoctorAppointmentsQuery,
-    now: Date,
-  ): Promise<DoctorAppointmentPage> {
+  page(doctorId: string, query: DoctorAppointmentsQuery, now: Date): Promise<DoctorAppointmentPage> {
     return this.db.transaction(
       async (tx) => ({
-        ...(await list(tx, { doctorId, tab, from, now, ...pagination })),
+        ...(await list(tx, { doctorId, now, ...query })),
         counts: await countsOf(tx, doctorId, now),
       }),
       readSnapshot,

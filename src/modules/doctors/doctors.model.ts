@@ -45,15 +45,17 @@ export const periodShape = {
   to: civilDay.openapi({ description: 'Último dia, incluído.', example: '2026-11-27' }),
 };
 
+export const endNotBeforeStart = {
+  path: ['to'],
+  message: 'A data final precisa ser igual ou posterior à inicial.',
+};
+
 export function withPeriodRules<T extends z.ZodType<{ from: string; to: string }>>(
   schema: T,
   maxDays = MAX_AVAILABILITY_DAYS,
 ): T {
   return schema
-    .refine(({ from, to }) => to >= from, {
-      path: ['to'],
-      message: 'A data final precisa ser igual ou posterior à inicial.',
-    })
+    .refine(({ from, to }) => to >= from, endNotBeforeStart)
     .refine(({ from, to }) => Date.parse(to) - Date.parse(from) < maxDays * DAY, {
       path: ['to'],
       message: `Consulte no máximo ${maxDays} dias por vez.`,
