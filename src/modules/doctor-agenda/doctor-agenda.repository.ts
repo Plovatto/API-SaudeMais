@@ -11,7 +11,7 @@ import { specialties, units } from '../../database/schema/catalog.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf } from '../../lib/pagination.js';
 import { unaccentMatch } from '../../lib/search.js';
-import { CLINIC_TIME_ZONE, DAY, instantOfWallClock, type DayRange } from '../../lib/time.js';
+import { civilDayStartIn, CLINIC_TIME_ZONE, type DayRange } from '../../lib/time.js';
 import { doctorActions } from '../bookings/booking-policy.js';
 import {
   cancellationColumns,
@@ -42,9 +42,6 @@ const reachablePhone = (now: Date) =>
     string | null
   >`case when ${effectiveStatus(now)} in ('pending', 'confirmed', 'completed', 'no_show') then ${users.phone} end`;
 
-const midnightOf = (day: string, daysLater = 0) =>
-  instantOfWallClock(CLINIC_TIME_ZONE, Date.parse(day) + daysLater * DAY);
-
 const patientNamed = (tx: Transaction, search: string) =>
   inArray(bookings.patientId, tx.select({ id: users.id }).from(users).where(unaccentMatch(users.fullName, search)));
 
@@ -58,8 +55,8 @@ async function list(tx: Transaction, { doctorId, tab, from, to, search, now, ...
   const where = and(
     ofDoctor(doctorId),
     inTab,
-    from ? gte(bookings.startsAt, midnightOf(from)) : undefined,
-    to ? lt(bookings.startsAt, midnightOf(to, 1)) : undefined,
+    from ? gte(bookings.startsAt, civilDayStartIn(CLINIC_TIME_ZONE, from)) : undefined,
+    to ? lt(bookings.startsAt, civilDayStartIn(CLINIC_TIME_ZONE, to, 1)) : undefined,
     search ? patientNamed(tx, search) : undefined,
   );
   const select = tx
