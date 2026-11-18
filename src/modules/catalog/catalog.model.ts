@@ -8,6 +8,8 @@ import { boundedText } from '../../lib/text.js';
 import { endMinute, endsAfterStart, startMinute, weekday, weekList } from '../../lib/week.js';
 import { phoneNumber } from '../users/user.model.js';
 
+export const MAX_BOOKING_HORIZON_DAYS = 365;
+
 const catalogName = boundedText('O nome', 2, 80);
 
 const duration = (min: number, max: number) =>
@@ -186,7 +188,7 @@ const policyFields = {
     .number()
     .int()
     .min(1)
-    .max(365)
+    .max(MAX_BOOKING_HORIZON_DAYS)
     .openapi({ description: 'Até quantos dias à frente se agenda.', example: 60 }),
   minLeadMinutes: z
     .number()

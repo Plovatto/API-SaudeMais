@@ -3,20 +3,21 @@ import type { PgSelect } from 'drizzle-orm/pg-core';
 import { readSnapshot, type Database } from '../../database/pg-client.js';
 import { bookings, isActiveFuture } from '../../database/schema/bookings.js';
 import { settings, specialties, units } from '../../database/schema/catalog.js';
-import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
+import { appointmentDuration, doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { doctorScheduleDays, doctorScheduleRanges } from '../../database/schema/doctor-schedule.js';
 import { users } from '../../database/schema/users.js';
 import { pageOf, type Page } from '../../lib/pagination.js';
 import { unaccentMatch } from '../../lib/search.js';
+import { civilDate, civilDateIn, CLINIC_TIME_ZONE, DAY } from '../../lib/time.js';
 import type { SlotRequest } from '../../lib/time-slots.js';
 import { placeColumns } from '../bookings/bookings.repository.js';
-import { hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
+import { blockedDatesFrom, hoursOf } from '../doctor-schedule/doctor-schedule.repository.js';
 import { hasRole } from '../users/user.repository.js';
 import type { Doctor, DoctorsQuery } from './doctors.model.js';
 
 export type SlotContext = Pick<
   SlotRequest,
-  'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays'
+  'ranges' | 'unitHours' | 'durationMin' | 'minLeadMinutes' | 'bookingHorizonDays' | 'blockedDates'
 > & { specialtyId: string };
 
 interface Period {
@@ -75,7 +76,7 @@ export class DoctorsRepository {
     except: SQL | undefined,
   ): Promise<(SlotContext & Pick<SlotRequest, 'busy'>) | undefined> {
     return this.db.transaction(async (tx) => {
-      const context = await slotContext(tx, doctorId, includeProtected);
+      const context = await slotContext(tx, doctorId, includeProtected, now);
       if (!context) return undefined;
       const busy = await tx
         .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
@@ -99,10 +100,11 @@ export async function slotContext(
   db: Pick<Database, 'select'>,
   doctorId: string,
   includeProtected: boolean,
+  now: Date,
 ): Promise<SlotContext | undefined> {
   const [doctor] = await joinProfile(
     db
-      .select({ durationMin: specialties.appointmentDurationMin, specialtyId: specialties.id, unitId: units.id })
+      .select({ durationMin: appointmentDuration, specialtyId: specialties.id, unitId: units.id })
       .from(users)
       .$dynamic(),
   ).where(and(eq(users.id, doctorId), bookable(includeProtected)));
@@ -123,7 +125,17 @@ export async function slotContext(
     )
     .where(and(eq(doctorScheduleRanges.doctorId, doctorId), eq(doctorScheduleDays.isActive, true)));
   const { durationMin, specialtyId, unitId } = doctor;
-  return { durationMin, specialtyId, ranges, unitHours: await hoursOf(db, unitId), ...(await slotPolicy(db)) };
+  const policy = await slotPolicy(db);
+  const from = civilDateIn(CLINIC_TIME_ZONE, now);
+  const to = civilDate(Date.parse(from) + (policy.bookingHorizonDays + 1) * DAY);
+  return {
+    durationMin,
+    specialtyId,
+    ranges,
+    unitHours: await hoursOf(db, unitId),
+    blockedDates: await blockedDatesFrom(db, doctorId, { from, to }),
+    ...policy,
+  };
 }
 
 export async function slotPolicy(

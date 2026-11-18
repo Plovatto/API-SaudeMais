@@ -5,7 +5,7 @@ import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
-import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDate, wallClockIn } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDateIn } from '../../lib/time.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import type {
   ChangePasswordInput,
@@ -174,7 +174,7 @@ export class UserService {
   }
 
   async updateProfile(userId: string, { fullName, phone, birthDate }: UpdateProfileInput): Promise<Profile> {
-    if (birthDate && birthDate > civilDate(wallClockIn(CLINIC_TIME_ZONE, this.clock.now()))) {
+    if (birthDate && birthDate > civilDateIn(CLINIC_TIME_ZONE, this.clock.now())) {
       throw invalidData(birthDateInFuture);
     }
     await this.repository.updateProfile(userId, definedFields({ fullName, phone, birthDate }));

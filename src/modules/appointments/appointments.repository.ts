@@ -35,6 +35,7 @@ interface DoctorLock {
   doctorId: string;
   specialtyId: string;
   includeProtected: boolean;
+  now: Date;
 }
 
 interface Party {
@@ -90,7 +91,7 @@ export class AppointmentsRepository {
 
   async lockDoctor(
     tx: Transaction,
-    { doctorId, specialtyId, includeProtected }: DoctorLock,
+    { doctorId, specialtyId, includeProtected, now }: DoctorLock,
   ): Promise<SlotContext | undefined> {
     await tx.select({ id: specialties.id }).from(specialties).where(eq(specialties.id, specialtyId)).for('share');
     const [unit] = await tx
@@ -105,7 +106,7 @@ export class AppointmentsRepository {
       .from(doctorProfiles)
       .where(and(eq(doctorProfiles.userId, doctorId), eq(doctorProfiles.unitId, unit.id)))
       .for('share');
-    return profiles.length > 0 ? slotContext(tx, doctorId, includeProtected) : undefined;
+    return profiles.length > 0 ? slotContext(tx, doctorId, includeProtected, now) : undefined;
   }
 
   async create(tx: Transaction, appointment: NewAppointment): Promise<string> {

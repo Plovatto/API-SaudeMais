@@ -148,6 +148,13 @@
       "when": 1794971539427,
       "tag": "0020_password_reset_token_purpose",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794978527304,
+      "tag": "0021_doctor_availability_settings",
+      "breakpoints": true
     }
   ]
 }

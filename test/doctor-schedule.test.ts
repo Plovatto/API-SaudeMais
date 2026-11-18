@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { systemClock } from '@/lib/clock.js';
 import { WEEKDAYS, WORKDAYS } from '@/lib/week.js';
 import { DoctorScheduleRepository } from '@/modules/doctor-schedule/doctor-schedule.repository.js';
 import { DEFAULT_SCHEDULE, DoctorScheduleService } from '@/modules/doctor-schedule/doctor-schedule.service.js';
@@ -13,6 +14,7 @@ type Range = { startMin: number; endMin: number };
 const PATH = '/api/doctor/schedule';
 const MORNING = { startMin: 480, endMin: 720 };
 const AFTERNOON = { startMin: 780, endMin: 1020 };
+const SPECIALTY_DURATION = { appointmentDurationMin: 30, specialtyDurationMin: 30, isSpecialtyDefault: true };
 
 function week(ranges: Partial<Record<number, Range[]>>, inactive: number[] = []) {
   return {
@@ -98,7 +100,7 @@ describe('access', () => {
 });
 
 describe('GET /api/doctor/schedule', () => {
-  it('starts with every day inactive and shows the unit hours', async () => {
+  it('starts with every day inactive, the unit hours and the specialty duration', async () => {
     const context = await withDoctor();
 
     const response = await read(context).expect(200);
@@ -110,7 +112,78 @@ describe('GET /api/doctor/schedule', () => {
         ...WORKDAYS.map((weekday) => ({ weekday, openMin: 420, closeMin: 1140 })),
         { weekday: 6, openMin: 480, closeMin: 720 },
       ],
+      ...SPECIALTY_DURATION,
     });
+  });
+});
+
+describe('appointment duration', () => {
+  const durationOf = (body: unknown) => {
+    const { appointmentDurationMin, specialtyDurationMin, isSpecialtyDefault } = body as typeof SPECIALTY_DURATION;
+    return { appointmentDurationMin, specialtyDurationMin, isSpecialtyDefault };
+  };
+
+  it('saves a duration of its own, keeps it when the field is left out and resets it with null', async () => {
+    const context = await withDoctor();
+    const own = { appointmentDurationMin: 45, specialtyDurationMin: 30, isSpecialtyDefault: false };
+
+    const saved = await save(context, { ...week({ 1: [MORNING] }), appointmentDurationMin: 45 }).expect(200);
+    const kept = await save(context, week({ 1: [AFTERNOON] })).expect(200);
+    const afterKeep = await read(context).expect(200);
+    const reset = await save(context, { ...week({ 1: [AFTERNOON] }), appointmentDurationMin: null }).expect(200);
+
+    expect(durationOf(saved.body)).toEqual(own);
+    expect(durationOf(kept.body)).toEqual(own);
+    expect(durationOf(afterKeep.body)).toEqual(own);
+    expect(durationOf(reset.body)).toEqual(SPECIALTY_DURATION);
+    expect(durationOf((await read(context)).body)).toEqual(SPECIALTY_DURATION);
+  });
+
+  it('follows the specialty when it has no duration of its own', async () => {
+    const context = await withDoctor();
+    await context.db.execute(sql`update specialties set appointment_duration_min = 50 where name = 'Clínica Geral'`);
+
+    const response = await read(context).expect(200);
+
+    expect(durationOf(response.body)).toEqual({
+      appointmentDurationMin: 50,
+      specialtyDurationMin: 50,
+      isSpecialtyDefault: true,
+    });
+  });
+
+  it('records the chosen duration in the audit log', async () => {
+    const context = await withDoctor();
+
+    await save(context, { ...week({ 1: [MORNING] }), appointmentDurationMin: 20 }).expect(200);
+    await save(context, { ...week({ 1: [MORNING] }), appointmentDurationMin: null }).expect(200);
+
+    const audit = await context.db.execute<{ duration: number | null }>(sql`
+      select (metadata ->> 'appointmentDurationMin')::int as duration from audit_logs
+      where action = 'doctor_schedule.saved' order by created_at, id
+    `);
+    expect(audit.rows).toEqual([{ duration: 20 }, { duration: null }]);
+  });
+
+  it.each([25, 0, 90, '30', 30.5])('rejects the duration %s with 400 and keeps the current one', async (duration) => {
+    const context = await withDoctor();
+
+    const response = await save(context, { ...week({ 1: [MORNING] }), appointmentDurationMin: duration });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      fields: { appointmentDurationMin: 'Escolha 15, 20, 30, 45 ou 60 minutos.' },
+    });
+    expect(durationOf((await read(context)).body)).toEqual(SPECIALTY_DURATION);
+  });
+
+  it('refuses a duration outside the allowed list in the database too', async () => {
+    const context = await withDoctor();
+
+    await expect(
+      context.db.execute(sql`update doctor_profiles set appointment_duration_min = 25 where user_id = ${context.doctorId}`),
+    ).rejects.toMatchObject({ cause: { constraint: 'doctor_profiles_appointment_duration_min_check' } });
   });
 });
 
@@ -245,7 +318,7 @@ describe('atomic replace', () => {
       constraint: 'doctor_schedule_ranges_no_overlap_excl',
     });
     const repository = { replace: () => Promise.reject(violation) } as unknown as DoctorScheduleRepository;
-    const service = new DoctorScheduleService(repository);
+    const service = new DoctorScheduleService(repository, systemClock);
 
     await expect(service.save('id', week({}), { actorId: 'id', ip: null })).rejects.toMatchObject({
       status: 422,
