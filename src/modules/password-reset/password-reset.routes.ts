@@ -13,7 +13,7 @@ import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import { resetConfirmSchema, resetRequestSchema } from './password-reset.model.js';
-import type { PasswordResetService } from './password-reset.service.js';
+import { INVALID_RESET_TOKEN_MESSAGE, type PasswordResetService } from './password-reset.service.js';
 
 registry.registerPath({
   method: 'post',
@@ -44,9 +44,9 @@ registry.registerPath({
   responses: {
     204: { description: 'Senha redefinida.' },
     400: errorResponse('Dados inválidos, ou link inválido, usado ou vencido (`INVALID_RESET_TOKEN`).', {
-      message: 'Este link é inválido ou já venceu. Peça um novo.',
+      message: INVALID_RESET_TOKEN_MESSAGE,
       code: 'INVALID_RESET_TOKEN',
-      fields: { token: 'Este link é inválido ou já venceu. Peça um novo.' },
+      fields: { token: INVALID_RESET_TOKEN_MESSAGE },
     }),
     429: tooManyRequestsResponse,
     500: internalErrorResponse,

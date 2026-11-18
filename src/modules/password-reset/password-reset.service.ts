@@ -13,6 +13,11 @@ import type { ResetConfirmInput, ResetRequestInput } from './password-reset.mode
 import type { PasswordResetRepository } from './password-reset.repository.js';
 
 export const RESET_TOKEN_MINUTES = 30;
+export const INVALID_RESET_TOKEN_MESSAGE = 'Este link é inválido ou já venceu. Peça um novo.';
+
+function invalidResetToken(): AppError {
+  return new AppError(400, 'INVALID_RESET_TOKEN', INVALID_RESET_TOKEN_MESSAGE, { token: INVALID_RESET_TOKEN_MESSAGE });
+}
 export const WELCOME_TOKEN_HOURS = 72;
 
 export class PasswordResetService {
@@ -70,12 +75,11 @@ export class PasswordResetService {
   }
 
   async confirm({ token, password }: ResetConfirmInput): Promise<void> {
+    const tokenHash = hashToken(token);
+    if (!(await this.resets.isUsable(tokenHash, this.clock.now()))) throw invalidResetToken();
     const passwordHash = await hashPassword(password);
-    const userId = await this.resets.consume(hashToken(token), passwordHash, this.clock.now());
-    if (!userId) {
-      const message = 'Este link é inválido ou já venceu. Peça um novo.';
-      throw new AppError(400, 'INVALID_RESET_TOKEN', message, { token: message });
-    }
+    const userId = await this.resets.consume(tokenHash, passwordHash, this.clock.now());
+    if (!userId) throw invalidResetToken();
     this.sessions.invalidateUser(userId);
   }
 }
