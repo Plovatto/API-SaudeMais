@@ -30,8 +30,6 @@ export const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 export const NO_ACTIONS = { canConfirm: false, canCancel: false, canComplete: false, canNoShow: false };
 export const RECORDABLE = { ...NO_ACTIONS, canComplete: true, canNoShow: true };
 
-export const slot = (date: string, time: string) => `${date}T${time}:00.000Z`;
-
 export const ids = (items: Item[]) => items.map((item) => item.id);
 
 export interface Attending {

@@ -16,7 +16,7 @@ import {
   type ClientBody,
   type Exam,
 } from './support/lab.js';
-import { as, createAdmin, createPatient, START } from './support/users.js';
+import { anyText, as, createAdmin, createPatient, START } from './support/users.js';
 
 const API_KEY = /^slab_([0-9a-f]{8})_[A-Za-z0-9_-]{43}$/;
 const ITEMS = [
@@ -298,7 +298,7 @@ describe('POST /api/integrations/lab/results', () => {
     const otherId = await publish(labResult(exam, { externalId: 'LAB-OUTRO' })).expect(409);
     const otherClient = await publish(labResult(exam), other).expect(409);
 
-    expect(final.body).toMatchObject({ code: 'RESULT_FINAL', fields: { status: expect.any(String) as unknown } });
+    expect(final.body).toMatchObject({ code: 'RESULT_FINAL', fields: { status: anyText } });
     expect(otherId.body).toMatchObject({ code: 'RESULT_EXISTS' });
     expect(otherClient.body).toMatchObject({ code: 'RESULT_EXISTS' });
     expect(await versionsOf(exam)).toHaveLength(1);
@@ -328,11 +328,11 @@ describe('POST /api/integrations/lab/results', () => {
 
     expect(itemsOnImaging.body).toMatchObject({
       code: 'WRONG_RESULT_FORMAT',
-      fields: { report: expect.any(String) as unknown },
+      fields: { report: anyText },
     });
     expect(reportOnLab.body).toMatchObject({
       code: 'WRONG_RESULT_FORMAT',
-      fields: { items: expect.any(String) as unknown },
+      fields: { items: anyText },
     });
     expect(report.status).toBe(201);
     expect(await versionsOf(imaging)).toEqual([
@@ -349,7 +349,7 @@ describe('POST /api/integrations/lab/results', () => {
     const ahead = await publish(labResult(exam, { issuedAt: '2026-11-20T12:05:01.000Z' })).expect(422);
     await publish(labResult(exam, { issuedAt: '2026-11-20T12:05:00.000Z' })).expect(201);
 
-    expect(ahead.body).toMatchObject({ code: 'ISSUED_IN_FUTURE', fields: { issuedAt: expect.any(String) as unknown } });
+    expect(ahead.body).toMatchObject({ code: 'ISSUED_IN_FUTURE', fields: { issuedAt: anyText } });
   });
 
   it('answers 404 for an unknown code and NOT_ELIGIBLE for future or cancelled exams', async () => {
@@ -361,7 +361,7 @@ describe('POST /api/integrations/lab/results', () => {
     await publish(labResult(cancelled)).expect(422);
 
     expect(unknown.body).toMatchObject({ code: 'NOT_FOUND' });
-    expect(early.body).toMatchObject({ code: 'NOT_ELIGIBLE', fields: { examCode: expect.any(String) as unknown } });
+    expect(early.body).toMatchObject({ code: 'NOT_ELIGIBLE', fields: { examCode: anyText } });
     expect(await statusOf(future)).toBe('confirmed');
     expect(await notificationsOf(future)).toEqual([]);
   });

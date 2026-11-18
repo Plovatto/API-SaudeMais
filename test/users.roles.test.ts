@@ -15,7 +15,7 @@ import { TEST_CORS_ORIGIN } from './support/build-test-app.js';
 import { createTestDb } from './support/create-test-db.js';
 import { fixedClock } from './support/fixed-clock.js';
 import { MemoryMailer } from './support/memory-mailer.js';
-import { login, registration, START } from './support/users.js';
+import { as, login, registration, START } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 
@@ -58,7 +58,7 @@ describe('role authorization', () => {
     await request(app).post('/api/users/register').send(registration()).expect(201);
     const token = await tokenOf(app, 'ana.silva@email.com', 'senha-segura-123');
 
-    const response = await request(app).get('/probe/admin').set('Authorization', `Bearer ${token}`);
+    const response = await request(app).get('/probe/admin').set(as(token));
 
     expect(response.status).toBe(403);
     expect(response.body).toEqual({ message: 'Você não tem acesso a esta área.', code: 'FORBIDDEN' });
@@ -69,7 +69,7 @@ describe('role authorization', () => {
     await users.bootstrap(ADMIN);
     const token = await tokenOf(app, ADMIN.email, ADMIN.password);
 
-    const response = await request(app).get('/probe/admin').set('Authorization', `Bearer ${token}`);
+    const response = await request(app).get('/probe/admin').set(as(token));
 
     expect(response.status).toBe(200);
   });

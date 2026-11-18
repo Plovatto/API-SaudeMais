@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
-import { buildUsersApp, login, registration } from './support/users.js';
+import { as, buildUsersApp, login, registration } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 
@@ -25,7 +25,7 @@ describe('GET /api/admin/home', () => {
     ).rows;
     await context.db.execute(sql`insert into user_roles (user_id, role) values (${bruno?.id}, 'doctor')`);
 
-    const response = await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${context.token}`);
+    const response = await request(context.app).get('/api/admin/home').set(as(context.token));
 
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
@@ -39,7 +39,7 @@ describe('GET /api/admin/home', () => {
       sql`insert into user_roles (user_id, role) select id, 'doctor' from users where email = 'paciente@saudemais.test'`,
     );
 
-    const response = await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${context.token}`);
+    const response = await request(context.app).get('/api/admin/home').set(as(context.token));
 
     expect(response.body).toEqual({ patients: 2, doctors: 1, appointmentsToday: 0 });
   });
@@ -70,7 +70,7 @@ describe('GET /api/admin/home', () => {
     await insert('ana@email.com', '2026-11-21T03:00:00Z');
     await insert('paciente@saudemais.test', '2026-11-20T15:00:00Z');
 
-    const response = await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${context.token}`);
+    const response = await request(context.app).get('/api/admin/home').set(as(context.token));
 
     expect(response.body).toMatchObject({ appointmentsToday: 6 });
   });
@@ -81,7 +81,7 @@ describe('GET /api/admin/home', () => {
     const patient = ((await login(context.app).expect(200)).body as { token: string }).token;
 
     expect((await request(context.app).get('/api/admin/home')).status).toBe(401);
-    expect((await request(context.app).get('/api/admin/home').set('Authorization', `Bearer ${patient}`)).status).toBe(
+    expect((await request(context.app).get('/api/admin/home').set(as(patient))).status).toBe(
       403,
     );
   });

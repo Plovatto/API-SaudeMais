@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MINUTE } from '@/lib/time.js';
 import { TtlCache } from '@/lib/ttl-cache.js';
 import { fixedClock } from './support/fixed-clock.js';
-
-const START = new Date('2026-11-20T12:00:00.000Z');
+import { START } from './support/users.js';
 
 const cacheOf = (maxEntries = 1000) => {
   const clock = fixedClock(START);

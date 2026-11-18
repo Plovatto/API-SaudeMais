@@ -3,6 +3,8 @@ import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { activeFutureCounts, activeLimits } from '@/modules/bookings/bookings.repository.js';
 import { EXAMPLE_DOCTOR } from '@/modules/seed/seed.data.js';
+import { UNKNOWN_ID } from './support/agenda.js';
+import { slot } from './support/bookings.js';
 import {
   availability,
   doctorNamed,
@@ -11,7 +13,7 @@ import {
   type Clinic,
   type Doctor,
 } from './support/doctors.js';
-import { as, createAdmin, HOUR, login, signUp, START } from './support/users.js';
+import { anyText, as, createAdmin, HOUR, login, signUp, START } from './support/users.js';
 
 interface Appointment {
   id: string;
@@ -28,7 +30,6 @@ interface Appointment {
   events: Record<string, unknown>[];
 }
 
-const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 const MONDAY_FIRST_SLOT = '2026-11-23T11:00:00.000Z';
 
 let context: Clinic;
@@ -58,8 +59,6 @@ const book = (token: string, body: Record<string, unknown>) =>
 
 const show = (token: string, id: string) => request(context.app).get(`/api/appointments/${id}`).set(as(token));
 
-const slot = (date: string, time: string) => `${date}T${time}:00.000Z`;
-
 describe('appointment routes', () => {
   it('require a session and the right role', async () => {
     expect((await request(context.app).post('/api/appointments').send({})).status).toBe(401);
@@ -84,13 +83,13 @@ describe('POST /api/appointments', () => {
     expect(response.status).toBe(201);
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.body).toEqual({
-      id: expect.any(String) as unknown,
+      id: anyText,
       status: 'pending',
       visitType: 'routine',
       startsAt: MONDAY_FIRST_SLOT,
       endsAt: '2026-11-23T11:30:00.000Z',
       notes: 'Dor no peito\nao subir escadas.',
-      patient: { id: expect.any(String) as unknown, fullName: 'Ana Maria Silva' },
+      patient: { id: anyText, fullName: 'Ana Maria Silva' },
       doctor: { id: carlos.id, fullName: 'Dr. Carlos Mendes' },
       specialty: carlos.specialty,
       unit: carlos.unit,
@@ -172,7 +171,7 @@ describe('POST /api/appointments', () => {
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
       code: 'PATIENT_CONFLICT',
-      fields: { startsAt: expect.any(String) as unknown },
+      fields: { startsAt: anyText },
     });
   });
 
@@ -219,7 +218,7 @@ describe('POST /api/appointments', () => {
     expect(response.status).toBe(422);
     expect(response.body).toMatchObject({
       code: 'SPECIALTY_MISMATCH',
-      fields: { specialtyId: expect.any(String) as unknown },
+      fields: { specialtyId: anyText },
     });
   });
 
@@ -279,7 +278,7 @@ describe('POST /api/appointments', () => {
     );
 
     expect(response.status).toBe(422);
-    expect(response.body).toMatchObject({ code: 'SELF_BOOKING', fields: { doctorId: expect.any(String) as unknown } });
+    expect(response.body).toMatchObject({ code: 'SELF_BOOKING', fields: { doctorId: anyText } });
   });
 
   it('rejects invalid bodies with 400', async () => {

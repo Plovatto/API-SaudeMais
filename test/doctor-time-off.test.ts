@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { WEEKDAYS, WORKDAYS } from '@/lib/week.js';
 import { bookedBy, rescheduleOn, slot } from './support/bookings.js';
 import { availability, createDoctor, setupClinic, type Availability, type Clinic, type Doctor } from './support/doctors.js';
-import { as, createPatient } from './support/users.js';
+import { anyText, as, createPatient } from './support/users.js';
 
 const PATH = '/api/doctor/time-off';
 const MONDAY = '2026-11-23';
@@ -111,7 +111,7 @@ describe('POST, GET and DELETE /api/doctor/time-off', () => {
 
     expect(farthest.status).toBe(201);
     expect(tooFar.status).toBe(422);
-    expect(tooFar.body).toMatchObject({ code: 'DATE_TOO_FAR', fields: { date: expect.any(String) as unknown } });
+    expect(tooFar.body).toMatchObject({ code: 'DATE_TOO_FAR', fields: { date: anyText } });
   });
 
   it('refuses to unblock a past day with 422 PAST_DATE', async () => {
@@ -128,9 +128,9 @@ describe('POST, GET and DELETE /api/doctor/time-off', () => {
     const again = await block({ date: '2027-01-04', reason: 'De novo' });
 
     expect(past.status).toBe(422);
-    expect(past.body).toMatchObject({ code: 'PAST_DATE', fields: { date: expect.any(String) as unknown } });
+    expect(past.body).toMatchObject({ code: 'PAST_DATE', fields: { date: anyText } });
     expect(again.status).toBe(409);
-    expect(again.body).toMatchObject({ code: 'TIME_OFF_EXISTS', fields: { date: expect.any(String) as unknown } });
+    expect(again.body).toMatchObject({ code: 'TIME_OFF_EXISTS', fields: { date: anyText } });
   });
 
   it('rejects invalid input with 400', async () => {

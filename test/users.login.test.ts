@@ -3,7 +3,7 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { buildTestApp } from './support/build-test-app.js';
 import { createTestDb } from './support/create-test-db.js';
-import { buildUsersApp, HOUR, login, registration, START } from './support/users.js';
+import { anyText, buildUsersApp, HOUR, login, registration, START } from './support/users.js';
 
 async function withAccount() {
   const context = await buildUsersApp();
@@ -115,7 +115,7 @@ describe('POST /api/users/login', () => {
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({
       code: 'VALIDATION_ERROR',
-      fields: { password: expect.any(String) as unknown },
+      fields: { password: anyText },
     });
   });
 

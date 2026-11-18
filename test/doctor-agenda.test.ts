@@ -7,12 +7,12 @@ import {
   ids,
   NO_ACTIONS,
   RECORDABLE,
-  slot,
   UNKNOWN_ID,
   type AgendaPage,
   type Counts,
   type Item,
 } from './support/agenda.js';
+import { slot } from './support/bookings.js';
 import { createDoctor, doctorNamed, setupClinic, type Clinic, type Doctor } from './support/doctors.js';
 import { as, login, signUp, START } from './support/users.js';
 

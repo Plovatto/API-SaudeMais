@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { as, buildUsersApp, login, registerAndLogin } from './support/users.js';
+import { anyText, as, buildUsersApp, login, registerAndLogin } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 
@@ -90,7 +90,7 @@ describe('specialties', () => {
     const response = await adminCall('post', '/api/admin/specialties', { name: 'NUTRIÇÃO', council: 'CRN' });
 
     expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({ code: 'NAME_TAKEN', fields: { name: expect.any(String) as unknown } });
+    expect(response.body).toMatchObject({ code: 'NAME_TAKEN', fields: { name: anyText } });
   });
 
   it.each([
@@ -288,7 +288,7 @@ describe('booking policy', () => {
       maxActiveBookings: 5,
       maxActiveAppointments: 5,
       maxActiveExams: 5,
-      updatedAt: expect.any(String) as unknown,
+      updatedAt: anyText,
     });
   });
 
@@ -319,7 +319,7 @@ describe('booking policy', () => {
       expect(response.status).toBe(400);
       expect(response.body).toMatchObject({
         code: 'VALIDATION_ERROR',
-        fields: { [field]: expect.any(String) as unknown },
+        fields: { [field]: anyText },
       });
     },
   );
@@ -357,14 +357,14 @@ describe('text limits', () => {
     const response = await adminCall('post', '/api/admin/specialties', body);
 
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR', fields: { name: expect.any(String) as unknown } });
+    expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR', fields: { name: anyText } });
   });
 
   it('counts the address by character, not by code unit', async () => {
     const response = await adminCall('post', '/api/admin/units', unitBody('Unidade Emoji', { address: '😀😀a' }));
 
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({ fields: { address: expect.any(String) as unknown } });
+    expect(response.body).toMatchObject({ fields: { address: anyText } });
   });
 });
 
@@ -376,7 +376,7 @@ describe('conflicts on change', () => {
     const response = await adminCall('patch', `/api/admin/specialties/${idOf(other)}`, { name: 'NEUROLOGIA' });
 
     expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({ code: 'NAME_TAKEN', fields: { name: expect.any(String) as unknown } });
+    expect(response.body).toMatchObject({ code: 'NAME_TAKEN', fields: { name: anyText } });
   });
 
   it('refuses changing an exam code to one already used', async () => {

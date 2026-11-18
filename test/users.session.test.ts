@@ -1,13 +1,13 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { buildUsersApp, HOUR, registerAndLogin } from './support/users.js';
+import { as, buildUsersApp, HOUR, registerAndLogin } from './support/users.js';
 
 type App = Parameters<typeof request>[0];
 
 const logout = (app: App, token?: string) => {
   const call = request(app).post('/api/users/logout');
-  return token ? call.set('Authorization', `Bearer ${token}`) : call;
+  return token ? call.set(as(token)) : call;
 };
 
 describe('POST /api/users/logout', () => {

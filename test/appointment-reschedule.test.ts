@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { UNKNOWN_ID } from './support/agenda.js';
+import { bookedBy, rescheduleOn, slot } from './support/bookings.js';
 import {
   availability,
   doctorNamed,
@@ -10,8 +12,7 @@ import {
   type Doctor,
 } from './support/doctors.js';
 import { EXAMPLE_DOCTOR } from '@/modules/seed/seed.data.js';
-import { bookedBy, rescheduleOn, slot } from './support/bookings.js';
-import { as, createAdmin, login, START } from './support/users.js';
+import { anyText, as, createAdmin, login, START } from './support/users.js';
 
 interface Appointment {
   id: string;
@@ -20,8 +21,6 @@ interface Appointment {
   patientActions: Record<string, unknown> | null;
   events: Record<string, unknown>[];
 }
-
-const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 
 let context: Clinic;
 let carlos: Doctor;
@@ -214,7 +213,7 @@ describe('POST /api/appointments/:id/reschedule', () => {
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
       code: 'PATIENT_CONFLICT',
-      fields: { newStartsAt: expect.any(String) as unknown },
+      fields: { newStartsAt: anyText },
     });
   });
 
