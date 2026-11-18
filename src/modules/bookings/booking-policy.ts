@@ -1,4 +1,4 @@
-import type { BookingStatus, bookingKinds } from '../../database/schema/bookings.js';
+import type { BookingKind, BookingStatus } from '../../database/schema/bookings.js';
 import { HOUR } from '../../lib/time.js';
 
 export const cancelBlockedReasons = ['started', 'closed'] as const;
@@ -11,7 +11,7 @@ export interface PolicySettings {
 }
 
 export interface PolicySubject {
-  kind: (typeof bookingKinds)[number];
+  kind: BookingKind;
   status: BookingStatus;
   startsAt: Date;
   rescheduleCount: number;
