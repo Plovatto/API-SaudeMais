@@ -28,7 +28,6 @@ import {
   type ChangedBooking,
   type Canceller,
   type LockedBooking,
-  type LockedPatient,
   type Outcome,
   type Move,
   type SeenBooking,
@@ -99,7 +98,7 @@ export class BookingsService {
   async writeAsPatient<T>(
     patientId: string,
     conflicts: Record<string, FieldConflict>,
-    work: (tx: Transaction, patient: LockedPatient) => Promise<T>,
+    work: (tx: Transaction) => Promise<T>,
   ): Promise<T> {
     const result = await withConstraintConflicts(
       () => retryOnDeadlock(() => asPatient(this.db, patientId, work)),
@@ -112,7 +111,7 @@ export class BookingsService {
   async rescheduleAsPatient<T>(
     patientId: string,
     conflicts: Record<string, FieldConflict>,
-    work: (tx: Transaction, patient: LockedPatient) => Promise<T>,
+    work: (tx: Transaction) => Promise<T>,
   ): Promise<T> {
     try {
       return await this.writeAsPatient(patientId, conflicts, work);
@@ -137,8 +136,8 @@ export class BookingsService {
     return { ...moved, fromStartsAt: booking.startsAt };
   }
 
-  async ensureActiveLimit(tx: Transaction, patientId: string, exempt: boolean, now: Date) {
-    if (!exempt && (await activeFutureCount(tx, patientId, now)) >= ACTIVE_LIMIT) {
+  async ensureActiveLimit(tx: Transaction, patientId: string, now: Date) {
+    if ((await activeFutureCount(tx, patientId, now)) >= ACTIVE_LIMIT) {
       throw unprocessableField(activeLimit);
     }
   }

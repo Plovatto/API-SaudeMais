@@ -115,14 +115,14 @@ X-Api-Key: slab_<prefixo>_<segredo>
 
 \`GET /api/integrations/lab/worklist\` lista, só pelo código público, os exames do dia que aguardam resultado, e \`POST /api/integrations/lab/results\` publica o resultado de um deles. Reenviar o mesmo conteúdo não muda nada, e uma correção (\`amended\`) cria uma nova versão. Cada chave tem um limite próprio de 60 requisições por minuto.
 
-## Conta de demonstração
+## Contas de exemplo
 
-Para testar sem criar conta, entre com uma das contas de demonstração. As credenciais são públicas e servem só para demonstração:
+O seed (\`npm run db:seed\`) cria uma única vez, se ainda não existirem, duas contas de exemplo com dados de amostra:
 
 - Paciente: \`paciente@saudemais.test\`, senha \`paciente-demo-123\`.
 - Médico, que também é paciente e passa pela escolha de perfil: \`medico@saudemais.test\`, senha \`medico-demo-123\`.
 
-Os dados delas são de exemplo e podem ser alterados. Esses e-mails não podem ser usados em um cadastro novo. Uma vez por dia, a rotina de manutenção devolve as contas ao estado de exemplo (senha documentada, nome, conta ativa e perfis) e os agendamentos voltam ao exemplo inicial.
+São contas comuns: seguem os mesmos limites e regras de qualquer outra conta, entram nas métricas e recebem e-mails, e nada nelas é restaurado depois de criado.
 
 ## Rotinas automáticas
 

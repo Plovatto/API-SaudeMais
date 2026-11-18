@@ -4,7 +4,7 @@ import type { Clock } from '../../lib/clock.js';
 import { civilPeriodIn, CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { slotAt, slotDays } from '../../lib/time-slots.js';
 import { patientConflict } from '../bookings/bookings.messages.js';
-import { exceptOwn, type LockedPatient } from '../bookings/bookings.repository.js';
+import { exceptOwn } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import {
   examBookingNotFound,
@@ -70,8 +70,8 @@ export class ExamBookingsService {
   }
 
   async book(patientId: string, input: BookExamInput): Promise<ExamBooking> {
-    const id = await this.bookings.writeAsPatient(patientId, exclusionConflicts, (tx, patient) =>
-      this.create(tx, patient, patientId, input),
+    const id = await this.bookings.writeAsPatient(patientId, exclusionConflicts, (tx) =>
+      this.create(tx, patientId, input),
     );
     return this.detail(id, patientId);
   }
@@ -110,14 +110,9 @@ export class ExamBookingsService {
     return this.detail(id, patientId);
   }
 
-  private async create(
-    tx: Transaction,
-    patient: LockedPatient,
-    patientId: string,
-    { unitId, examTypeId, notes, ...input }: BookExamInput,
-  ) {
+  private async create(tx: Transaction, patientId: string, { unitId, examTypeId, notes, ...input }: BookExamInput) {
     const now = this.clock.now();
-    await this.bookings.ensureActiveLimit(tx, patientId, patient.isProtected, now);
+    await this.bookings.ensureActiveLimit(tx, patientId, now);
     const offer = { unitId, examTypeId };
     const context = await this.repository.lockOffer(tx, offer);
     if (!context) throw notFound(examOfferNotFound);

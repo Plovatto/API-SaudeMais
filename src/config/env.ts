@@ -26,10 +26,6 @@ const envSchema = z.object({
   ADMIN_EMAIL: z.email().optional(),
   ADMIN_PASSWORD: z.string().min(12, 'Use at least 12 characters').max(128).optional(),
   APP_PUBLIC_URL: z.url({ protocol: /^https?$/ }).optional(),
-  DEMO_ACCOUNTS_ENABLED: z
-    .enum(['true', 'false'])
-    .default('true')
-    .transform((value) => value === 'true'),
   MAINTENANCE_SCHEDULER: z.enum(['true', 'false']).optional(),
   MAIL_DRIVER: z.enum(['console', 'smtp']).default('console'),
   SMTP_HOST: z.string().min(1).default('smtp.gmail.com'),
@@ -51,7 +47,6 @@ export interface Env {
   ADMIN_EMAIL?: string | undefined;
   ADMIN_PASSWORD?: string | undefined;
   APP_PUBLIC_URL: string;
-  DEMO_ACCOUNTS_ENABLED: boolean;
   MAINTENANCE_SCHEDULER: boolean;
   MAIL_DRIVER: 'console' | 'smtp';
   SMTP_HOST: string;
