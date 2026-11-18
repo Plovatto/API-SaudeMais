@@ -1,21 +1,28 @@
 import type { Clock } from '../../lib/clock.js';
 import { civilDate, civilDateIn, civilPeriodIn, CLINIC_TIME_ZONE, DAY } from '../../lib/time.js';
 import { noStatusTotals } from '../bookings/bookings.repository.js';
+import { reportFileName } from './admin-reports.export.js';
 import {
   DEFAULT_REPORT_DAYS,
+  exportMediaTypes,
   MAX_DAILY_DAYS,
   rateOf,
   reportPeriod,
   type AdminReport,
+  type ReportExportQuery,
   type ReportsQuery,
 } from './admin-reports.model.js';
+import { renderReportPdf } from './admin-reports.pdf.js';
 import type { AdminReportsRepository } from './admin-reports.repository.js';
+import { renderReportXlsx } from './admin-reports.xlsx.js';
 
 const noKindTotals = {
   ...noStatusTotals,
   lateCancellations: 0,
   cancelledBy: { patient: 0, doctor: 0, admin: 0, system: 0 },
 };
+
+const renderers = { pdf: renderReportPdf, xlsx: renderReportXlsx };
 
 const shiftDays = (date: string, days: number) => civilDate(Date.parse(date) + days * DAY);
 
@@ -49,6 +56,15 @@ export class AdminReportsService {
       })),
       topSpecialties,
       topExamTypes,
+    };
+  }
+
+  async export({ format, ...query }: ReportExportQuery) {
+    const report = await this.report(query);
+    return {
+      fileName: reportFileName(report, format),
+      mediaType: exportMediaTypes[format],
+      content: await renderers[format](report, this.clock.now()),
     };
   }
 }

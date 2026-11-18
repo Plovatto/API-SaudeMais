@@ -6,7 +6,14 @@ import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
-import { adminReportSchema, DEFAULT_REPORT_DAYS, MAX_REPORT_DAYS, reportsQuery } from './admin-reports.model.js';
+import {
+  adminReportSchema,
+  DEFAULT_REPORT_DAYS,
+  exportMediaTypes,
+  MAX_REPORT_DAYS,
+  reportExportQuery,
+  reportsQuery,
+} from './admin-reports.model.js';
 import type { AdminReportsService } from './admin-reports.service.js';
 
 documentOperation({
@@ -21,6 +28,26 @@ documentOperation({
   errors: { 403: forbiddenResponse },
 });
 
+documentOperation({
+  method: 'get',
+  path: '/api/admin/reports/export',
+  operationId: 'exportAdminReport',
+  tag: tags.administration.name,
+  summary: 'Exportar os relatórios',
+  description: `Gera o mesmo relatório de \`GET /api/admin/reports\`, com os mesmos períodos e regras, como arquivo para baixar: \`pdf\` para imprimir (resumo de consultas e exames, série por dia ou semana e especialidades e exames mais procurados) ou \`xlsx\` para abrir em planilha (abas Resumo, Série, Especialidades e Exames, com números, datas e percentuais de verdade). Responde como anexo (\`Content-Disposition: attachment; filename=relatorio_<início>_a_<fim>.<formato>\`). Só números, sem dados pessoais. Limite: 20 arquivos por minuto por IP.`,
+  query: reportExportQuery,
+  success: {
+    status: 200,
+    description: 'Relatório no formato pedido.',
+    file: {
+      mediaTypes: [exportMediaTypes.pdf, exportMediaTypes.xlsx],
+      disposition: 'Sempre `attachment`, com o nome `relatorio_<primeiro dia>_a_<último dia>.<pdf ou xlsx>`.',
+      example: 'attachment; filename=relatorio_2026-10-22_a_2026-11-20.pdf',
+    },
+  },
+  errors: { 403: forbiddenResponse },
+});
+
 export interface AdminReportsRouterDeps {
   service: AdminReportsService;
   requireAuth: RequestHandler;
@@ -32,7 +59,13 @@ export function createAdminReportsRouter({ service, requireAuth, requireAdmin }:
   const report: RequestHandler = async (req, res) => {
     res.json(await service.report(reportsQuery.parse(req.query)));
   };
+  const exportLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 20 });
+  const exportReport: RequestHandler = async (req, res) => {
+    const { fileName, mediaType, content } = await service.export(reportExportQuery.parse(req.query));
+    res.type(mediaType).attachment(fileName).send(content);
+  };
   const router = Router();
   router.get('/api/admin/reports', reportsLimit, noStore, requireAuth, requireAdmin, report);
+  router.get('/api/admin/reports/export', exportLimit, noStore, requireAuth, requireAdmin, exportReport);
   return router;
 }
