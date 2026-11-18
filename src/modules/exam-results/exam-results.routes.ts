@@ -84,7 +84,7 @@ documentOperation({
   },
 });
 
-export interface ExamResultsRouterDeps {
+interface ExamResultsRouterDeps {
   controller: ExamResultsController;
   requireAuth: RequestHandler;
   requirePatient: RequestHandler;

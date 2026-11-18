@@ -66,7 +66,7 @@ documentOperation({
   errors: roleErrors,
 });
 
-export interface NotificationsRouterDeps {
+interface NotificationsRouterDeps {
   controller: NotificationsController;
   requireAuth: RequestHandler;
 }

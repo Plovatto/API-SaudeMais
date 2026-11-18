@@ -207,7 +207,7 @@ document({
   success: { status: 200, description: 'Perfil médico removido.', ...detail },
 });
 
-export interface AdminUserRouterDeps {
+interface AdminUserRouterDeps {
   controller: AdminUserController;
   requireAuth: RequestHandler;
   requireAdmin: RequestHandler;

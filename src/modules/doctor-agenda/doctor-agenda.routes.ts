@@ -37,7 +37,7 @@ documentOperation({
   errors,
 });
 
-export interface DoctorAgendaRouterDeps {
+interface DoctorAgendaRouterDeps {
   controller: DoctorAgendaController;
   requireAuth: RequestHandler;
   requireDoctor: RequestHandler;

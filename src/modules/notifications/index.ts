@@ -11,7 +11,7 @@ import { NotificationsService, type Delivery } from './notifications.service.js'
 const COUNTER_TTL = 10 * MINUTE;
 const COUNTER_MAX_ENTRIES = 1000;
 
-export interface NotificationsModuleDeps {
+interface NotificationsModuleDeps {
   db: Database;
   clock: Clock;
   onDelivered?: (deliveries: Delivery[]) => void;

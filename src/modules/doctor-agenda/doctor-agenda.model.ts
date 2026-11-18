@@ -8,7 +8,7 @@ import { appointmentSchema, doctorActionsSchema, person } from '../appointments/
 import { civilDay, endNotBeforeStart } from '../doctors/doctors.model.js';
 import { notificationSchema } from '../notifications/notifications.model.js';
 
-export const agendaTabs = ['pending', 'confirmed', 'awaiting', 'history', 'all'] as const;
+const agendaTabs = ['pending', 'confirmed', 'awaiting', 'history', 'all'] as const;
 
 export const doctorAppointmentsQuery = paginationQuery
   .extend({
@@ -37,7 +37,7 @@ export const doctorAppointmentsQuery = paginationQuery
   })
   .refine(({ from, to }) => !from || !to || to >= from, endNotBeforeStart);
 
-export const doctorAppointmentSchema = registry.register(
+const doctorAppointmentSchema = registry.register(
   'DoctorAppointment',
   appointmentSchema
     .pick({

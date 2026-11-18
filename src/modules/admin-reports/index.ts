@@ -6,7 +6,7 @@ import { AdminReportsRepository } from './admin-reports.repository.js';
 import { createAdminReportsRouter } from './admin-reports.routes.js';
 import { AdminReportsService } from './admin-reports.service.js';
 
-export interface AdminReportsModuleDeps {
+interface AdminReportsModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

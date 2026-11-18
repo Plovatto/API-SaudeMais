@@ -16,7 +16,7 @@ import { createHealthRouter } from './routes/health.js';
 
 export type AppConfig = Pick<Env, 'NODE_ENV' | 'CORS_ORIGIN' | 'TRUST_PROXY_HOPS'>;
 
-export interface AppOptions {
+interface AppOptions {
   config?: AppConfig;
   logger?: Logger;
   routers?: Router[];

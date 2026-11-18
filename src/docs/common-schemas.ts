@@ -7,7 +7,7 @@ import { TOO_MANY_REQUESTS_MESSAGE } from '../middleware/rate-limit.js';
 import { SERVER_BUSY_MESSAGE } from '../modules/users/user.password.js';
 import { registry } from './registry.js';
 
-export const errorResponseSchema = registry.register(
+const errorResponseSchema = registry.register(
   'ErrorResponse',
   z
     .object({
@@ -30,7 +30,7 @@ export const errorResponseSchema = registry.register(
     .openapi({ description: 'Corpo de toda resposta de erro.' }),
 );
 
-export interface ErrorExample {
+interface ErrorExample {
   message: string;
   code: string;
   fields?: Record<string, string>;

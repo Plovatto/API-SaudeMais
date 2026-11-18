@@ -171,7 +171,7 @@ documentOperation({
   },
 });
 
-export interface UserRouterDeps {
+interface UserRouterDeps {
   controller: UserController;
   requireAuth: RequestHandler;
 }

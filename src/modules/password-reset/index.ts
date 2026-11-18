@@ -8,7 +8,7 @@ import { PasswordResetRepository } from './password-reset.repository.js';
 import { createPasswordResetRouter } from './password-reset.routes.js';
 import { PasswordResetService } from './password-reset.service.js';
 
-export interface PasswordResetModuleDeps {
+interface PasswordResetModuleDeps {
   db: Database;
   clock: Clock;
   mail: MailQueue;

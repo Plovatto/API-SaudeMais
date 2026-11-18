@@ -11,18 +11,18 @@ import { insertMetrics } from '../appointments/appointments.repository.js';
 import { freeLanes, lanesInUse } from '../exam-bookings/exam-bookings.repository.js';
 import type { ExamTypeSeed, SampleResultSeed, SpecialtySeed, UnitSeed } from './seed.data.js';
 
-export interface SpecialtyRef {
+interface SpecialtyRef {
   id: string;
   council: string;
   isActive: boolean;
 }
 
-export interface UnitRef {
+interface UnitRef {
   id: string;
   isActive: boolean;
 }
 
-export interface DoctorProfileSeed {
+interface DoctorProfileSeed {
   userId: string;
   specialty: SpecialtyRef;
   unitId: string;

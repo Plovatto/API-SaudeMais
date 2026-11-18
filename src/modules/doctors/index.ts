@@ -7,7 +7,7 @@ import { DoctorsRepository } from './doctors.repository.js';
 import { createDoctorsRouter } from './doctors.routes.js';
 import { DoctorsService } from './doctors.service.js';
 
-export interface DoctorsModuleDeps {
+interface DoctorsModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

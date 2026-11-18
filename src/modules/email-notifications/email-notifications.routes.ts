@@ -40,7 +40,7 @@ documentOperation({
   },
 });
 
-export interface EmailNotificationsRouterDeps {
+interface EmailNotificationsRouterDeps {
   service: EmailNotificationsService;
   requireAuth: RequestHandler;
 }

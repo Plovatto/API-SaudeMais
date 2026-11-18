@@ -125,7 +125,7 @@ export const updateDoctorProfileSchema = registry.register(
     }),
 );
 
-export const doctorProfileSchema = registry.register(
+const doctorProfileSchema = registry.register(
   'DoctorProfile',
   z.object({
     specialtyId: z.uuid(),
@@ -138,7 +138,7 @@ export const doctorProfileSchema = registry.register(
   }),
 );
 
-export const adminUserSchema = registry.register(
+const adminUserSchema = registry.register(
   'AdminUser',
   publicUserSchema.extend({
     deactivatedAt: z.iso.datetime().nullable(),

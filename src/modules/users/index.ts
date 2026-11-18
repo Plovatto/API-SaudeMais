@@ -11,12 +11,12 @@ import { UserService, type SessionPolicy } from './user.service.js';
 
 export type { AuthContext, SeedAccount, SessionPolicy } from './user.service.js';
 
-export interface InitialAdmin {
+interface InitialAdmin {
   email: string;
   password: string;
 }
 
-export interface UsersModuleDeps {
+interface UsersModuleDeps {
   db: Database;
   clock: Clock;
   policy: SessionPolicy;

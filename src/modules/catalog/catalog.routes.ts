@@ -232,7 +232,7 @@ document({
   success: { status: 200, description: 'Política atualizada.', schema: policySchema },
 });
 
-export interface CatalogRouterDeps {
+interface CatalogRouterDeps {
   controller: CatalogController;
   requireAuth: RequestHandler;
   requireAdmin: RequestHandler;

@@ -6,7 +6,7 @@ import { registry } from '../../docs/registry.js';
 import { endMinute, endsAfterStart, startMinute, weekday, weekList } from '../../lib/week.js';
 import { civilDay } from '../doctors/doctors.model.js';
 
-export const MAX_RANGES_PER_DAY = 12;
+const MAX_RANGES_PER_DAY = 12;
 
 const rangeSchema = endsAfterStart(
   z.strictObject({

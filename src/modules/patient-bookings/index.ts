@@ -8,7 +8,7 @@ import { PatientBookingsRepository } from './patient-bookings.repository.js';
 import { createPatientBookingsRouter } from './patient-bookings.routes.js';
 import { PatientBookingsService } from './patient-bookings.service.js';
 
-export interface PatientBookingsModuleDeps {
+interface PatientBookingsModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

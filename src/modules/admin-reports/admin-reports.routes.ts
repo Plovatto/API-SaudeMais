@@ -48,7 +48,7 @@ documentOperation({
   errors: { 403: forbiddenResponse },
 });
 
-export interface AdminReportsRouterDeps {
+interface AdminReportsRouterDeps {
   service: AdminReportsService;
   requireAuth: RequestHandler;
   requireAdmin: RequestHandler;

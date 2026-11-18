@@ -3,7 +3,7 @@ import type { AdminReport, ReportFormat } from './admin-reports.model.js';
 type KindTotals = AdminReport['appointments'] | AdminReport['exams'];
 type StatusKey = Exclude<keyof AdminReport['series'][number], 'start'>;
 
-export interface SummaryLine {
+interface SummaryLine {
   label: string;
   value: (totals: KindTotals) => number | null;
   percent?: boolean;

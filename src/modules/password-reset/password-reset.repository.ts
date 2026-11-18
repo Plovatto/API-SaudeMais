@@ -7,13 +7,13 @@ import { applyNewPassword } from '../users/user.repository.js';
 
 const LOCK_NAMESPACE = 727_002;
 
-export interface ResetLimits {
+interface ResetLimits {
   perUserPerDay: number;
   globalPerDay: number;
   minIntervalMs: number;
 }
 
-export interface NewResetToken {
+interface NewResetToken {
   userId: string;
   requestedBy: string | null;
   tokenHash: string;

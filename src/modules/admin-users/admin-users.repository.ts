@@ -29,7 +29,7 @@ export interface LockedUser {
   deactivatedAt: Date | null;
 }
 
-export interface ProfileRow {
+interface ProfileRow {
   specialtyId: string;
   council: string;
   unitId: string;

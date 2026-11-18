@@ -42,7 +42,7 @@ export interface SessionPolicy {
   maxSessionsPerUser: number;
 }
 
-export interface ClientInfo {
+interface ClientInfo {
   ip: string | null;
   userAgent: string | null;
 }
@@ -59,7 +59,7 @@ export interface SeedAccount {
   roles: Role[];
 }
 
-export class SeedAccountConflictError extends Error {
+class SeedAccountConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'SeedAccountConflictError';

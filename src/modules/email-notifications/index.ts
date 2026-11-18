@@ -7,7 +7,7 @@ import { EmailNotificationsRepository } from './email-notifications.repository.j
 import { createEmailNotificationsRouter } from './email-notifications.routes.js';
 import { EmailNotificationsService } from './email-notifications.service.js';
 
-export interface EmailNotificationsModuleDeps {
+interface EmailNotificationsModuleDeps {
   db: Database;
   clock: Clock;
   mail: MailQueue;

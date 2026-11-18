@@ -7,7 +7,7 @@ import { ExamResultsRepository } from './exam-results.repository.js';
 import { createExamResultsRouter } from './exam-results.routes.js';
 import { ExamResultsService } from './exam-results.service.js';
 
-export interface ExamResultsModuleDeps {
+interface ExamResultsModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

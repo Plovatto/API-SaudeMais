@@ -7,7 +7,7 @@ import { DoctorScheduleRepository } from './doctor-schedule.repository.js';
 import { createDoctorScheduleRouter } from './doctor-schedule.routes.js';
 import { DoctorScheduleService } from './doctor-schedule.service.js';
 
-export interface DoctorScheduleModuleDeps {
+interface DoctorScheduleModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

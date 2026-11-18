@@ -50,12 +50,12 @@ export interface NewUser {
   now: Date;
 }
 
-export interface LoginCandidate extends PublicUser {
+interface LoginCandidate extends PublicUser {
   passwordHash: string;
   deactivatedAt: Date | null;
 }
 
-export interface NewSession {
+interface NewSession {
   userId: string;
   tokenHash: string;
   remember: boolean;

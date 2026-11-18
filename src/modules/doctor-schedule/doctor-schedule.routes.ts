@@ -120,7 +120,7 @@ documentOperation({
   },
 });
 
-export interface DoctorScheduleRouterDeps {
+interface DoctorScheduleRouterDeps {
   controller: DoctorScheduleController;
   requireAuth: RequestHandler;
   requireDoctor: RequestHandler;

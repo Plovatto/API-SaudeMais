@@ -43,7 +43,7 @@ documentOperation({
   errors: { 403: forbiddenResponse, 404: notFoundResponse(doctorNotFound) },
 });
 
-export interface DoctorsRouterDeps {
+interface DoctorsRouterDeps {
   controller: DoctorsController;
   requireAuth: RequestHandler;
   requirePatient: RequestHandler;

@@ -21,7 +21,7 @@ documentOperation({
   errors: { 403: forbiddenResponse },
 });
 
-export interface AdminHomeRouterDeps {
+interface AdminHomeRouterDeps {
   service: AdminHomeService;
   requireAuth: RequestHandler;
   requireAdmin: RequestHandler;

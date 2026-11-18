@@ -1,6 +1,6 @@
 import type { MailMessage } from './mailer.js';
 
-export interface MailContent {
+interface MailContent {
   to: string;
   subject: string;
   paragraphs: string[];

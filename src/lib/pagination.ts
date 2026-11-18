@@ -24,7 +24,7 @@ export function paginatedSchema<T extends z.ZodType>(item: T) {
   });
 }
 
-export function offsetOf({ page, pageSize }: Pagination): number {
+function offsetOf({ page, pageSize }: Pagination): number {
   return (page - 1) * pageSize;
 }
 

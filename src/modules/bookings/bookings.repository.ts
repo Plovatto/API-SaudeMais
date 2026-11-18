@@ -84,7 +84,7 @@ interface CancellationRow {
   cancelledAt: Date | null;
 }
 
-export function cancellationOf({ byRole, reason, late, cancelledAt }: CancellationRow) {
+function cancellationOf({ byRole, reason, late, cancelledAt }: CancellationRow) {
   return byRole && cancelledAt ? { byRole, reason, late, cancelledAt: cancelledAt.toISOString() } : null;
 }
 
@@ -206,7 +206,7 @@ export function asPatient<T>(
   });
 }
 
-export interface ActiveLimits {
+interface ActiveLimits {
   maxActiveBookings: number;
   maxActiveAppointments: number;
   maxActiveExams: number;

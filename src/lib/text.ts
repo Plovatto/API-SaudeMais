@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 const lineControls = new Set(['\n', '\r', '\t']);
 
-export function hasControlCharacter(value: string, multiline = false): boolean {
+function hasControlCharacter(value: string, multiline = false): boolean {
   return [...value].some((character) => {
     if (multiline && lineControls.has(character)) return false;
     const code = character.codePointAt(0) ?? 0;
