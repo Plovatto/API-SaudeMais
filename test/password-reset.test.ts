@@ -108,8 +108,8 @@ describe('POST /api/password-reset/request', () => {
       now,
       expiresAt: new Date(now.getTime() + 30 * MINUTE),
     });
-    const issue = (userId: string, index: number) =>
-      resets.issue({ userId, ...token(index), dayStart: startOfDayIn(CLINIC_TIME_ZONE, now) });
+    const issue = (userId: string, index: number, requestedBy: string | null = null) =>
+      resets.issue({ userId, ...token(index), requestedBy, dayStart: startOfDayIn(CLINIC_TIME_ZONE, now) });
     return { context, resets, token, issue, ids: ids as [string, string, string] };
   }
 
@@ -120,6 +120,15 @@ describe('POST /api/password-reset/request', () => {
     for (const [index, userId] of ids.entries()) results.push(await issue(userId, index));
 
     expect(results).toEqual([true, true, false]);
+  });
+
+  it('sends links from an administrator past the daily total for the whole site without counting them', async () => {
+    const { issue, ids } = await siteLimited(1);
+    const [first, second, third] = ids;
+
+    expect(await issue(first, 1)).toBe(true);
+    expect(await issue(second, 2, first)).toBe(true);
+    expect(await issue(third, 3)).toBe(false);
   });
 
   it('leaves welcome links out of the daily total for the whole site', async () => {

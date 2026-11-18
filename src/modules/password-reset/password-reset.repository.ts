@@ -38,7 +38,7 @@ export class PasswordResetRepository {
       const since = recentSince < dayStart ? recentSince : dayStart;
       const [today] = await tx
         .select({
-          total: sql<number>`count(*) filter (where ${passwordResetTokens.purpose} = 'reset' and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
+          total: sql<number>`count(*) filter (where ${passwordResetTokens.purpose} = 'reset' and ${passwordResetTokens.requestedBy} is null and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
           forUser: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
           recent: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} > ${recentSince})::int`,
         })
@@ -46,7 +46,7 @@ export class PasswordResetRepository {
         .where(gte(passwordResetTokens.createdAt, since));
       if (
         !today ||
-        today.total >= this.limits.globalPerDay ||
+        (requestedBy === null && today.total >= this.limits.globalPerDay) ||
         today.forUser >= this.limits.perUserPerDay ||
         today.recent > 0
       ) {
@@ -76,6 +76,14 @@ export class PasswordResetRepository {
     await db
       .insert(passwordResetTokens)
       .values({ userId, requestedBy, tokenHash, purpose, createdAt: now, expiresAt, sentAt: now });
+  }
+
+  async isUsable(tokenHash: string, now: Date): Promise<boolean> {
+    const count = await this.db.$count(
+      passwordResetTokens,
+      and(eq(passwordResetTokens.tokenHash, tokenHash), open, gt(passwordResetTokens.expiresAt, now)),
+    );
+    return count > 0;
   }
 
   consume(tokenHash: string, passwordHash: string, now: Date): Promise<string | undefined> {
