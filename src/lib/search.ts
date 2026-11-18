@@ -1,8 +1,14 @@
 import { sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import '../docs/zod-extend.js';
 import { z } from 'zod';
 
-export const searchText = z.string().trim().max(120, 'A busca pode ter até 120 caracteres.').optional();
+export const searchText = z
+  .string()
+  .trim()
+  .max(120, 'A busca pode ter até 120 caracteres.')
+  .optional()
+  .openapi({ example: 'maria' });
 
 export function likePattern(search: string): string {
   return `%${search.replace(/[\\%_]/g, '\\$&')}%`;
