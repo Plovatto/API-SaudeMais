@@ -1,16 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import {
-  errorResponse,
-  forbiddenResponse,
-  internalErrorResponse,
-  notFoundResponse,
-  tooManyRequestsResponse,
-  unauthenticatedResponse,
-  validationErrorResponse,
-} from '../../docs/common-schemas.js';
+import { errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
-import { registry, sessionSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
 import { paginationQuery } from '../../lib/pagination.js';
 import { MINUTE } from '../../lib/time.js';
@@ -43,33 +34,24 @@ documentOperation({
   errors: { 403: forbiddenResponse },
 });
 
-registry.registerPath({
+documentOperation({
   method: 'get',
   path: `${patientPath}/{bookingId}/pdf`,
   operationId: 'downloadPatientExamResultPdf',
-  tags: [tags.patient.name],
+  tag: tags.patient.name,
   summary: 'Baixar o laudo em PDF',
   description: `Gera o laudo em PDF da versão atual do exame \`bookingId\` do paciente logado: unidade, nome do paciente, código do exame, datas e os itens com valor, referência e indicador, ou o laudo do exame de imagem. Responde como anexo (\`Content-Disposition: attachment; filename=laudo-<código>.pdf\`). Exame de outra pessoa, consulta ou exame sem resultado respondem 404. Cada laudo gerado fica na auditoria como \`exam_result.read\`, como na leitura. Limite: 20 laudos por minuto por IP.`,
-  ...sessionSecurity,
-  request: { params: bookingParams },
-  responses: {
-    200: {
-      description: 'Laudo em PDF.',
-      headers: {
-        'Content-Disposition': {
-          description: 'Sempre `attachment`, com o nome `laudo-<código do exame>.pdf`.',
-          schema: { type: 'string', example: 'attachment; filename=laudo-EX-7F3K2Q.pdf' },
-        },
-      },
-      content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } },
+  params: bookingParams,
+  success: {
+    status: 200,
+    description: 'Laudo em PDF.',
+    file: {
+      mediaTypes: ['application/pdf'],
+      disposition: 'Sempre `attachment`, com o nome `laudo-<código do exame>.pdf`.',
+      example: 'attachment; filename=laudo-EX-7F3K2Q.pdf',
     },
-    400: validationErrorResponse,
-    401: unauthenticatedResponse,
-    403: forbiddenResponse,
-    404: notFoundResponse(resultNotFound),
-    429: tooManyRequestsResponse,
-    500: internalErrorResponse,
   },
+  errors: { 403: forbiddenResponse, 404: notFoundResponse(resultNotFound) },
 });
 
 documentOperation({

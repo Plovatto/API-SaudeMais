@@ -1,12 +1,14 @@
 import type { ResponseConfig } from '@asteasolutions/zod-to-openapi';
 import type { z } from 'zod';
 import {
+  fileResponse,
   internalErrorResponse,
   jsonBody,
   jsonResponse,
   tooManyRequestsResponse,
   unauthenticatedResponse,
   validationErrorResponse,
+  type FileDownload,
 } from './common-schemas.js';
 import { registry, sessionSecurity } from './registry.js';
 
@@ -14,6 +16,7 @@ interface Success {
   status: 200 | 201 | 202 | 204;
   description: string;
   schema?: z.ZodType;
+  file?: FileDownload;
 }
 
 export interface OperationDoc {
@@ -45,9 +48,9 @@ export function documentOperation({
     ...Object.fromEntries(
       [success]
         .flat()
-        .map(({ status, description, schema }) => [
+        .map(({ status, description, schema, file }) => [
           status,
-          schema ? jsonResponse(description, schema) : { description },
+          file ? fileResponse(description, file) : schema ? jsonResponse(description, schema) : { description },
         ]),
     ),
     401: unauthenticatedResponse,
