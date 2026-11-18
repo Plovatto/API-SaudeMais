@@ -1,21 +1,15 @@
-import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
-import { auditLogs } from '../../database/schema/audit-logs.js';
 import { bookingEvents, bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { doctorTimeOff } from '../../database/schema/doctor-schedule.js';
-import { examResults } from '../../database/schema/exam-results.js';
-import { healthMetrics } from '../../database/schema/health-metrics.js';
 import { integrationClients } from '../../database/schema/integration-clients.js';
-import { notifications } from '../../database/schema/notifications.js';
 import { userRoles, users } from '../../database/schema/users.js';
-import { MAINTENANCE_LOCK } from '../../jobs/maintenance.js';
 import type { HealthMetricsInput } from '../appointments/appointments.model.js';
 import { insertMetrics } from '../appointments/appointments.repository.js';
 import { freeLanes, lanesInUse } from '../exam-bookings/exam-bookings.repository.js';
-import type { Recipient } from '../notifications/notifications.service.js';
-import type { DemoResultSeed, ExamTypeSeed, SpecialtySeed, UnitSeed } from './demo.data.js';
+import type { ExamTypeSeed, SampleResultSeed, SpecialtySeed, UnitSeed } from './seed.data.js';
 
 export interface SpecialtyRef {
   id: string;
@@ -37,32 +31,15 @@ export interface DoctorProfileSeed {
   now: Date;
 }
 
-export interface DemoBooking {
+export interface SampleBooking {
   booking: Omit<typeof bookings.$inferInsert, 'examTypeId' | 'lane'>;
   exam?: { examTypeId: string; capacity: number };
   events: Omit<typeof bookingEvents.$inferInsert, 'bookingId'>[];
   metrics?: HealthMetricsInput | undefined;
-  results: readonly DemoResultSeed[];
+  results: readonly SampleResultSeed[];
 }
 
-export interface RestoredDemo {
-  deleted: number;
-  created: number;
-}
-
-interface Restoration {
-  restored: RestoredDemo;
-  recipients: Recipient[];
-  examCodes: string[];
-}
-
-const RESTORE_ACTION = 'demo.restored';
-
-async function restoredSince(db: Pick<Database, '$count'>, since: Date): Promise<boolean> {
-  return (await db.$count(auditLogs, and(eq(auditLogs.action, RESTORE_ACTION), gte(auditLogs.createdAt, since)))) > 0;
-}
-
-export class DemoRepository {
+export class SeedRepository {
   constructor(private readonly db: Database) {}
 
   async ensureSpecialty(seed: SpecialtySeed): Promise<SpecialtyRef | undefined> {
@@ -102,18 +79,6 @@ export class DemoRepository {
     return row?.id;
   }
 
-  async demoUserId(email: string): Promise<string | undefined> {
-    const [row] = await this.db
-      .select({ id: users.id })
-      .from(users)
-      .where(and(eq(users.email, email), eq(users.isProtected, true), isNull(users.deactivatedAt)));
-    return row?.id;
-  }
-
-  restoredSince(since: Date): Promise<boolean> {
-    return restoredSince(this.db, since);
-  }
-
   async integrationClient(name: string) {
     const [row] = await this.db
       .select({
@@ -126,18 +91,6 @@ export class DemoRepository {
     return row;
   }
 
-  async hasDoctorProfile(userId: string): Promise<boolean> {
-    const [row] = await this.db
-      .select({ userId: doctorProfiles.userId })
-      .from(doctorProfiles)
-      .where(eq(doctorProfiles.userId, userId));
-    return Boolean(row);
-  }
-
-  async grantDoctorRole(userId: string, now: Date): Promise<void> {
-    await this.db.insert(userRoles).values({ userId, role: 'doctor', grantedAt: now }).onConflictDoNothing();
-  }
-
   grantDoctorProfile({ userId, specialty, unitId, registryNumber, registryUf, now }: DoctorProfileSeed): Promise<void> {
     return this.db.transaction(async (tx) => {
       await tx
@@ -148,7 +101,7 @@ export class DemoRepository {
     });
   }
 
-  async demoDoctor(email: string) {
+  async doctor(email: string) {
     const [row] = await this.db
       .select({
         id: users.id,
@@ -159,7 +112,7 @@ export class DemoRepository {
       .from(users)
       .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
       .innerJoin(specialties, eq(specialties.id, doctorProfiles.specialtyId))
-      .where(and(eq(users.email, email), eq(users.isProtected, true), isNull(users.deactivatedAt)));
+      .where(and(eq(users.email, email), isNull(users.deactivatedAt)));
     return row;
   }
 
@@ -176,34 +129,14 @@ export class DemoRepository {
     return row;
   }
 
-  restoreBookings(
-    since: Date,
-    now: Date,
-    demoBookings: DemoBooking[],
-    timeOff: typeof doctorTimeOff.$inferInsert,
-  ): Promise<Restoration | undefined> {
+  async addTimeOff(timeOff: typeof doctorTimeOff.$inferInsert): Promise<void> {
+    await this.db.insert(doctorTimeOff).values(timeOff).onConflictDoNothing();
+  }
+
+  createBookings(sampleBookings: SampleBooking[]): Promise<string[]> {
     return this.db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(${MAINTENANCE_LOCK}, 1)`);
-      if (await restoredSince(tx, since)) return undefined;
-      const protectedIds = tx.select({ id: users.id }).from(users).where(eq(users.isProtected, true));
-      const demoScope = or(inArray(bookings.patientId, protectedIds), inArray(bookings.doctorId, protectedIds));
-      const demoBookingIds = tx.select({ id: bookings.id }).from(bookings).where(demoScope);
-      await tx.delete(examResults).where(inArray(examResults.bookingId, demoBookingIds));
-      await tx.delete(healthMetrics).where(inArray(healthMetrics.bookingId, demoBookingIds));
-      const recipients = await tx
-        .delete(notifications)
-        .where(inArray(notifications.bookingId, demoBookingIds))
-        .returning({ userId: notifications.userId, audienceRole: notifications.audienceRole });
-      const deleted = await tx.delete(bookings).where(demoScope).returning({ id: bookings.id });
-      await tx
-        .update(doctorProfiles)
-        .set({ appointmentDurationMin: null })
-        .where(inArray(doctorProfiles.userId, protectedIds));
-      await tx.delete(doctorTimeOff).where(inArray(doctorTimeOff.doctorId, protectedIds));
-      await tx.insert(doctorTimeOff).values(timeOff);
-      let created = 0;
       const examCodes: string[] = [];
-      for (const { booking, exam, events, metrics } of demoBookings) {
+      for (const { booking, exam, events, metrics } of sampleBookings) {
         const { startsAt, endsAt } = booking;
         const offer = exam && { unitId: booking.unitId, examTypeId: exam.examTypeId };
         const [lane] = offer
@@ -217,15 +150,10 @@ export class DemoRepository {
           .returning({ id: bookings.id });
         if (!inserted) continue;
         if (booking.publicCode) examCodes.push(booking.publicCode);
-        created += 1;
         await tx.insert(bookingEvents).values(events.map((event) => ({ ...event, bookingId: inserted.id })));
         if (metrics) await insertMetrics(tx, inserted.id, metrics, endsAt);
       }
-      const restored = { deleted: deleted.length, created };
-      await tx
-        .insert(auditLogs)
-        .values({ actorType: 'system', action: RESTORE_ACTION, metadata: restored, createdAt: now });
-      return { restored, recipients, examCodes };
+      return examCodes;
     });
   }
 }

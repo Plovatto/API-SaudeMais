@@ -15,7 +15,7 @@ const pool = createPool(env.DATABASE_URL);
 
 try {
   const { maintenance } = createModulesFromEnv(env, createDb(pool), new MailQueue(new ConsoleMailer(logger), logger));
-  await maintenance.runExclusive({ restoreDemo: env.DEMO_ACCOUNTS_ENABLED });
+  await maintenance.runExclusive();
 } catch (err) {
   logger.fatal({ err }, 'Maintenance failed');
   process.exitCode = 1;
