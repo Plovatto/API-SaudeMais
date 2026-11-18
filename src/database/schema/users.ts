@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, foreignKey, pgTable, primaryKey, text, unique, uuid } from 'drizzle-orm/pg-core';
+import { check, date, foreignKey, pgTable, primaryKey, text, unique, uuid } from 'drizzle-orm/pg-core';
 import { citext, isE164, isOneOf, timestamptz, uuidv7Id } from './columns.js';
 
 export const roles = ['patient', 'doctor', 'admin'] as const;
@@ -17,7 +17,6 @@ export const users = pgTable(
     birthDate: date('birth_date', { mode: 'string' }),
     passwordHash: text('password_hash').notNull(),
     passwordChangedAt: timestamptz('password_changed_at'),
-    isProtected: boolean('is_protected').notNull().default(false),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
     deactivatedAt: timestamptz('deactivated_at'),

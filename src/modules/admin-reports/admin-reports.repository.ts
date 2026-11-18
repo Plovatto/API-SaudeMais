@@ -1,9 +1,8 @@
-import { and, asc, count, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { asc, count, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgSelect, PgTable } from 'drizzle-orm/pg-core';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties } from '../../database/schema/catalog.js';
-import { users } from '../../database/schema/users.js';
 import { CLINIC_TIME_ZONE, type DayRange } from '../../lib/time.js';
 import { countWhere, startsWithin, statusTotals } from '../bookings/bookings.repository.js';
 import { TOP_ITEMS } from './admin-reports.model.js';
@@ -32,15 +31,13 @@ const bucketOf = ({ from, days }: Buckets) =>
     Number,
   );
 
-function ofRealPatients<T extends PgSelect>(query: T, range: DayRange) {
-  return query
-    .innerJoin(users, eq(users.id, bookings.patientId))
-    .where(and(eq(users.isProtected, false), startsWithin(range)));
+function within<T extends PgSelect>(query: T, range: DayRange) {
+  return query.where(startsWithin(range));
 }
 
 function topOf(tx: Transaction, range: DayRange, { table, id, name, on }: Ranked) {
   const query = tx.select({ id: sql<string>`${id}`, name: sql<string>`${name}`, total: count() }).from(bookings);
-  return ofRealPatients(query.$dynamic(), range)
+  return within(query.$dynamic(), range)
     .innerJoin(table, on)
     .groupBy(id)
     .orderBy(desc(count()), asc(name))
@@ -53,7 +50,7 @@ export class AdminReportsRepository {
   report(range: DayRange, buckets: Buckets, now: Date) {
     return this.db.transaction(
       async (tx) => ({
-        kinds: await ofRealPatients(
+        kinds: await within(
           tx
             .select({
               kind: bookings.kind,
@@ -65,7 +62,7 @@ export class AdminReportsRepository {
             .$dynamic(),
           range,
         ).groupBy(bookings.kind),
-        series: await ofRealPatients(
+        series: await within(
           tx
             .select({ bucket: bucketOf(buckets), ...statusTotals(now) })
             .from(bookings)

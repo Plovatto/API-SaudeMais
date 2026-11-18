@@ -22,7 +22,7 @@ documentOperation({
   operationId: 'getAdminReports',
   tag: tags.administration.name,
   summary: 'Ver os relatórios',
-  description: `Totais de consultas e exames que começam no período, pela situação atual, com cancelamentos por autor, taxa de faltas, série para gráfico e especialidades e exames mais procurados. Os dias seguem o fuso de São Paulo; sem datas, vale os últimos ${DEFAULT_REPORT_DAYS} dias até hoje, e o período tem no máximo ${MAX_REPORT_DAYS} dias. Só números: nada de dados pessoais, observações, motivos ou resultados. Agendamentos de pacientes de demonstração não entram. Limite: 30 requisições por minuto por IP.`,
+  description: `Totais de consultas e exames que começam no período, pela situação atual, com cancelamentos por autor, taxa de faltas, série para gráfico e especialidades e exames mais procurados. Os dias seguem o fuso de São Paulo; sem datas, vale os últimos ${DEFAULT_REPORT_DAYS} dias até hoje, e o período tem no máximo ${MAX_REPORT_DAYS} dias. Só números: nada de dados pessoais, observações, motivos ou resultados. Limite: 30 requisições por minuto por IP.`,
   query: reportsQuery,
   success: { status: 200, description: 'Relatório do período.', schema: adminReportSchema },
   errors: { 403: forbiddenResponse },

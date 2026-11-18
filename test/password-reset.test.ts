@@ -3,7 +3,6 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { CLINIC_TIME_ZONE, startOfDayIn } from '@/lib/time.js';
 import { PasswordResetRepository } from '@/modules/password-reset/password-reset.repository.js';
-import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
 import { buildUsersApp, login, registerAndLogin, registration, START } from './support/users.js';
 
 type Context = Awaited<ReturnType<typeof buildUsersApp>>;
@@ -51,16 +50,6 @@ describe('POST /api/password-reset/request', () => {
 
     expect(response.status).toBe(204);
     expect(context.mailer.sent).toHaveLength(0);
-  });
-
-  it('sends a link to the demo account like any other', async () => {
-    const context = await buildUsersApp();
-    await context.modules.users.bootstrap(undefined);
-
-    await requestReset(context.app, DEMO_ACCOUNTS[0]?.email).expect(204);
-    await context.mail.drain();
-
-    expect(context.mailer.sent).toHaveLength(1);
   });
 
   it('waits 15 minutes between links and sends at most 3 per day', async () => {

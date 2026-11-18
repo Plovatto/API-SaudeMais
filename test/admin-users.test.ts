@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
+import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { as, buildUsersApp, HOUR, login, registration } from './support/users.js';
 
 const anyText = expect.any(String) as unknown;
@@ -110,10 +110,10 @@ describe('GET /api/admin/users', () => {
 
     expect((await list('role=admin')).items.map((u) => u.fullName)).toEqual(['Administrador']);
     expect((await list('page=2&pageSize=2&role=patient')).items.map((u) => u.fullName)).toEqual([
-      'Ana Prado',
       'Bruno Lima',
+      'Carla Dias',
     ]);
-    expect((await list('pageSize=2&role=patient')).total).toBe(5);
+    expect((await list('pageSize=2&role=patient')).total).toBe(4);
     expect((await list('status=inactive')).total).toBe(0);
   });
 
@@ -223,20 +223,25 @@ describe('acting admin', () => {
   });
 });
 
-describe('demo account', () => {
-  it('can be edited and promoted like any account', async () => {
+describe('example patient', () => {
+  it('can be edited, promoted and deactivated like any account', async () => {
     const context = await withAdmin();
-    const demo = await login(context.app, { email: DEMO_ACCOUNTS[0]?.email, password: DEMO_ACCOUNTS[0]?.password });
-    const id = (demo.body as { user: { id: string } }).user.id;
+    await context.modules.users.service.ensureAccount(EXAMPLE_PATIENT);
+    const example = await login(context.app, { email: EXAMPLE_PATIENT.email, password: EXAMPLE_PATIENT.password });
+    const id = (example.body as { user: { id: string } }).user.id;
 
     const edited = await call(context, context.admin.token, 'patch', `/api/admin/users/${id}`, {
       fullName: 'Outro Nome',
     });
     const promoted = await call(context, context.admin.token, 'post', `/api/admin/users/${id}/roles/admin`);
+    const deactivated = await call(context, context.admin.token, 'post', `/api/admin/users/${id}/deactivate`);
 
     expect(edited.status).toBe(200);
-    expect(edited.body).toMatchObject({ fullName: 'Outro Nome', isProtected: true });
+    expect(edited.body).toMatchObject({ fullName: 'Outro Nome' });
+    expect(edited.body).not.toHaveProperty('isProtected');
     expect(promoted.status).toBe(200);
+    expect(deactivated.status).toBe(200);
+    await login(context.app, { email: EXAMPLE_PATIENT.email, password: EXAMPLE_PATIENT.password }).expect(403);
   });
 });
 
@@ -557,12 +562,11 @@ describe('POST /api/admin/users', () => {
     expect(await accountsWith(context, 'bruno@email.com')).toBe(0);
   });
 
-  it('answers EMAIL_TAKEN for an e-mail already in use, whatever the case, and for demo accounts', async () => {
+  it('answers EMAIL_TAKEN for an e-mail already in use, whatever the case', async () => {
     const context = await withAdmin();
     await register(context);
 
     const duplicate = await create(context, { ...person, email: ' ANA.Silva@Email.COM ', role: 'patient' });
-    const demo = await create(context, { ...person, email: 'medico@saudemais.test', role: 'admin' });
 
     expect(duplicate.status).toBe(409);
     expect(duplicate.body).toEqual({
@@ -570,8 +574,6 @@ describe('POST /api/admin/users', () => {
       code: 'EMAIL_TAKEN',
       fields: { email: 'Este e-mail já está cadastrado.' },
     });
-    expect(demo.status).toBe(409);
-    expect(demo.body).toMatchObject({ code: 'EMAIL_TAKEN' });
   });
 
   it('e-mails a link that creates the password, and login fails until then', async () => {

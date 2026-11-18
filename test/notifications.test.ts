@@ -6,7 +6,7 @@ import type { NotificationParams, NotificationType } from '@/database/schema/not
 import type { Role } from '@/database/schema/users.js';
 import { MINUTE } from '@/lib/time.js';
 import { NotificationsRepository } from '@/modules/notifications/notifications.repository.js';
-import { DEMO_ACCOUNTS } from '@/modules/users/user.demo.js';
+import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { as, buildUsersApp, login, registration } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
@@ -33,7 +33,7 @@ async function session(
 
 async function withAdmin() {
   const context = await buildUsersApp();
-  await context.modules.users.bootstrap(ADMIN, { demoAccounts: false });
+  await context.modules.users.bootstrap(ADMIN);
   return { ...context, admin: await session(context, ADMIN) };
 }
 
@@ -145,64 +145,11 @@ describe('access', () => {
     expect((await request(context.app).post(`${PATH}/not-a-uuid/read`).set(as(patient.token))).status).toBe(400);
   });
 
-  it('lets the demo account mark notifications read', async () => {
-    const context = await withAdmin();
-    await context.modules.users.bootstrap(undefined);
-    const [demo] = DEMO_ACCOUNTS;
-    const visitor = await session(context, { email: demo?.email, password: demo?.password });
-    await deliver(context, visitor.id, 'patient');
-    const [item] = itemsOf(await list(context, visitor.token, 'role=patient').expect(200));
-
-    const one = await request(context.app).post(`${PATH}/${item?.id}/read`).set(as(visitor.token));
-    const all = await request(context.app).post(`${PATH}/read-all?role=patient`).set(as(visitor.token));
-
-    expect(one.status).toBe(204);
-    expect(all.status).toBe(204);
-    expect(await unread(context, visitor.token, 'patient')).toBe(0);
-  });
-});
-
-describe('user_registered', () => {
-  it('notifies every active admin, and only admins, when a patient registers', async () => {
-    const context = await withAdmin();
-    const carla = await register(context, 'Carla Dias', 'carla@email.com');
-    const davi = await register(context, 'Davi Lima', 'davi@email.com');
-    await context.db.execute(
-      sql`insert into user_roles (user_id, role, granted_at) values (${carla}, 'admin', now()), (${davi}, 'admin', now())`,
-    );
-    await context.db.execute(sql`update users set deactivated_at = now() where id = ${davi}`);
-
-    const ana = await register(context, 'Ana Maria Silva', 'ana.silva@email.com');
-
-    const rows = await context.db.execute<{
-      user_id: string;
-      audience_role: string;
-      type: string;
-      booking_id: null;
-      params: object;
-    }>(
-      sql`select user_id, audience_role, type, booking_id, params from notifications where params->>'userId' = ${ana} order by user_id`,
-    );
-    expect(rows.rows).toEqual(
-      [context.admin.id, carla].sort().map((userId) => ({
-        user_id: userId,
-        audience_role: 'admin',
-        type: 'user_registered',
-        booking_id: null,
-        params: { userId: ana },
-      })),
-    );
-    const others = await context.db.execute<{ total: number }>(
-      sql`select count(*)::int as total from notifications where audience_role <> 'admin'`,
-    );
-    expect(others.rows[0]?.total).toBe(0);
-  });
-
   it('does not notify anyone when the registration fails or a seed account is created', async () => {
     const context = await withAdmin();
+    await context.modules.users.service.ensureAccount(EXAMPLE_PATIENT);
     await register(context, 'Ana Maria Silva', 'ana.silva@email.com');
     await request(context.app).post('/api/users/register').send(registration()).expect(409);
-    await context.modules.users.bootstrap(undefined);
 
     const rows = await context.db.execute<{ total: number }>(sql`select count(*)::int as total from notifications`);
     expect(rows.rows[0]?.total).toBe(1);

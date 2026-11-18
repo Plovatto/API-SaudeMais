@@ -3,7 +3,7 @@ import { logger } from '../config/logger.js';
 import { ConsoleMailer } from '../mail/console-mailer.js';
 import { MailQueue } from '../mail/index.js';
 import { createModulesFromEnv } from '../modules/index.js';
-import { seedTarget } from '../modules/demo/seed-guard.js';
+import { seedTarget } from '../modules/seed/seed-guard.js';
 import { runMigrations } from './migrate.js';
 import { createDb, createPool } from './pg-client.js';
 
@@ -14,16 +14,15 @@ try {
   logger.fatal({ err }, 'Seeding refused');
   process.exit(1);
 }
-logger.info({ host }, 'Seeding demo data');
+logger.info({ host }, 'Seeding sample data');
 
 const pool = createPool(env.DATABASE_URL);
 
 try {
   await runMigrations(pool);
-  const { demo } = createModulesFromEnv(env, createDb(pool), new MailQueue(new ConsoleMailer(logger), logger));
-  for (const warning of await demo.service.seed()) logger.warn(warning);
-  await demo.service.restore();
-  logger.info('Demo data ensured');
+  const { seed } = createModulesFromEnv(env, createDb(pool), new MailQueue(new ConsoleMailer(logger), logger));
+  for (const warning of await seed.service.seed()) logger.warn(warning);
+  logger.info('Sample data ensured');
 } catch (err) {
   logger.fatal({ err }, 'Seeding failed');
   process.exitCode = 1;

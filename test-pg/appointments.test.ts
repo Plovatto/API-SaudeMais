@@ -3,8 +3,9 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
-import { DEMO_ACCOUNTS, DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR, EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
+import { seedWithoutSampleBookings } from '../test/support/doctors.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { as, HOUR, signUp, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
@@ -22,15 +23,14 @@ describe('appointments on PostgreSQL', () => {
   let context: ReturnType<typeof buildTestApp>;
   let carlos: Doctor;
   let ana: Doctor;
-  let demoDoctor: Doctor;
+  let exampleDoctor: Doctor;
 
   beforeEach(async () => {
     pool = await createCleanPool();
     await runMigrations(pool);
     context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await seedWithoutSampleBookings(context.modules);
     const doctors = await pool.query<Doctor & { full_name: string }>(
       'select u.id, u.full_name, p.specialty_id from users u join doctor_profiles p on p.user_id = u.id',
     );
@@ -41,7 +41,7 @@ describe('appointments on PostgreSQL', () => {
     };
     carlos = named('Dr. Carlos Mendes');
     ana = named('Dra. Ana Ferreira');
-    demoDoctor = named(DEMO_DOCTOR.fullName);
+    exampleDoctor = named(EXAMPLE_DOCTOR.fullName);
   });
 
   afterEach(async () => {
@@ -95,15 +95,13 @@ describe('appointments on PostgreSQL', () => {
     expect(events.rows[0]?.total).toBe(1);
   });
 
-  async function demoBooking() {
+  async function exampleBooking() {
     const signIn = async ({ email, password }: { email: string; password: string }) =>
       ((await request(app).post('/api/users/login').send({ email, password }).expect(200)).body as { token: string })
         .token;
-    const demoPatient = DEMO_ACCOUNTS.find((account) => account.roles.includes('patient'));
-    if (!demoPatient) throw new Error('The demo patient is not configured');
-    const [patient, doctor] = await Promise.all([signIn(demoPatient), signIn(DEMO_DOCTOR)]);
+    const [patient, doctor] = await Promise.all([signIn(EXAMPLE_PATIENT), signIn(EXAMPLE_DOCTOR)]);
     const startsAt = '2026-11-23T11:00:00.000Z';
-    const { id } = (await book(patient, demoDoctor, startsAt).expect(201)).body as { id: string };
+    const { id } = (await book(patient, exampleDoctor, startsAt).expect(201)).body as { id: string };
     const act = (action: string, token: string, seen = startsAt) =>
       request(app).post(`/api/appointments/${id}/${action}`).set(as(token)).send({ startsAt: seen });
     const events = async () =>
@@ -117,7 +115,7 @@ describe('appointments on PostgreSQL', () => {
   }
 
   it('confirms a request only once when two confirmations race', async () => {
-    const { doctor, act, events } = await demoBooking();
+    const { doctor, act, events } = await exampleBooking();
 
     const responses = await Promise.all([act('confirm', doctor), act('confirm', doctor)]);
 
@@ -127,7 +125,7 @@ describe('appointments on PostgreSQL', () => {
   });
 
   it('keeps the patient cancellation when a confirmation races it', async () => {
-    const { patient, doctor, act, events } = await demoBooking();
+    const { patient, doctor, act, events } = await exampleBooking();
 
     const [confirmed, cancelled] = await Promise.all([act('confirm', doctor), act('cancel', patient)]);
 
@@ -139,7 +137,7 @@ describe('appointments on PostgreSQL', () => {
   });
 
   async function startedBooking() {
-    const booking = await demoBooking();
+    const booking = await exampleBooking();
     await booking.act('confirm', booking.doctor).expect(200);
     const startsAt = new Date(Date.parse(booking.startsAt) - 96 * HOUR).toISOString();
     await pool.query(
@@ -175,7 +173,7 @@ describe('appointments on PostgreSQL', () => {
   });
 
   it('serves the doctor agenda tabs and home from PostgreSQL', async () => {
-    const { doctor, act } = await demoBooking();
+    const { doctor, act } = await exampleBooking();
     await act('confirm', doctor).expect(200);
     const get = (path: string) => request(app).get(path).set(as(doctor)).expect(200);
 

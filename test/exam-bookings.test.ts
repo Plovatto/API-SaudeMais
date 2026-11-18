@@ -333,18 +333,21 @@ describe('POST /api/exam-bookings', () => {
     });
   });
 
-  it('answers 422 ACTIVE_LIMIT on the sixth active booking, except for the demo patient', async () => {
+  it('answers 422 ACTIVE_LIMIT on the sixth active booking, for the example patient too', async () => {
     const patient = await createPatient(context, 'limite.exame@email.com');
     const times = ['14:00', '14:10', '14:20', '14:30', '14:40', '14:50'];
     for (const time of times.slice(0, 5)) await booked(patient, hemograma, slot('2026-11-26', time));
 
     const sixth = await book(patient, hemograma, slot('2026-11-26', '14:50'));
-    const demo = [];
-    for (const time of times) demo.push((await book(context.demoPatient, hemograma, slot('2026-11-27', time))).status);
+    const example = [];
+    for (const time of times) {
+      example.push((await book(context.examplePatient, hemograma, slot('2026-11-27', time))).status);
+    }
 
     expect(sixth.status).toBe(422);
     expect(sixth.body).toMatchObject({ code: 'ACTIVE_LIMIT' });
-    expect(demo).toEqual([201, 201, 201, 201, 201, 201]);
+    expect(example.at(-1)).toBe(422);
+    expect(example).toContain(201);
   });
 
   it('answers 422 OUTSIDE_AVAILABILITY for a start that is not a generated slot', async () => {

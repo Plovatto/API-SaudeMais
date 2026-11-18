@@ -5,6 +5,7 @@ import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
 import { hashToken } from '@/modules/users/user.token.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
+import { seedWithoutSampleBookings } from '../test/support/doctors.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
@@ -21,8 +22,7 @@ describe('lab results on PostgreSQL', () => {
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool), clock: fixedClock(START) });
     app = context.app;
-    await context.modules.users.bootstrap(undefined);
-    await context.modules.demo.service.seed();
+    await seedWithoutSampleBookings(context.modules);
     await pool.query(
       `insert into integration_clients (name, key_prefix, api_key_hash, created_by)
        select 'Laboratório Central', '0a1b2c3d', $1, id from users order by created_at limit 1`,

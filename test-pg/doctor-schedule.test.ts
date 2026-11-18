@@ -5,7 +5,7 @@ import { createDb } from '@/database/pg-client.js';
 import { WEEKDAYS } from '@/lib/week.js';
 import { DoctorScheduleRepository } from '@/modules/doctor-schedule/doctor-schedule.repository.js';
 import { DoctorScheduleService } from '@/modules/doctor-schedule/doctor-schedule.service.js';
-import { DEMO_DOCTOR } from '@/modules/users/user.demo.js';
+import { EXAMPLE_DOCTOR } from '@/modules/seed/seed.data.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
 import { createCleanPool } from './support/pg-test-pool.js';
@@ -25,8 +25,8 @@ describe('doctor schedule on PostgreSQL', () => {
     pool = await createCleanPool();
     await runMigrations(pool);
     const context = buildTestApp({}, { db: createDb(pool) });
-    await context.modules.demo.service.ensure();
-    const row = await pool.query<{ id: string }>('select id from users where email = $1', [DEMO_DOCTOR.email]);
+    await context.modules.seed.service.seed();
+    const row = await pool.query<{ id: string }>('select id from users where email = $1', [EXAMPLE_DOCTOR.email]);
     doctorId = row.rows[0]?.id ?? '';
   });
 
@@ -84,7 +84,10 @@ describe('doctor schedule on PostgreSQL', () => {
       ['Congresso', 'Viagem'].map((reason) => service.block(doctorId, { date: '2026-12-24', reason }, actor)),
     );
 
-    const rows = await pool.query('select 1 from doctor_time_off where doctor_id = $1', [doctorId]);
+    const rows = await pool.query('select reason from doctor_time_off where doctor_id = $1 and date = $2', [
+      doctorId,
+      '2026-12-24',
+    ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.find((result) => result.status === 'rejected')).toMatchObject({
       reason: { status: 409, code: 'TIME_OFF_EXISTS' },
