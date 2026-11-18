@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, isNull, lt, not, sql } from 'drizzle-orm';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes } from '../../database/schema/catalog.js';
-import { examResults, examResultVersions } from '../../database/schema/exam-results.js';
+import { examResults, examResultVersions, type ResultPayload } from '../../database/schema/exam-results.js';
 import { integrationClients } from '../../database/schema/integration-clients.js';
 import { recordAudit, type Actor, type AuditActor } from '../../lib/audit.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
@@ -142,7 +142,7 @@ export class LabIntegrationRepository {
     return row;
   }
 
-  async latestVersion(tx: Transaction, resultId: string, payload: Record<string, unknown>) {
+  async latestVersion(tx: Transaction, resultId: string, payload: ResultPayload) {
     const [row] = await tx
       .select({
         version: examResultVersions.version,

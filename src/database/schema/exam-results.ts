@@ -7,6 +7,19 @@ import { integrationClients } from './integration-clients.js';
 export const resultStatuses = ['final', 'amended'] as const;
 export const resultFlags = ['normal', 'low', 'high', 'critical'] as const;
 
+export interface ResultPayloadItem {
+  name: string;
+  value: number | string;
+  unit: string | null;
+  referenceRange: string | null;
+  flag: (typeof resultFlags)[number];
+}
+
+export interface ResultPayload {
+  items?: ResultPayloadItem[];
+  report?: string;
+}
+
 export const examResults = pgTable(
   'exam_results',
   {
@@ -43,7 +56,7 @@ export const examResultVersions = pgTable(
     status: text('status', { enum: resultStatuses }).notNull(),
     issuedAt: timestamptz('issued_at').notNull(),
     receivedAt: timestamptz('received_at').notNull(),
-    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    payload: jsonb('payload').$type<ResultPayload>().notNull(),
   },
   (table) => [
     primaryKey({ name: 'exam_result_versions_pkey', columns: [table.resultId, table.version] }),
