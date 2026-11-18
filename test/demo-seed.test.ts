@@ -295,10 +295,11 @@ describe('demo account restore', () => {
     await context.modules.demo.service.restore();
 
     const dates = await blockedDates();
+    const [blocked] = dates;
     expect(dates).toHaveLength(1);
-    expect(dates[0]?.reason).toBe('Congresso médico');
-    expect(dates[0]?.date > '2026-11-21').toBe(true);
-    expect([0, 6]).not.toContain(new Date(`${dates[0]?.date ?? ''}T12:00:00Z`).getUTCDay());
+    expect(blocked?.reason).toBe('Congresso médico');
+    expect((blocked?.date ?? '') > '2026-11-21').toBe(true);
+    expect([0, 6]).not.toContain(new Date(`${blocked?.date ?? ''}T12:00:00Z`).getUTCDay());
   });
 
   it('ends the sessions that existed before the password was reset', async () => {
