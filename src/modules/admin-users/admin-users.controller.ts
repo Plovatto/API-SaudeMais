@@ -2,7 +2,13 @@ import type { RequestHandler } from 'express';
 import { idParams } from '../../lib/params.js';
 import { actorOf } from '../../middleware/auth.js';
 import { updateProfileSchema } from '../users/user.model.js';
-import { doctorProfileInputSchema, roleParams, updateDoctorProfileSchema, usersQuery } from './admin-users.model.js';
+import {
+  createUserSchema,
+  doctorProfileInputSchema,
+  roleParams,
+  updateDoctorProfileSchema,
+  usersQuery,
+} from './admin-users.model.js';
 import type { AdminUserService } from './admin-users.service.js';
 
 const idOf = (params: unknown) => idParams.parse(params).id;
@@ -11,6 +17,9 @@ export function createAdminUserController(service: AdminUserService) {
   return {
     page: (async (req, res) => {
       res.json(await service.page(usersQuery.parse(req.query)));
+    }) satisfies RequestHandler,
+    create: (async (req, res) => {
+      res.status(201).json(await service.create(actorOf(req), createUserSchema.parse(req.body)));
     }) satisfies RequestHandler,
     detail: (async (req, res) => {
       res.json(await service.detail(idOf(req.params)));

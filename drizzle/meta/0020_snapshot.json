@@ -1,5 +1,5 @@
 {
-  "id": "87bf66e2-4811-4622-8c6f-92a09258f812",
+  "id": "bb432e27-b6a5-477b-8553-c605ab76facb",
   "prevId": "f5edf916-cbce-4064-8829-7f0029607752",
   "version": "7",
   "dialect": "postgresql",
@@ -1228,12 +1228,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "appointment_duration_min": {
-          "name": "appointment_duration_min",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1345,10 +1339,6 @@
         "doctor_profiles_registry_uf_check": {
           "name": "doctor_profiles_registry_uf_check",
           "value": "registry_uf ~ '^[A-Z]{2}$'"
-        },
-        "doctor_profiles_appointment_duration_min_check": {
-          "name": "doctor_profiles_appointment_duration_min_check",
-          "value": "appointment_duration_min in (15, 20, 30, 45, 60)"
         }
       },
       "isRLSEnabled": false
@@ -1472,71 +1462,6 @@
         "doctor_schedule_ranges_period_check": {
           "name": "doctor_schedule_ranges_period_check",
           "value": "0 <= start_min and start_min < end_min and end_min <= 1440"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.doctor_time_off": {
-      "name": "doctor_time_off",
-      "schema": "",
-      "columns": {
-        "doctor_id": {
-          "name": "doctor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "date": {
-          "name": "date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "doctor_time_off_doctor_id_fkey": {
-          "name": "doctor_time_off_doctor_id_fkey",
-          "tableFrom": "doctor_time_off",
-          "tableTo": "doctor_profiles",
-          "columnsFrom": [
-            "doctor_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "doctor_time_off_pkey": {
-          "name": "doctor_time_off_pkey",
-          "columns": [
-            "doctor_id",
-            "date"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "doctor_time_off_reason_check": {
-          "name": "doctor_time_off_reason_check",
-          "value": "char_length(reason) between 1 and 80"
         }
       },
       "isRLSEnabled": false
@@ -2196,6 +2121,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'reset'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2322,6 +2254,10 @@
       },
       "policies": {},
       "checkConstraints": {
+        "password_reset_tokens_purpose_check": {
+          "name": "password_reset_tokens_purpose_check",
+          "value": "purpose in ('reset', 'welcome')"
+        },
         "password_reset_tokens_token_hash_check": {
           "name": "password_reset_tokens_token_hash_check",
           "value": "token_hash ~ '^[0-9a-f]{64}$'"

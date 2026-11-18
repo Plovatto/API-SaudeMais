@@ -49,6 +49,7 @@ export function createModules(deps: ModulesDeps) {
     passwordReset: passwordReset.service,
     sessions,
     bookings: bookings.service,
+    users: users.service,
   });
   const doctorSchedule = createDoctorScheduleModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const labIntegration = createLabIntegrationModule({

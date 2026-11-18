@@ -31,7 +31,7 @@ documentOperation({
   tag: tags.doctor.name,
   summary: 'Listar a agenda do médico',
   description:
-    'Consultas do médico logado na aba escolhida em `tab`, a partir do dia `from`, com o paciente (nome e telefone), a especialidade, a unidade e as observações. O médico só vê as próprias consultas. Cada item traz o que o médico pode fazer (`actions`), para o cliente não repetir as regras. `counts` traz os totais das abas, sem os filtros. Limite: 120 requisições por minuto por IP.',
+    'Consultas do médico logado na aba escolhida em `tab`, com o paciente (nome e telefone), a especialidade, a unidade e as observações. A aba `all` traz todas as consultas, em qualquer situação, em ordem de horário, para montar a semana e a lista do dia. Os filtros se combinam: `from` e `to` limitam aos dias do período, incluídos, no fuso de São Paulo, e `search` procura no nome do paciente, sem distinguir acentos nem maiúsculas. `to` anterior a `from` responde 400. O médico só vê as próprias consultas. Cada item traz o que o médico pode fazer (`actions`), para o cliente não repetir as regras. `counts` traz os totais das abas sem os filtros `from`, `to` e `search`, os mesmos em qualquer aba. Limite: 120 requisições por minuto por IP.',
   query: doctorAppointmentsQuery,
   success: { status: 200, description: 'Página da agenda.', schema: doctorAppointmentPageSchema },
   errors,

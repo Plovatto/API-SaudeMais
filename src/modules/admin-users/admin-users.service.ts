@@ -1,5 +1,6 @@
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
-import { AppError, conflictError, unprocessableField } from '../../lib/app-error.js';
+import type { Role } from '../../database/schema/users.js';
+import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import type { Actor } from '../../lib/audit.js';
@@ -9,10 +10,19 @@ import type { BookingSide } from '../bookings/bookings.repository.js';
 import type { BookingsService } from '../bookings/bookings.service.js';
 import type { PasswordResetService } from '../password-reset/password-reset.service.js';
 import type { UpdateProfileInput } from '../users/user.model.js';
+import { unusablePasswordHash } from '../users/user.password.js';
+import type { UserService } from '../users/user.service.js';
 import type { SessionCache } from '../users/user.session-cache.js';
-import { adminConflicts, doctorProfileNotFound, unavailable, userNotFound } from './admin-users.messages.js';
+import {
+  adminConflicts,
+  doctorProfileNotFound,
+  inDoctorProfile,
+  unavailable,
+  userNotFound,
+} from './admin-users.messages.js';
 import type {
   AdminUserDetail,
+  CreateUserInput,
   DeactivationImpact,
   DoctorProfileInput,
   UpdateDoctorProfileInput,
@@ -27,6 +37,8 @@ function active(user: LockedUser): LockedUser {
   return user;
 }
 
+const sameField = (conflict: FieldConflict) => conflict;
+
 export class AdminUserService {
   constructor(
     private readonly repository: AdminUserRepository,
@@ -34,10 +46,38 @@ export class AdminUserService {
     private readonly bookings: BookingsService,
     private readonly sessions: SessionCache,
     private readonly clock: Clock,
+    private readonly accounts: UserService,
   ) {}
 
   page(query: UsersQuery) {
     return this.repository.page(query);
+  }
+
+  async create(
+    actor: Actor,
+    { fullName, email, phone, role, doctorProfile }: CreateUserInput,
+  ): Promise<AdminUserDetail> {
+    const passwordHash = await unusablePasswordHash();
+    const roles = [...new Set<Role>(['patient', role])];
+    const user = await withConstraintConflicts(
+      () =>
+        this.accounts.createAccount(
+          { fullName, email, phone, passwordHash, roles, termsVersion: null, grantedBy: actor.actorId },
+          async (tx, created) => {
+            if (!(await this.repository.isActiveAdmin(tx, actor.actorId))) throw forbidden();
+            if (doctorProfile) await this.saveDoctorProfile(tx, created.id, doctorProfile, inDoctorProfile);
+            const { specialtyId, unitId } = doctorProfile ?? {};
+            const metadata = { role, ...definedFields({ specialtyId, unitId }) };
+            await this.repository.audit(
+              { ...actor, action: 'user.created', entityType: 'user', entityId: created.id, metadata },
+              tx,
+            );
+            return this.passwordReset.issueWelcome(tx, created, actor.actorId);
+          },
+        ),
+      { doctor_profiles_registry_key: inDoctorProfile(adminConflicts.registryTaken) },
+    );
+    return this.detail(user.id);
   }
 
   async detail(id: string): Promise<AdminUserDetail> {
@@ -120,9 +160,7 @@ export class AdminUserService {
     return this.change(actor, id, 'doctor_profile.created', async (tx, user) => {
       active(user);
       if (user.roles.includes('doctor')) throw conflictError(adminConflicts.profileExists);
-      const council = await this.availableCouncil(tx, input.specialtyId);
-      await this.ensureUnitAvailable(tx, input.unitId);
-      await this.repository.saveProfile(tx, id, { ...input, council });
+      await this.saveDoctorProfile(tx, id, input);
       await this.repository.grantRole(tx, id, 'doctor', actor.actorId, this.clock.now());
       return { specialtyId: input.specialtyId, unitId: input.unitId };
     });
@@ -199,15 +237,26 @@ export class AdminUserService {
     }
   }
 
-  private async availableCouncil(tx: Transaction, specialtyId: string): Promise<string> {
+  private async saveDoctorProfile(
+    tx: Transaction,
+    id: string,
+    input: DoctorProfileInput,
+    at = sameField,
+  ): Promise<void> {
+    const council = await this.availableCouncil(tx, input.specialtyId, at);
+    await this.ensureUnitAvailable(tx, input.unitId, at);
+    await this.repository.saveProfile(tx, id, { ...input, council });
+  }
+
+  private async availableCouncil(tx: Transaction, specialtyId: string, at = sameField): Promise<string> {
     return (
       (await this.repository.activeSpecialtyCouncil(tx, specialtyId)) ??
-      Promise.reject(unprocessableField(unavailable.specialty))
+      Promise.reject(unprocessableField(at(unavailable.specialty)))
     );
   }
 
-  private async ensureUnitAvailable(tx: Transaction, unitId: string): Promise<void> {
-    if (!(await this.repository.unitIsActive(tx, unitId))) throw unprocessableField(unavailable.unit);
+  private async ensureUnitAvailable(tx: Transaction, unitId: string, at = sameField): Promise<void> {
+    if (!(await this.repository.unitIsActive(tx, unitId))) throw unprocessableField(at(unavailable.unit));
   }
 
   private async cancelBookings(tx: Transaction, user: LockedUser, sides: BookingSide[], actor: Actor) {
