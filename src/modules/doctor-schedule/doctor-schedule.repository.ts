@@ -1,18 +1,47 @@
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
-import { unitHours, units } from '../../database/schema/catalog.js';
-import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
-import { doctorScheduleDays, doctorScheduleRanges } from '../../database/schema/doctor-schedule.js';
+import { bookings, isActiveFuture } from '../../database/schema/bookings.js';
+import { specialties, unitHours, units } from '../../database/schema/catalog.js';
+import { appointmentDuration, doctorProfiles, type AppointmentDuration } from '../../database/schema/doctor-profiles.js';
+import { doctorScheduleDays, doctorScheduleRanges, doctorTimeOff } from '../../database/schema/doctor-schedule.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
+import { civilPeriodIn, CLINIC_TIME_ZONE } from '../../lib/time.js';
 import { WEEKDAYS } from '../../lib/week.js';
-import type { Schedule, ScheduleDay, UnitHour } from './doctor-schedule.model.js';
+import type {
+  CreatedTimeOff,
+  Duration,
+  Schedule,
+  ScheduleDay,
+  ScheduleWarning,
+  TimeOff,
+  UnitHour,
+} from './doctor-schedule.model.js';
 
 export interface ReplaceRequest {
   doctorId: string;
   days: ScheduleDay[];
+  appointmentDurationMin?: AppointmentDuration | null | undefined;
   actor: Actor;
   check: (hours: UnitHour[]) => void;
 }
+
+export interface BlockRequest {
+  doctorId: string;
+  date: string;
+  reason: string | null;
+  actor: Actor;
+  now: Date;
+}
+
+export interface UnblockRequest {
+  doctorId: string;
+  date: string;
+  actor: Actor;
+}
+
+type Replaced = Duration & { unitHours: UnitHour[] };
+
+const timeOffColumns = { date: doctorTimeOff.date, reason: doctorTimeOff.reason };
 
 export class DoctorScheduleRepository {
   constructor(private readonly db: Database) {}
@@ -47,11 +76,12 @@ export class DoctorScheduleRepository {
             .map(({ startMin, endMin }) => ({ startMin, endMin })),
         })),
         unitHours: hours,
+        ...(await durationOf(tx, doctorId)),
       };
     }, readSnapshot);
   }
 
-  replace({ doctorId, days, actor, check }: ReplaceRequest): Promise<UnitHour[] | undefined> {
+  replace({ doctorId, days, appointmentDurationMin, actor, check }: ReplaceRequest): Promise<Replaced | undefined> {
     return this.db.transaction(async (tx) => {
       const unitId = await lockProfile(tx, doctorId);
       if (!unitId) return undefined;
@@ -60,6 +90,10 @@ export class DoctorScheduleRepository {
       check(hours);
       await tx.delete(doctorScheduleDays).where(eq(doctorScheduleDays.doctorId, doctorId));
       await insertSchedule(tx, doctorId, days);
+      if (appointmentDurationMin !== undefined) {
+        await tx.update(doctorProfiles).set({ appointmentDurationMin }).where(eq(doctorProfiles.userId, doctorId));
+      }
+      const duration = await durationOf(tx, doctorId);
       await recordAudit(tx, {
         ...actor,
         action: 'doctor_schedule.saved',
@@ -68,9 +102,10 @@ export class DoctorScheduleRepository {
         metadata: {
           activeDays: days.filter((day) => day.isActive).map((day) => day.weekday),
           ranges: days.reduce((total, day) => total + day.ranges.length, 0),
+          appointmentDurationMin: duration.isSpecialtyDefault ? null : duration.appointmentDurationMin,
         },
       });
-      return hours;
+      return { unitHours: hours, ...duration };
     });
   }
 
@@ -89,6 +124,60 @@ export class DoctorScheduleRepository {
       if (ranges.length > 0) await tx.insert(doctorScheduleRanges).values(ranges);
     });
   }
+
+  timeOff(doctorId: string, since: string): Promise<TimeOff[] | undefined> {
+    return this.db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select({ userId: doctorProfiles.userId })
+        .from(doctorProfiles)
+        .where(eq(doctorProfiles.userId, doctorId));
+      if (!profile) return undefined;
+      return tx
+        .select(timeOffColumns)
+        .from(doctorTimeOff)
+        .where(and(eq(doctorTimeOff.doctorId, doctorId), gte(doctorTimeOff.date, since)))
+        .orderBy(asc(doctorTimeOff.date));
+    }, readSnapshot);
+  }
+
+  block({ doctorId, date, reason, actor, now }: BlockRequest): Promise<CreatedTimeOff | 'missing' | 'exists'> {
+    return this.db.transaction(async (tx) => {
+      if (!(await lockProfile(tx, doctorId))) return 'missing';
+      const [created] = await tx
+        .insert(doctorTimeOff)
+        .values({ doctorId, date, reason, createdAt: now })
+        .onConflictDoNothing()
+        .returning(timeOffColumns);
+      if (!created) return 'exists';
+      await recordAudit(tx, {
+        ...actor,
+        action: 'doctor_time_off.created',
+        entityType: 'doctor_profile',
+        entityId: doctorId,
+        metadata: { date },
+      });
+      return { ...created, warnings: await appointmentsOn(tx, doctorId, date, now) };
+    });
+  }
+
+  unblock({ doctorId, date, actor }: UnblockRequest): Promise<'missing' | 'absent' | 'deleted'> {
+    return this.db.transaction(async (tx) => {
+      if (!(await lockProfile(tx, doctorId))) return 'missing';
+      const deleted = await tx
+        .delete(doctorTimeOff)
+        .where(and(eq(doctorTimeOff.doctorId, doctorId), eq(doctorTimeOff.date, date)))
+        .returning({ date: doctorTimeOff.date });
+      if (deleted.length === 0) return 'absent';
+      await recordAudit(tx, {
+        ...actor,
+        action: 'doctor_time_off.deleted',
+        entityType: 'doctor_profile',
+        entityId: doctorId,
+        metadata: { date },
+      });
+      return 'deleted';
+    });
+  }
 }
 
 async function lockProfile(tx: Transaction, doctorId: string): Promise<string | undefined> {
@@ -98,6 +187,51 @@ async function lockProfile(tx: Transaction, doctorId: string): Promise<string | 
     .where(eq(doctorProfiles.userId, doctorId))
     .for('no key update');
   return profile?.unitId;
+}
+
+async function durationOf(tx: Transaction, doctorId: string): Promise<Duration> {
+  const [row] = await tx
+    .select({
+      appointmentDurationMin: appointmentDuration,
+      specialtyDurationMin: specialties.appointmentDurationMin,
+      own: doctorProfiles.appointmentDurationMin,
+    })
+    .from(doctorProfiles)
+    .innerJoin(specialties, eq(specialties.id, doctorProfiles.specialtyId))
+    .where(eq(doctorProfiles.userId, doctorId));
+  if (!row) throw new Error('Doctor profile disappeared inside its transaction');
+  const { own, ...duration } = row;
+  return { ...duration, isSpecialtyDefault: own === null };
+}
+
+async function appointmentsOn(tx: Transaction, doctorId: string, date: string, now: Date): Promise<ScheduleWarning[]> {
+  const { start, end } = civilPeriodIn(CLINIC_TIME_ZONE, { from: date, to: date });
+  const rows = await tx
+    .select({ appointmentId: bookings.id, startsAt: bookings.startsAt })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.doctorId, doctorId),
+        eq(bookings.kind, 'appointment'),
+        isActiveFuture(now),
+        gte(bookings.startsAt, start),
+        lt(bookings.startsAt, end),
+      ),
+    )
+    .orderBy(asc(bookings.startsAt));
+  return rows.map(({ appointmentId, startsAt }) => ({ appointmentId, startsAt: startsAt.toISOString() }));
+}
+
+export async function blockedDatesFrom(
+  db: Pick<Database, 'select'>,
+  doctorId: string,
+  since: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ date: doctorTimeOff.date })
+    .from(doctorTimeOff)
+    .where(and(eq(doctorTimeOff.doctorId, doctorId), gte(doctorTimeOff.date, since)));
+  return rows.map((row) => row.date);
 }
 
 export function hoursOf(db: Pick<Database, 'select'>, unitId: string): Promise<UnitHour[]> {
