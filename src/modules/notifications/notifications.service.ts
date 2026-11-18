@@ -1,6 +1,6 @@
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import type { Role } from '../../database/schema/users.js';
-import { AppError } from '../../lib/app-error.js';
+import { notFound } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import type { Pagination } from '../../lib/pagination.js';
 import type { TtlCache } from '../../lib/ttl-cache.js';
@@ -61,7 +61,7 @@ export class NotificationsService {
 
   async markRead(userId: string, id: string): Promise<void> {
     const role = await this.repository.markRead(userId, id, this.clock.now());
-    if (!role) throw new AppError(404, 'NOT_FOUND', notificationNotFound);
+    if (!role) throw notFound(notificationNotFound);
     this.counter.delete(keyOf(userId, role));
   }
 

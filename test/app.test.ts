@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { buildTestApp, TEST_CORS_ORIGIN } from './support/build-test-app.js';
+import { anyText } from './support/users.js';
 
 describe('security headers', () => {
   it('sends helmet headers and hides the framework', async () => {
@@ -120,7 +121,7 @@ describe('access log', () => {
       id: expect.anything() as unknown,
       method: 'GET',
       path: '/api/x/PATHVALUE',
-      ip: expect.any(String) as unknown,
+      ip: anyText,
     });
     expect(entry.res).toEqual({ statusCode: 404 });
     for (const secret of ['QUERYSECRET', 'ana@example.com', 'HEADERSECRET', 'COOKIESECRET']) {

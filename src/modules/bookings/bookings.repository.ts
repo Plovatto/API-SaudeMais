@@ -15,7 +15,7 @@ import {
 import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { examResults } from '../../database/schema/exam-results.js';
 import { users } from '../../database/schema/users.js';
-import { HOUR, type DayRange } from '../../lib/time.js';
+import { HOUR, isoOrNull, type DayRange } from '../../lib/time.js';
 import { bookingActions, type BookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
 
 export type BookingSide = 'patient' | 'doctor';
@@ -84,7 +84,7 @@ interface CancellationRow {
   cancelledAt: Date | null;
 }
 
-export function cancellationOf({ byRole, reason, late, cancelledAt }: CancellationRow) {
+function cancellationOf({ byRole, reason, late, cancelledAt }: CancellationRow) {
   return byRole && cancelledAt ? { byRole, reason, late, cancelledAt: cancelledAt.toISOString() } : null;
 }
 
@@ -206,7 +206,7 @@ export function asPatient<T>(
   });
 }
 
-export interface ActiveLimits {
+interface ActiveLimits {
   maxActiveBookings: number;
   maxActiveAppointments: number;
   maxActiveExams: number;
@@ -249,7 +249,6 @@ export async function recordCreated(tx: Transaction, { bookingId, patientId, sta
   });
 }
 
-const iso = (date: Date | null) => date?.toISOString() ?? null;
 
 export async function eventsOf(db: Pick<Database, 'select'>, bookingId: string) {
   const events = await db
@@ -267,8 +266,8 @@ export async function eventsOf(db: Pick<Database, 'select'>, bookingId: string) 
     .orderBy(asc(bookingEvents.createdAt), asc(bookingEvents.id));
   return events.map((event) => ({
     ...event,
-    fromStartsAt: iso(event.fromStartsAt),
-    toStartsAt: iso(event.toStartsAt),
+    fromStartsAt: isoOrNull(event.fromStartsAt),
+    toStartsAt: isoOrNull(event.toStartsAt),
     createdAt: event.createdAt.toISOString(),
   }));
 }

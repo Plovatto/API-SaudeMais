@@ -6,7 +6,7 @@ import { AdminHomeRepository } from './admin-home.repository.js';
 import { createAdminHomeRouter } from './admin-home.routes.js';
 import { AdminHomeService } from './admin-home.service.js';
 
-export interface AdminHomeModuleDeps {
+interface AdminHomeModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

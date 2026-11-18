@@ -23,7 +23,7 @@ export interface Offer {
   examTypeId: string;
 }
 
-export interface LaneUse {
+interface LaneUse {
   startsAt: Date;
   endsAt: Date;
   lane: number;

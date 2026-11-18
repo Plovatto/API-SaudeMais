@@ -1,4 +1,4 @@
-export interface NumericRange {
+interface NumericRange {
   low: number;
   high: number;
 }

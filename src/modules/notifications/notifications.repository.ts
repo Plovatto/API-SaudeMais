@@ -3,6 +3,7 @@ import type { Database, Transaction } from '../../database/pg-client.js';
 import { notifications } from '../../database/schema/notifications.js';
 import { users, type Role } from '../../database/schema/users.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
+import { isoOrNull } from '../../lib/time.js';
 import { hasRole } from '../users/user.repository.js';
 import type { Area, NotificationView } from './notifications.model.js';
 
@@ -35,7 +36,7 @@ function viewOf({ readAt, createdAt, fullName, params, ...row }: NotificationRow
   return {
     ...row,
     params: fullName === null ? params : { ...params, fullName },
-    readAt: readAt?.toISOString() ?? null,
+    readAt: isoOrNull(readAt),
     createdAt: createdAt.toISOString(),
   };
 }

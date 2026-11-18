@@ -3,9 +3,11 @@ import request from 'supertest';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type * as publicCode from '@/modules/exam-bookings/exam-bookings.code.js';
 import { newPublicCode } from '@/modules/exam-bookings/exam-bookings.code.js';
+import { UNKNOWN_ID } from './support/agenda.js';
+import { slot } from './support/bookings.js';
 import { doctorNamed, setupClinic, type Clinic } from './support/doctors.js';
 import { offerOf, type Offer } from './support/exams.js';
-import { as, createAdmin, createPatient, HOUR, START } from './support/users.js';
+import { anyText, as, createAdmin, createPatient, HOUR, START } from './support/users.js';
 
 vi.mock('@/modules/exam-bookings/exam-bookings.code.js', async (importOriginal) => {
   const original = await importOriginal<typeof publicCode>();
@@ -27,7 +29,6 @@ interface ExamAvailability {
   days: { date: string; slots: { startsAt: string; endsAt: string; remaining: number }[] }[];
 }
 
-const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 const PUBLIC_CODE = /^EX-[0-9A-HJKMNP-TV-Z]{6}$/;
 
 let context: Clinic;
@@ -49,8 +50,6 @@ beforeAll(async () => {
   southUltrassom = await offerOf(context, 'Unidade Sul', 'ultrassom');
   centralUnit = (await doctorNamed(context, 'Dr. Carlos Mendes')).unit;
 }, 60_000);
-
-const slot = (date: string, time: string) => `${date}T${time}:00.000Z`;
 
 const availability = (token: string, offer: Offer, from: string, to = from) =>
   request(context.app)
@@ -254,7 +253,7 @@ describe('POST /api/exam-bookings', () => {
     expect(response.headers['cache-control']).toBe('no-store');
     const exam = response.body as ExamBooking;
     expect(exam).toEqual({
-      id: expect.any(String) as unknown,
+      id: anyText,
       status: 'confirmed',
       publicCode: expect.stringMatching(PUBLIC_CODE) as unknown,
       startsAt: slot('2026-11-23', '10:00'),
@@ -329,7 +328,7 @@ describe('POST /api/exam-bookings', () => {
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
       code: 'PATIENT_CONFLICT',
-      fields: { startsAt: expect.any(String) as unknown },
+      fields: { startsAt: anyText },
     });
   });
 

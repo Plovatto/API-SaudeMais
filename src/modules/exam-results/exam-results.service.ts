@@ -1,4 +1,4 @@
-import { AppError } from '../../lib/app-error.js';
+import { AppError, notFound } from '../../lib/app-error.js';
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import type { Page, Pagination } from '../../lib/pagination.js';
@@ -27,7 +27,7 @@ export class ExamResultsService {
 
   async patientResult(bookingId: string, actor: Actor): Promise<ExamResult> {
     const result = await this.repository.patientResult(bookingId, actor);
-    if (!result) throw new AppError(404, 'NOT_FOUND', resultNotFound);
+    if (!result) throw notFound(resultNotFound);
     return result;
   }
 

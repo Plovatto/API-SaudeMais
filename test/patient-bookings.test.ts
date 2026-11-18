@@ -3,6 +3,8 @@ import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { bookings, isLateCancellation } from '@/database/schema/bookings.js';
 import { EXAMPLE_DOCTOR } from '@/modules/seed/seed.data.js';
+import { UNKNOWN_ID } from './support/agenda.js';
+import { slot } from './support/bookings.js';
 import {
   availability,
   doctorNamed,
@@ -11,7 +13,7 @@ import {
   type Clinic,
   type Doctor,
 } from './support/doctors.js';
-import { as, createAdmin, HOUR, login, signUp, START } from './support/users.js';
+import { anyText, as, createAdmin, HOUR, login, signUp, START } from './support/users.js';
 
 interface Booking {
   id: string;
@@ -30,8 +32,6 @@ interface BookingPage {
   counts: { upcoming: number; past: number };
 }
 
-const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
-
 let context: Clinic;
 let carlos: Doctor;
 let exampleDoctor: Doctor;
@@ -46,8 +46,6 @@ beforeAll(async () => {
   doctorToken = (doctorLogin.body as { token: string }).token;
   admin = await createAdmin(context, 'admin.reservas@email.com');
 }, 60_000);
-
-const slot = (date: string, time: string) => `${date}T${time}:00.000Z`;
 
 async function book(token: string, startsAt: string, doctor = carlos): Promise<Booking> {
   const response = await request(context.app)
@@ -170,9 +168,9 @@ describe('GET /api/patient/bookings', () => {
       visitType: null,
       doctor: null,
       specialty: null,
-      examType: { id: expect.any(String) as unknown, name: expect.any(String) as unknown },
+      examType: { id: anyText, name: anyText },
       publicCode: 'EX-7F3K2Q',
-      unit: { address: expect.any(String) as unknown, phone: expect.any(String) as unknown },
+      unit: { address: anyText, phone: anyText },
       actions: {
         canCancel: true,
         lateCancellation: false,

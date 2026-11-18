@@ -7,7 +7,7 @@ import { CatalogRepository } from './catalog.repository.js';
 import { createCatalogRouter } from './catalog.routes.js';
 import { CatalogService } from './catalog.service.js';
 
-export interface CatalogModuleDeps {
+interface CatalogModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

@@ -8,7 +8,7 @@ import { ExamBookingsRepository } from './exam-bookings.repository.js';
 import { createExamBookingsRouter } from './exam-bookings.routes.js';
 import { ExamBookingsService } from './exam-bookings.service.js';
 
-export interface ExamBookingsModuleDeps {
+interface ExamBookingsModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

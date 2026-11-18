@@ -62,7 +62,7 @@ export const examResultSchema = registry.register(
 
 export const examResultPageSchema = registry.register('ExamResultPage', paginatedSchema(examResultSchema));
 
-export const examResultSummarySchema = registry.register(
+const examResultSummarySchema = registry.register(
   'ExamResultSummary',
   z.object({
     bookingId: z.uuid(),

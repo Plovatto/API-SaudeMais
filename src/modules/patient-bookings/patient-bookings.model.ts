@@ -14,7 +14,7 @@ import {
 import { doctorSchema } from '../doctors/doctors.model.js';
 import { notificationSchema } from '../notifications/notifications.model.js';
 
-export const bookingScopes = ['upcoming', 'past'] as const;
+const bookingScopes = ['upcoming', 'past'] as const;
 
 export const patientBookingsQuery = paginationQuery.extend({
   scope: z.enum(bookingScopes, { error: 'Escolha entre agendados e realizados.' }).default('upcoming').openapi({
@@ -31,7 +31,7 @@ export const patientBookingsQuery = paginationQuery.extend({
     .openapi({ description: 'Só agendamentos nesta situação, já com `expired` calculado.' }),
 });
 
-export const patientBookingSchema = registry.register(
+const patientBookingSchema = registry.register(
   'PatientBooking',
   z.object({
     id: z.uuid(),

@@ -11,7 +11,7 @@ import type { BookingsService } from '../modules/bookings/bookings.service.js';
 import type { EmailNotifier } from '../modules/email-notifications/email-notifications.notifier.js';
 import type { NotificationsService } from '../modules/notifications/notifications.service.js';
 
-export const MAINTENANCE_LOCK = 727_004;
+const MAINTENANCE_LOCK = 727_004;
 
 const RETENTION = {
   resetTokens: 48 * HOUR,

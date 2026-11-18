@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '@/database/migrate.js';
 import { createDb } from '@/database/pg-client.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
-import { registration } from '../test/support/users.js';
+import { as, registration } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
@@ -41,7 +41,7 @@ describe('admins on PostgreSQL', () => {
     const id = (created.body as { id: string }).id;
     await request(context.app)
       .post(`/api/admin/users/${id}/roles/admin`)
-      .set('Authorization', `Bearer ${token}`)
+      .set(as(token))
       .expect(200);
     return id;
   };
@@ -62,10 +62,10 @@ describe('admins on PostgreSQL', () => {
     const results = await Promise.all([
       request(context.app)
         .post(`/api/admin/users/${secondId}/deactivate`)
-        .set('Authorization', `Bearer ${first.token}`),
+        .set(as(first.token)),
       request(context.app)
         .delete(`/api/admin/users/${first.user.id}/roles/admin`)
-        .set('Authorization', `Bearer ${second.token}`),
+        .set(as(second.token)),
     ]);
 
     const [winner, loser] = results.map((response) => response.status).sort();
@@ -83,17 +83,17 @@ describe('admins on PostgreSQL', () => {
     const otherId = (created.body as { id: string }).id;
     await request(context.app)
       .post(`/api/admin/users/${otherId}/roles/admin`)
-      .set('Authorization', `Bearer ${first.token}`)
+      .set(as(first.token))
       .expect(200);
     const second = await session(OTHER);
 
     const results = await Promise.all([
       request(context.app)
         .delete(`/api/admin/users/${otherId}/roles/admin`)
-        .set('Authorization', `Bearer ${first.token}`),
+        .set(as(first.token)),
       request(context.app)
         .delete(`/api/admin/users/${first.user.id}/roles/admin`)
-        .set('Authorization', `Bearer ${second.token}`),
+        .set(as(second.token)),
     ]);
 
     const [winner, loser] = results.map((response) => response.status).sort();

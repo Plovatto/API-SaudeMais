@@ -7,7 +7,7 @@ import type { Role } from '@/database/schema/users.js';
 import { MINUTE } from '@/lib/time.js';
 import { NotificationsRepository } from '@/modules/notifications/notifications.repository.js';
 import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
-import { as, buildUsersApp, login, registration } from './support/users.js';
+import { anyText, as, buildUsersApp, login, registration } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PATH = '/api/notifications';
@@ -185,7 +185,7 @@ describe('GET /api/notifications', () => {
     expect(response.body).toMatchObject({ page: 1, pageSize: 20, total: 2 });
     expect(itemsOf(response)).toEqual([
       {
-        id: expect.any(String) as unknown,
+        id: anyText,
         type: 'user_registered',
         params: { userId: ana, fullName: 'Ana Maria Silva' },
         bookingId: null,
@@ -199,7 +199,7 @@ describe('GET /api/notifications', () => {
     expect(itemsOf(second)).toEqual([expect.objectContaining({ params: { userId: carla, fullName: 'Carla Dias' } })]);
     const patientArea = itemsOf(await list(context, context.admin.token, 'role=patient').expect(200));
     expect(patientArea).toEqual([
-      expect.objectContaining({ type: 'appointment_confirmed', bookingId: expect.any(String) as unknown }),
+      expect.objectContaining({ type: 'appointment_confirmed', bookingId: anyText }),
     ]);
   });
 

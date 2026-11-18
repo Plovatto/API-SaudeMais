@@ -9,7 +9,7 @@ import { LabIntegrationRepository } from './lab-integration.repository.js';
 import { createLabIntegrationRouter } from './lab-integration.routes.js';
 import { LabIntegrationService } from './lab-integration.service.js';
 
-export interface LabIntegrationModuleDeps {
+interface LabIntegrationModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

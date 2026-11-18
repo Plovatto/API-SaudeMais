@@ -2,6 +2,8 @@ import { randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from 'node:c
 import { AppError } from '../../lib/app-error.js';
 import { QueueFullError, Semaphore } from '../../lib/semaphore.js';
 
+export const SERVER_BUSY_MESSAGE = 'O servidor está ocupado. Tente de novo em instantes.';
+
 const KEY_LENGTH = 64;
 const SALT_LENGTH = 16;
 const PARAMS = { N: 2 ** 15, r: 8, p: 1 };
@@ -21,7 +23,7 @@ async function derive(password: string, salt: Buffer, options: ScryptOptions, le
     );
   } catch (error) {
     if (error instanceof QueueFullError) {
-      throw new AppError(503, 'SERVER_BUSY', 'O servidor está ocupado. Tente de novo em instantes.');
+      throw new AppError(503, 'SERVER_BUSY', SERVER_BUSY_MESSAGE);
     }
     throw error;
   }

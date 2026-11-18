@@ -9,7 +9,7 @@ import { AppointmentsRepository } from './appointments.repository.js';
 import { createAppointmentsRouter } from './appointments.routes.js';
 import { AppointmentsService } from './appointments.service.js';
 
-export interface AppointmentsModuleDeps {
+interface AppointmentsModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

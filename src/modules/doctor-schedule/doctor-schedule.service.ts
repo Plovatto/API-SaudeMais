@@ -1,10 +1,10 @@
-import { AppError, conflictError, unprocessable, unprocessableField, type FieldErrors } from '../../lib/app-error.js';
+import { conflictError, notFound, unprocessable, unprocessableField, type FieldErrors } from '../../lib/app-error.js';
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { isExclusionViolation } from '../../lib/pg-errors.js';
 import { civilDate, civilDateIn, CLINIC_TIME_ZONE, DAY } from '../../lib/time.js';
 import { MAX_BOOKING_HORIZON_DAYS } from '../catalog/catalog.model.js';
-import { WEEKDAYS, WORKDAYS } from '../../lib/week.js';
+import { isWorkday, WEEKDAYS } from '../../lib/week.js';
 import { scheduleMessages } from './doctor-schedule.messages.js';
 import type {
   CreatedTimeOff,
@@ -24,7 +24,7 @@ const DEFAULT_RANGES = [
 ];
 
 export const DEFAULT_SCHEDULE: ScheduleDay[] = WEEKDAYS.map((weekday) => {
-  const isActive = (WORKDAYS as readonly number[]).includes(weekday);
+  const isActive = isWorkday(weekday);
   return { weekday, isActive, ranges: isActive ? DEFAULT_RANGES : [] };
 });
 
@@ -33,7 +33,6 @@ const rangeField = (dayIndex: number, rangeIndex: number) => `days.${dayIndex}.r
 const rejection = ({ code, message }: { code: string; message: string }, fields?: FieldErrors) =>
   unprocessable(code, message, fields);
 
-const notFound = (message: string) => new AppError(404, 'NOT_FOUND', message);
 
 const profileMissing = () => notFound(scheduleMessages.profileMissing);
 

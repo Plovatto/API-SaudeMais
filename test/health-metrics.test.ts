@@ -2,7 +2,8 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
-import { agendaHelpers, slot, type Attending } from './support/agenda.js';
+import { agendaHelpers, type Attending } from './support/agenda.js';
+import { slot } from './support/bookings.js';
 import { createDoctor, setupClinic, type Clinic } from './support/doctors.js';
 import { as, buildUsersApp, HOUR, login, signUp, START } from './support/users.js';
 

@@ -2,23 +2,18 @@ import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-or
 import type { Database, Transaction } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, units } from '../../database/schema/catalog.js';
-import { examResults, examResultVersions } from '../../database/schema/exam-results.js';
+import { examResults, examResultVersions, type ResultPayloadItem } from '../../database/schema/exam-results.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
 import { DAY } from '../../lib/time.js';
 import { hasResult, placeColumns } from '../bookings/bookings.repository.js';
-import type { ResultInput } from '../lab-integration/lab-integration.model.js';
 import { aboutItem } from './exam-results.glossary.js';
 import type { ExamResult, ExamResultVersion, ResultItemView } from './exam-results.model.js';
 import { parseReferenceRange } from './reference-range.js';
 
 const REVIEW_WINDOW = 30 * DAY;
 
-type Payload = Partial<Pick<ResultInput, 'items' | 'report'>>;
-
-type ResultItem = NonNullable<ResultInput['items']>[number];
-
-const describeItem = (item: ResultItem): ResultItemView => ({
+const describeItem = (item: ResultPayloadItem): ResultItemView => ({
   ...item,
   range: parseReferenceRange(item.referenceRange),
   about: aboutItem(item.name),
@@ -73,7 +68,7 @@ async function versionsOf(tx: Transaction, resultIds: string[]) {
     .orderBy(desc(examResultVersions.version));
   const byResult = new Map<string, ExamResultVersion[]>();
   for (const { resultId, issuedAt, receivedAt, payload, ...version } of rows) {
-    const { items, report = null } = payload as Payload;
+    const { items, report = null } = payload;
     const versions = byResult.get(resultId) ?? [];
     versions.push({
       ...version,

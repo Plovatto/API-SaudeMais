@@ -116,7 +116,7 @@ documentOperation({
   },
 });
 
-export interface ExamBookingsRouterDeps {
+interface ExamBookingsRouterDeps {
   controller: ExamBookingsController;
   requireAuth: RequestHandler;
   requirePatient: RequestHandler;

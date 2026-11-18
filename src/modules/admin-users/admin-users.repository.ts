@@ -7,6 +7,7 @@ import { userRoles, users, type Role } from '../../database/schema/users.js';
 import { recordAudit, type AuditEntry } from '../../lib/audit.js';
 import { pageOf, type Page } from '../../lib/pagination.js';
 import { likePattern, unaccentMatch } from '../../lib/search.js';
+import { isoOrNull } from '../../lib/time.js';
 import { futureBookingCounts } from '../bookings/bookings.repository.js';
 import { hasRole, publicUserColumns } from '../users/user.repository.js';
 import type { AdminUser, AdminUserDetail, DoctorProfile, UsersQuery } from './admin-users.model.js';
@@ -28,7 +29,7 @@ export interface LockedUser {
   deactivatedAt: Date | null;
 }
 
-export interface ProfileRow {
+interface ProfileRow {
   specialtyId: string;
   council: string;
   unitId: string;
@@ -37,7 +38,7 @@ export interface ProfileRow {
 }
 
 function toAdminUser({ deactivatedAt, createdAt, ...row }: AdminUserRow): AdminUser {
-  return { ...row, deactivatedAt: deactivatedAt?.toISOString() ?? null, createdAt: createdAt.toISOString() };
+  return { ...row, deactivatedAt: isoOrNull(deactivatedAt), createdAt: createdAt.toISOString() };
 }
 
 export class AdminUserRepository {

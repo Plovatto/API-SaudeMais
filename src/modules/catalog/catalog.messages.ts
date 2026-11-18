@@ -17,8 +17,6 @@ export const uniqueConflicts = {
   exam_types_code_key: { code: 'CODE_TAKEN', field: 'code', message: 'Já existe um tipo de exame com esse código.' },
 } satisfies Record<string, Conflict>;
 
-export type UniqueConstraint = keyof typeof uniqueConflicts;
-
 export const examTypeInactive: Conflict = {
   code: 'EXAM_TYPE_INACTIVE',
   field: 'isActive',

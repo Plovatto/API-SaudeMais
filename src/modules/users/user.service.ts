@@ -1,6 +1,6 @@
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import type { Role } from '../../database/schema/users.js';
-import { AppError, invalidData } from '../../lib/app-error.js';
+import { AppError, invalidData, notFound, unprocessable, unprocessableField } from '../../lib/app-error.js';
 import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
@@ -18,7 +18,15 @@ import type {
   SessionView,
   UpdateProfileInput,
 } from './user.model.js';
-import { birthDateInFuture, currentSession, emailConflicts, sessionNotFound } from './user.messages.js';
+import {
+  birthDateInFuture,
+  currentSession,
+  emailConflicts,
+  invalidCredentials,
+  invalidCurrentPassword,
+  sessionNotFound,
+  userInactive,
+} from './user.messages.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
 import type { NewUser, UserRepository } from './user.repository.js';
 import type { SessionCache } from './user.session-cache.js';
@@ -34,7 +42,7 @@ export interface SessionPolicy {
   maxSessionsPerUser: number;
 }
 
-export interface ClientInfo {
+interface ClientInfo {
   ip: string | null;
   userAgent: string | null;
 }
@@ -51,7 +59,7 @@ export interface SeedAccount {
   roles: Role[];
 }
 
-export class SeedAccountConflictError extends Error {
+class SeedAccountConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'SeedAccountConflictError';
@@ -89,8 +97,8 @@ export class UserService {
     const now = this.clock.now();
     const candidate = await this.repository.findLoginCandidate(email);
     const valid = await verifyPassword(password, candidate?.passwordHash ?? (await placeholderPasswordHash()));
-    if (!candidate || !valid) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos.');
-    if (candidate.deactivatedAt) throw new AppError(403, 'USER_INACTIVE', 'Esta conta está desativada.');
+    if (!candidate || !valid) throw new AppError(401, invalidCredentials.code, invalidCredentials.message);
+    if (candidate.deactivatedAt) throw new AppError(403, userInactive.code, userInactive.message);
 
     const absoluteExpiresAt = new Date(now.getTime() + this.policy.maxDays * DAY);
     const expiresAt = remember ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
@@ -180,8 +188,7 @@ export class UserService {
     const now = this.clock.now();
     const stored = await this.repository.findPasswordHash(user.id);
     if (!stored || !(await verifyPassword(currentPassword, stored))) {
-      const message = 'A senha atual está incorreta.';
-      throw new AppError(422, 'INVALID_CURRENT_PASSWORD', message, { currentPassword: message });
+      throw unprocessableField(invalidCurrentPassword);
     }
     await this.repository.replacePassword(user.id, await hashPassword(password), sessionId, now);
     this.sessions.invalidateUser(user.id);
@@ -205,9 +212,9 @@ export class UserService {
   }
 
   async endSession({ sessionId, user }: AuthContext, id: string): Promise<void> {
-    if (id === sessionId) throw new AppError(422, currentSession.code, currentSession.message);
+    if (id === sessionId) throw unprocessable(currentSession.code, currentSession.message);
     if (!(await this.repository.deleteOwnSession(user.id, id))) {
-      throw new AppError(404, 'NOT_FOUND', sessionNotFound);
+      throw notFound(sessionNotFound);
     }
     this.sessions.invalidateSessions([id]);
   }

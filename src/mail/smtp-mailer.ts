@@ -1,7 +1,7 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import type { MailMessage, Mailer } from './mailer.js';
 
-export interface SmtpConfig {
+interface SmtpConfig {
   host: string;
   port: number;
   user: string;

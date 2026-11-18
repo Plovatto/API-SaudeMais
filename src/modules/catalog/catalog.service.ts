@@ -1,4 +1,4 @@
-import { AppError, conflictError } from '../../lib/app-error.js';
+import { conflictError, notFound, type AppError } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import type { Pagination } from '../../lib/pagination.js';
 import type {
@@ -21,8 +21,8 @@ import {
 } from './catalog.messages.js';
 import { InUseError, type Actor, type CatalogRepository } from './catalog.repository.js';
 
-function notFound(entity: CatalogEntity): AppError {
-  return new AppError(404, 'NOT_FOUND', notFoundMessages[entity]);
+function missing(entity: CatalogEntity): AppError {
+  return notFound(notFoundMessages[entity]);
 }
 
 const constraintConflicts: Record<string, Conflict> = {
@@ -40,7 +40,7 @@ async function translated<T>(write: () => Promise<T>): Promise<T> {
 }
 
 function found<T>(entity: CatalogEntity, value: T | undefined): T {
-  if (value === undefined) throw notFound(entity);
+  if (value === undefined) throw missing(entity);
   return value;
 }
 
@@ -96,14 +96,14 @@ export class CatalogService {
   }
 
   async offersOf(unitId: string) {
-    if (!(await this.repository.unitExists(unitId))) throw notFound('unit');
+    if (!(await this.repository.unitExists(unitId))) throw missing('unit');
     return this.repository.offersOf(unitId);
   }
 
   async saveOffer(unitId: string, examTypeId: string, input: SaveOfferInput, actor: Actor) {
-    if (!(await this.repository.unitExists(unitId))) throw notFound('unit');
+    if (!(await this.repository.unitExists(unitId))) throw missing('unit');
     const status = await this.repository.examTypeStatus(examTypeId);
-    if (status === 'missing') throw notFound('exam_type');
+    if (status === 'missing') throw missing('exam_type');
     if (status === 'inactive' && input.isActive) throw conflictError(examTypeInactive);
     await translated(() => this.repository.saveOffer(unitId, examTypeId, input, actor));
     return this.repository.offersOf(unitId);

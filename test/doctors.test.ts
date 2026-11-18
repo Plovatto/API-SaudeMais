@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { EXAMPLE_DOCTOR } from '@/modules/seed/seed.data.js';
+import { UNKNOWN_ID } from './support/agenda.js';
 import {
   availability,
   doctorNamed,
@@ -11,7 +12,7 @@ import {
   type Clinic,
   type DoctorPage,
 } from './support/doctors.js';
-import { as, createAdmin } from './support/users.js';
+import { anyText, as, createAdmin } from './support/users.js';
 
 const SAMPLE_NAMES = [
   'Dr. Carlos Mendes',
@@ -20,7 +21,6 @@ const SAMPLE_NAMES = [
   'Dra. Ana Ferreira',
   'Dra. Beatriz Lima',
 ];
-const UNKNOWN_ID = '0190a5d2-6b7e-7c3a-9f1e-2d4c6b8a0e13';
 
 const namesOf = (response: request.Response) => (response.body as DoctorPage).items.map((item) => item.fullName);
 
@@ -54,11 +54,11 @@ describe('GET /api/doctors', () => {
     expect(page).toMatchObject({ page: 1, pageSize: 20, total: 5 });
     expect(namesOf(response).toSorted()).toEqual(SAMPLE_NAMES);
     expect(carlos).toEqual({
-      id: expect.any(String) as unknown,
+      id: anyText,
       fullName: 'Dr. Carlos Mendes',
-      specialty: { id: expect.any(String) as unknown, name: 'Cardiologia', council: 'CRM' },
+      specialty: { id: anyText, name: 'Cardiologia', council: 'CRM' },
       unit: {
-        id: expect.any(String) as unknown,
+        id: anyText,
         name: 'Unidade Central',
         address: 'Rua das Flores, 123 - Centro, São Paulo - SP',
         phone: '+551133334444',

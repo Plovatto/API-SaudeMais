@@ -6,7 +6,7 @@ import type { UserService } from '../users/user.service.js';
 import { SeedRepository } from './seed.repository.js';
 import { SeedService } from './seed.service.js';
 
-export interface SeedModuleDeps {
+interface SeedModuleDeps {
   db: Database;
   users: UserService;
   schedules: DoctorScheduleService;

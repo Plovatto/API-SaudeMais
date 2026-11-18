@@ -37,7 +37,7 @@ documentOperation({
   errors,
 });
 
-export interface PatientBookingsRouterDeps {
+interface PatientBookingsRouterDeps {
   controller: PatientBookingsController;
   requireAuth: RequestHandler;
   requirePatient: RequestHandler;

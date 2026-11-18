@@ -178,7 +178,7 @@ documentOperation({
   },
 });
 
-export interface AppointmentsRouterDeps {
+interface AppointmentsRouterDeps {
   controller: AppointmentsController;
   requireAuth: RequestHandler;
   requirePatient: RequestHandler;

@@ -1,4 +1,4 @@
-import { AppError } from '../../lib/app-error.js';
+import { notFound } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import type { Page } from '../../lib/pagination.js';
 import { civilPeriodIn, CLINIC_TIME_ZONE } from '../../lib/time.js';
@@ -27,7 +27,7 @@ export class DoctorsService {
     const now = this.clock.now();
     const { start: from, end: to } = civilPeriodIn(CLINIC_TIME_ZONE, period);
     const context = await this.repository.bookingContext(doctorId, { from, to, now }, exceptOwn(user.id, rescheduling));
-    if (!context) throw new AppError(404, 'NOT_FOUND', doctorNotFound);
+    if (!context) throw notFound(doctorNotFound);
     return { days: slotDays({ ...context, ...period, now, timeZone: CLINIC_TIME_ZONE }) };
   }
 }

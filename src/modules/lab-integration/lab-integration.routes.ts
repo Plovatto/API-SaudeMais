@@ -124,7 +124,7 @@ documentOperation({
   },
 });
 
-export interface LabIntegrationRouterDeps {
+interface LabIntegrationRouterDeps {
   controller: LabIntegrationController;
   requireAuth: RequestHandler;
   requireAdmin: RequestHandler;

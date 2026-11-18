@@ -12,7 +12,7 @@ import { resetEmail, welcomeEmail } from './password-reset.mail.js';
 import type { ResetConfirmInput, ResetRequestInput } from './password-reset.model.js';
 import type { PasswordResetRepository } from './password-reset.repository.js';
 
-export const RESET_TOKEN_MINUTES = 30;
+const RESET_TOKEN_MINUTES = 30;
 export const INVALID_RESET_TOKEN_MESSAGE = 'Este link é inválido ou já venceu. Peça um novo.';
 export const WELCOME_TOKEN_HOURS = 72;
 

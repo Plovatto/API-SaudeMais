@@ -3,16 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { createSessionToken } from '@/modules/users/user.token.js';
-import { buildUsersApp, HOUR, login, registerAndLogin, START } from './support/users.js';
+import { as, buildUsersApp, HOUR, login, registerAndLogin, START } from './support/users.js';
 
 type App = Parameters<typeof request>[0];
 type Session = { id: string; current: boolean };
-const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 const changePassword = (app: App, token: string, body: Record<string, unknown>) =>
   request(app)
     .post('/api/me/password')
-    .set(auth(token))
+    .set(as(token))
     .send({
       currentPassword: 'senha-segura-123',
       password: 'nova-senha-456',
@@ -25,7 +24,7 @@ describe('GET and PATCH /api/me', () => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
 
-    const response = await request(app).get('/api/me').set(auth(token));
+    const response = await request(app).get('/api/me').set(as(token));
 
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
@@ -36,8 +35,8 @@ describe('GET and PATCH /api/me', () => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
 
-    const renamed = await request(app).patch('/api/me').set(auth(token)).send({ fullName: 'Ana Souza' });
-    const withoutPhone = await request(app).patch('/api/me').set(auth(token)).send({ phone: null });
+    const renamed = await request(app).patch('/api/me').set(as(token)).send({ fullName: 'Ana Souza' });
+    const withoutPhone = await request(app).patch('/api/me').set(as(token)).send({ phone: null });
 
     expect(renamed.body).toMatchObject({ fullName: 'Ana Souza', phone: '+5511987654321' });
     expect(withoutPhone.body).toMatchObject({ fullName: 'Ana Souza', phone: null });
@@ -47,7 +46,7 @@ describe('GET and PATCH /api/me', () => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
 
-    const response = await request(app).get('/api/me').set(auth(token));
+    const response = await request(app).get('/api/me').set(as(token));
 
     expect(response.body).toMatchObject({ birthDate: null, passwordChangedAt: null });
   });
@@ -56,8 +55,8 @@ describe('GET and PATCH /api/me', () => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
 
-    const saved = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-20' });
-    const removed = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: null });
+    const saved = await request(app).patch('/api/me').set(as(token)).send({ birthDate: '2026-11-20' });
+    const removed = await request(app).patch('/api/me').set(as(token)).send({ birthDate: null });
 
     expect(saved.status).toBe(200);
     expect(saved.body).toMatchObject({ birthDate: '2026-11-20', phone: '+5511987654321' });
@@ -68,7 +67,7 @@ describe('GET and PATCH /api/me', () => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
 
-    const response = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-21' });
+    const response = await request(app).patch('/api/me').set(as(token)).send({ birthDate: '2026-11-21' });
 
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({
@@ -82,8 +81,8 @@ describe('GET and PATCH /api/me', () => {
     clock.advance(13 * HOUR);
     const token = await registerAndLogin(app);
 
-    const utcToday = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-21' });
-    const saoPauloToday = await request(app).patch('/api/me').set(auth(token)).send({ birthDate: '2026-11-20' });
+    const utcToday = await request(app).patch('/api/me').set(as(token)).send({ birthDate: '2026-11-21' });
+    const saoPauloToday = await request(app).patch('/api/me').set(as(token)).send({ birthDate: '2026-11-20' });
 
     expect(utcToday.status).toBe(400);
     expect(saoPauloToday.status).toBe(200);
@@ -100,7 +99,7 @@ describe('GET and PATCH /api/me', () => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
 
-    expect((await request(app).patch('/api/me').set(auth(token)).send(body)).status).toBe(400);
+    expect((await request(app).patch('/api/me').set(as(token)).send(body)).status).toBe(400);
   });
 
   it('requires a session', async () => {
@@ -130,7 +129,7 @@ describe('POST /api/me/password', () => {
 
     expect(await service.authenticate(current)).not.toBeNull();
     expect(await service.authenticate(other)).toBeNull();
-    expect((await request(app).get('/api/me').set(auth(current))).body).toMatchObject({
+    expect((await request(app).get('/api/me').set(as(current))).body).toMatchObject({
       passwordChangedAt: START.toISOString(),
     });
     expect((await login(app)).status).toBe(401);
@@ -180,7 +179,7 @@ describe('sessions', () => {
     const token = await registerAndLogin(app);
     await login(app);
 
-    const response = await request(app).get('/api/me/sessions').set(auth(token));
+    const response = await request(app).get('/api/me/sessions').set(as(token));
 
     expect(response.status).toBe(200);
     const sessions = response.body as { current: boolean }[];
@@ -193,7 +192,7 @@ describe('sessions', () => {
     const current = await registerAndLogin(app);
     const other = ((await login(app)).body as { token: string }).token;
 
-    expect((await request(app).delete('/api/me/sessions').set(auth(current))).status).toBe(204);
+    expect((await request(app).delete('/api/me/sessions').set(as(current))).status).toBe(204);
 
     expect(await service.authenticate(current)).toBeNull();
     expect(await service.authenticate(other)).toBeNull();
@@ -204,7 +203,7 @@ describe('sessions', () => {
     const current = await registerAndLogin(app);
     const other = ((await login(app)).body as { token: string }).token;
 
-    expect((await request(app).delete('/api/me/sessions/others').set(auth(current))).status).toBe(204);
+    expect((await request(app).delete('/api/me/sessions/others').set(as(current))).status).toBe(204);
 
     expect(await service.authenticate(current)).not.toBeNull();
     expect(await service.authenticate(other)).toBeNull();
@@ -214,10 +213,10 @@ describe('sessions', () => {
     const { app, auth: service } = await buildUsersApp();
     const current = await registerAndLogin(app);
     const other = ((await login(app)).body as { token: string }).token;
-    const sessions = (await request(app).get('/api/me/sessions').set(auth(current))).body as Session[];
+    const sessions = (await request(app).get('/api/me/sessions').set(as(current))).body as Session[];
     const target = sessions.find((session) => !session.current);
 
-    expect((await request(app).delete(`/api/me/sessions/${target?.id}`).set(auth(current))).status).toBe(204);
+    expect((await request(app).delete(`/api/me/sessions/${target?.id}`).set(as(current))).status).toBe(204);
 
     expect(await service.authenticate(other)).toBeNull();
     expect(await service.authenticate(current)).not.toBeNull();
@@ -226,9 +225,9 @@ describe('sessions', () => {
   it('refuses to end the current session through the single-session route', async () => {
     const { app, auth: service } = await buildUsersApp();
     const current = await registerAndLogin(app);
-    const sessions = (await request(app).get('/api/me/sessions').set(auth(current))).body as Session[];
+    const sessions = (await request(app).get('/api/me/sessions').set(as(current))).body as Session[];
 
-    const response = await request(app).delete(`/api/me/sessions/${sessions[0]?.id}`).set(auth(current));
+    const response = await request(app).delete(`/api/me/sessions/${sessions[0]?.id}`).set(as(current));
 
     expect(response.status).toBe(422);
     expect(response.body).toMatchObject({ code: 'CURRENT_SESSION' });
@@ -239,9 +238,9 @@ describe('sessions', () => {
     const { app, auth: service } = await buildUsersApp();
     const mine = await registerAndLogin(app);
     const theirs = await registerAndLogin(app, {}, { email: 'bruno@email.com' });
-    const [their] = (await request(app).get('/api/me/sessions').set(auth(theirs))).body as Session[];
+    const [their] = (await request(app).get('/api/me/sessions').set(as(theirs))).body as Session[];
 
-    const response = await request(app).delete(`/api/me/sessions/${their?.id}`).set(auth(mine));
+    const response = await request(app).delete(`/api/me/sessions/${their?.id}`).set(as(mine));
 
     expect(response.status).toBe(404);
     expect(await service.authenticate(theirs)).not.toBeNull();
@@ -251,7 +250,7 @@ describe('sessions', () => {
     const { app } = await buildUsersApp();
     const token = await registerAndLogin(app);
 
-    expect((await request(app).delete('/api/me/sessions/abc').set(auth(token))).status).toBe(400);
+    expect((await request(app).delete('/api/me/sessions/abc').set(as(token))).status).toBe(400);
   });
 });
 
@@ -270,7 +269,7 @@ describe('example patient', () => {
 
     const patch = await request(app)
       .patch('/api/me')
-      .set(auth(first))
+      .set(as(first))
       .send({ fullName: 'Outro Nome', birthDate: '1990-01-01' });
     const password = await changePassword(app, first, { currentPassword: EXAMPLE_PATIENT.password });
 
@@ -282,7 +281,7 @@ describe('example patient', () => {
   it('signs out every session like any other account', async () => {
     const { app, auth: service, first, second } = await exampleApp();
 
-    await request(app).delete('/api/me/sessions').set(auth(first)).expect(204);
+    await request(app).delete('/api/me/sessions').set(as(first)).expect(204);
 
     expect(await service.authenticate(first)).toBeNull();
     expect(await service.authenticate(second)).toBeNull();
@@ -291,7 +290,7 @@ describe('example patient', () => {
   it('ends the other sessions like any other account', async () => {
     const { app, auth: service, first, second } = await exampleApp();
 
-    await request(app).delete('/api/me/sessions/others').set(auth(first)).expect(204);
+    await request(app).delete('/api/me/sessions/others').set(as(first)).expect(204);
 
     expect(await service.authenticate(first)).not.toBeNull();
     expect(await service.authenticate(second)).toBeNull();

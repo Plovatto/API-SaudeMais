@@ -3,9 +3,8 @@ import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
-import { as, buildUsersApp, HOUR, login, registration } from './support/users.js';
+import { anyText, as, buildUsersApp, HOUR, login, registration } from './support/users.js';
 
-const anyText = expect.any(String) as unknown;
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 
 async function adminSession(context: Awaited<ReturnType<typeof buildUsersApp>>, credentials = ADMIN) {
@@ -284,7 +283,7 @@ describe('doctor profile', () => {
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
       code: 'REGISTRY_TAKEN',
-      fields: { registryNumber: expect.any(String) as unknown },
+      fields: { registryNumber: anyText },
     });
   });
 

@@ -8,7 +8,7 @@ import { DoctorAgendaRepository } from './doctor-agenda.repository.js';
 import { createDoctorAgendaRouter } from './doctor-agenda.routes.js';
 import { DoctorAgendaService } from './doctor-agenda.service.js';
 
-export interface DoctorAgendaModuleDeps {
+interface DoctorAgendaModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

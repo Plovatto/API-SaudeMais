@@ -9,7 +9,13 @@ export const sessionAuth = registry.registerComponent('securitySchemes', 'sessio
   description: 'Token de sessão obtido no login, enviado como "Authorization: Bearer <token>".',
 });
 
-export const sessionSecurity = { security: [{ [sessionAuth.name]: [] }] };
+export interface OperationSecurity {
+  security: Record<string, string[]>[];
+}
+
+export const publicSecurity: OperationSecurity = { security: [] };
+
+export const sessionSecurity: OperationSecurity = { security: [{ [sessionAuth.name]: [] }] };
 
 const labApiKey = registry.registerComponent('securitySchemes', 'labApiKey', {
   type: 'apiKey',
@@ -18,4 +24,4 @@ const labApiKey = registry.registerComponent('securitySchemes', 'labApiKey', {
   description: 'Chave de API do laboratório, criada pelo administrador e exibida uma única vez.',
 });
 
-export const labKeySecurity = { security: [{ [labApiKey.name]: [] }] };
+export const labKeySecurity: OperationSecurity = { security: [{ [labApiKey.name]: [] }] };

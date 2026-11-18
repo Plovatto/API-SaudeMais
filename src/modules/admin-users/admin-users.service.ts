@@ -1,6 +1,6 @@
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
 import type { Role } from '../../database/schema/users.js';
-import { AppError, conflictError, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
+import { conflictError, notFound, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import type { Actor } from '../../lib/audit.js';
@@ -30,7 +30,6 @@ import type {
 } from './admin-users.model.js';
 import type { AdminUserRepository, LockedUser } from './admin-users.repository.js';
 
-const notFound = (message = userNotFound) => new AppError(404, 'NOT_FOUND', message);
 
 function active(user: LockedUser): LockedUser {
   if (user.deactivatedAt) throw conflictError(adminConflicts.inactive);
@@ -81,7 +80,7 @@ export class AdminUserService {
   }
 
   async detail(id: string): Promise<AdminUserDetail> {
-    return (await this.repository.detail(id)) ?? Promise.reject(notFound());
+    return (await this.repository.detail(id)) ?? Promise.reject(notFound(userNotFound));
   }
 
   async impact(id: string): Promise<DeactivationImpact> {
@@ -225,7 +224,7 @@ export class AdminUserService {
         ),
       { doctor_profiles_registry_key: adminConflicts.registryTaken },
     );
-    if (!applied) throw notFound();
+    if (!applied) throw notFound(userNotFound);
     this.sessions.invalidateUser(id);
     afterCommits.forEach(runAfterCommit);
     return this.detail(id);

@@ -25,7 +25,7 @@ import { hasActiveFuture } from '../bookings/bookings.repository.js';
 import { capacityInUse, inUse, type CatalogEntity, type Conflict } from './catalog.messages.js';
 
 export type { Actor };
-export type ExamTypeStatus = 'missing' | 'inactive' | 'active';
+type ExamTypeStatus = 'missing' | 'inactive' | 'active';
 
 export class InUseError extends Error {
   constructor(readonly conflict: Conflict = inUse) {

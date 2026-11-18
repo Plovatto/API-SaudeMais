@@ -7,7 +7,7 @@ import { bookedBy, rescheduleOn } from '../test/support/bookings.js';
 import { buildTestApp } from '../test/support/build-test-app.js';
 import { seedWithoutSampleBookings } from '../test/support/doctors.js';
 import { fixedClock } from '../test/support/fixed-clock.js';
-import { as, signUp, START } from '../test/support/users.js';
+import { anyText, as, signUp, START } from '../test/support/users.js';
 import { createCleanPool } from './support/pg-test-pool.js';
 
 const TARGET = '2026-11-23T13:00:00.000Z';
@@ -103,7 +103,7 @@ describe('reschedules on PostgreSQL', () => {
       expect(rescheduled.status).toBe(409);
       expect(rescheduled.body).toMatchObject({
         code: 'SLOT_TAKEN',
-        fields: { newStartsAt: expect.any(String) as unknown },
+        fields: { newStartsAt: anyText },
       });
       expect(starts).toEqual(['2026-11-23T11:00:00.000Z', TARGET]);
     }

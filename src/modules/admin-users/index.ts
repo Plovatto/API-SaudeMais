@@ -11,7 +11,7 @@ import { AdminUserRepository } from './admin-users.repository.js';
 import { createAdminUserRouter } from './admin-users.routes.js';
 import { AdminUserService } from './admin-users.service.js';
 
-export interface AdminUsersModuleDeps {
+interface AdminUsersModuleDeps {
   db: Database;
   clock: Clock;
   requireAuth: RequestHandler;

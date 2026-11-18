@@ -17,7 +17,7 @@ import type {
   UnitHour,
 } from './doctor-schedule.model.js';
 
-export interface ReplaceRequest {
+interface ReplaceRequest {
   doctorId: string;
   days: ScheduleDay[];
   appointmentDurationMin?: AppointmentDuration | null | undefined;
@@ -25,7 +25,7 @@ export interface ReplaceRequest {
   check: (hours: UnitHour[]) => void;
 }
 
-export interface BlockRequest {
+interface BlockRequest {
   doctorId: string;
   date: string;
   reason: string | null;
@@ -33,7 +33,7 @@ export interface BlockRequest {
   now: Date;
 }
 
-export interface UnblockRequest {
+interface UnblockRequest {
   doctorId: string;
   date: string;
   actor: Actor;

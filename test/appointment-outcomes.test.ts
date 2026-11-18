@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { agendaHelpers, ids, NO_ACTIONS, RECORDABLE, slot, UNKNOWN_ID, type AgendaPage } from './support/agenda.js';
+import { agendaHelpers, ids, NO_ACTIONS, RECORDABLE, UNKNOWN_ID, type AgendaPage } from './support/agenda.js';
+import { slot } from './support/bookings.js';
 import { createDoctor, setupClinic, type Clinic, type Doctor } from './support/doctors.js';
 import { as, signUp, START } from './support/users.js';
 

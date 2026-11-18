@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
+import { expect } from 'vitest';
 import type { Database } from '@/database/pg-client.js';
 import { loginSchema, registerSchema } from '@/modules/users/user.model.js';
 import type { UserService } from '@/modules/users/user.service.js';
@@ -11,6 +12,8 @@ export const START = new Date('2026-11-20T12:00:00.000Z');
 export const HOUR = 3_600_000;
 
 export const as = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+export const anyText = expect.any(String) as unknown;
 
 export async function buildUsersApp() {
   const db = await createTestDb();

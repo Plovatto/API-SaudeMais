@@ -9,7 +9,7 @@ import {
   type Clinic,
   type Doctor,
 } from './support/doctors.js';
-import { as, login, signUp } from './support/users.js';
+import { anyText, as, login, signUp } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 
@@ -184,7 +184,7 @@ describe('changes blocked by future bookings', () => {
 
     for (const response of refused) {
       expect(response.status).toBe(409);
-      expect(response.body).toMatchObject({ code: 'IN_USE', fields: { isActive: expect.any(String) as unknown } });
+      expect(response.body).toMatchObject({ code: 'IN_USE', fields: { isActive: anyText } });
     }
     const still = await context.db.execute<{ active: boolean }>(
       sql`select is_active as active from specialties where id = ${ana.specialty.id}`,
