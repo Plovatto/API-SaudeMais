@@ -7,6 +7,16 @@ export const currentSession = {
   message: 'Esta é a sessão em uso. Para encerrá-la, saia da conta.',
 };
 
+export const invalidCredentials = { code: 'INVALID_CREDENTIALS', message: 'E-mail ou senha incorretos.' };
+
+export const userInactive = { code: 'USER_INACTIVE', message: 'Esta conta está desativada.' };
+
+export const invalidCurrentPassword = {
+  code: 'INVALID_CURRENT_PASSWORD',
+  field: 'currentPassword',
+  message: 'A senha atual está incorreta.',
+} satisfies FieldConflict;
+
 export const invalidBirthDate = 'Informe uma data de nascimento válida.';
 
 export const birthDateInFuture = { birthDate: 'A data de nascimento não pode ser no futuro.' };

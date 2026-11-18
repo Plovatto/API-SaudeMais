@@ -1,6 +1,6 @@
 import { Router, type Request, type RequestHandler } from 'express';
 import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
-import { errorResponse, notFoundResponse, serverBusyResponse } from '../../docs/common-schemas.js';
+import { errorResponse, fieldErrorExample, notFoundResponse, serverBusyResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { publicSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
@@ -9,7 +9,14 @@ import { MINUTE } from '../../lib/time.js';
 import { authOf, noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import type { UserController } from './user.controller.js';
-import { currentSession, sessionNotFound } from './user.messages.js';
+import {
+  currentSession,
+  emailConflicts,
+  invalidCredentials,
+  invalidCurrentPassword,
+  sessionNotFound,
+  userInactive,
+} from './user.messages.js';
 import { z } from 'zod';
 import {
   changePasswordSchema,
@@ -42,11 +49,7 @@ documentOperation({
   body: registerSchema,
   success: { status: 201, description: 'Conta criada, só com o perfil de paciente.', schema: publicUserSchema },
   errors: {
-    409: errorResponse('E-mail já cadastrado (`EMAIL_TAKEN`).', {
-      message: 'Este e-mail já está cadastrado.',
-      code: 'EMAIL_TAKEN',
-      fields: { email: 'Este e-mail já está cadastrado.' },
-    }),
+    409: errorResponse('E-mail já cadastrado (`EMAIL_TAKEN`).', fieldErrorExample(emailConflicts.users_email_key)),
     503: serverBusyResponse,
   },
 });
@@ -63,14 +66,8 @@ documentOperation({
   body: loginSchema,
   success: { status: 200, description: 'Login feito.', schema: loginResponseSchema },
   errors: {
-    401: errorResponse('E-mail ou senha incorretos (`INVALID_CREDENTIALS`).', {
-      message: 'E-mail ou senha incorretos.',
-      code: 'INVALID_CREDENTIALS',
-    }),
-    403: errorResponse('Conta desativada (`USER_INACTIVE`). Só aparece com a senha correta.', {
-      message: 'Esta conta está desativada.',
-      code: 'USER_INACTIVE',
-    }),
+    401: errorResponse(`E-mail ou senha incorretos (\`${invalidCredentials.code}\`).`, invalidCredentials),
+    403: errorResponse(`Conta desativada (\`${userInactive.code}\`). Só aparece com a senha correta.`, userInactive),
     503: serverBusyResponse,
   },
 });
@@ -119,11 +116,10 @@ documentOperation({
   body: changePasswordSchema,
   success: { status: 204, description: 'Senha trocada.' },
   errors: {
-    422: errorResponse('Senha atual incorreta (`INVALID_CURRENT_PASSWORD`).', {
-      message: 'A senha atual está incorreta.',
-      code: 'INVALID_CURRENT_PASSWORD',
-      fields: { currentPassword: 'A senha atual está incorreta.' },
-    }),
+    422: errorResponse(
+      `Senha atual incorreta (\`${invalidCurrentPassword.code}\`).`,
+      fieldErrorExample(invalidCurrentPassword),
+    ),
     503: serverBusyResponse,
   },
 });

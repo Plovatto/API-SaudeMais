@@ -1,6 +1,10 @@
 import './zod-extend.js';
 import { z } from 'zod';
-import type { FieldConflict } from '../lib/app-error.js';
+import { INVALID_DATA_MESSAGE, type FieldConflict } from '../lib/app-error.js';
+import { FORBIDDEN_MESSAGE, UNAUTHENTICATED_MESSAGE } from '../middleware/auth.js';
+import { INTERNAL_ERROR_MESSAGE } from '../middleware/error-handler.js';
+import { TOO_MANY_REQUESTS_MESSAGE } from '../middleware/rate-limit.js';
+import { SERVER_BUSY_MESSAGE } from '../modules/users/user.password.js';
 import { registry } from './registry.js';
 
 export const errorResponseSchema = registry.register(
@@ -32,6 +36,10 @@ export interface ErrorExample {
   fields?: Record<string, string>;
 }
 
+export function fieldErrorExample({ code, field, message }: FieldConflict): ErrorExample {
+  return { message, code, fields: { [field]: message } };
+}
+
 export function errorResponse(description: string, example: ErrorExample) {
   return {
     description,
@@ -40,37 +48,37 @@ export function errorResponse(description: string, example: ErrorExample) {
 }
 
 export const internalErrorResponse = errorResponse('Erro inesperado no servidor (`INTERNAL_ERROR`).', {
-  message: 'Erro interno do servidor.',
+  message: INTERNAL_ERROR_MESSAGE,
   code: 'INTERNAL_ERROR',
 });
 
 export const validationErrorResponse = errorResponse('Dados inválidos (`VALIDATION_ERROR` ou `INVALID_JSON`).', {
-  message: 'Dados inválidos.',
+  message: INVALID_DATA_MESSAGE,
   code: 'VALIDATION_ERROR',
   fields: { email: 'Informe um e-mail válido.' },
 });
 
 export const unauthenticatedResponse = errorResponse('Sem sessão ou com sessão expirada (`UNAUTHENTICATED`).', {
-  message: 'Sua sessão expirou. Entre novamente.',
+  message: UNAUTHENTICATED_MESSAGE,
   code: 'UNAUTHENTICATED',
 });
 
 export const forbiddenResponse = errorResponse('A conta não tem o perfil exigido (`FORBIDDEN`).', {
-  message: 'Você não tem acesso a esta área.',
+  message: FORBIDDEN_MESSAGE,
   code: 'FORBIDDEN',
 });
 
 export const tooManyRequestsResponse = errorResponse(
   'Limite de tentativas atingido (`TOO_MANY_REQUESTS`). O cabeçalho `RateLimit` diz quando tentar de novo.',
   {
-    message: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.',
+    message: TOO_MANY_REQUESTS_MESSAGE,
     code: 'TOO_MANY_REQUESTS',
   },
 );
 
 export const serverBusyResponse = errorResponse(
   'Servidor ocupado conferindo outras senhas (`SERVER_BUSY`). Tente de novo em instantes.',
-  { message: 'O servidor está ocupado. Tente de novo em instantes.', code: 'SERVER_BUSY' },
+  { message: SERVER_BUSY_MESSAGE, code: 'SERVER_BUSY' },
 );
 
 export function jsonResponse(description: string, schema: z.ZodType) {
@@ -82,13 +90,8 @@ export function jsonBody(schema: z.ZodType) {
 }
 
 export function conflictResponse(...conflicts: [FieldConflict, ...FieldConflict[]]) {
-  const [example] = conflicts;
   const codes = [...new Set(conflicts.map(({ code }) => `\`${code}\``))].join(', ');
-  return errorResponse(`Conflito com o estado atual (${codes}).`, {
-    message: example.message,
-    code: example.code,
-    fields: { [example.field]: example.message },
-  });
+  return errorResponse(`Conflito com o estado atual (${codes}).`, fieldErrorExample(conflicts[0]));
 }
 
 export function notFoundResponse(message: string) {

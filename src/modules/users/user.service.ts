@@ -18,7 +18,15 @@ import type {
   SessionView,
   UpdateProfileInput,
 } from './user.model.js';
-import { birthDateInFuture, currentSession, emailConflicts, sessionNotFound } from './user.messages.js';
+import {
+  birthDateInFuture,
+  currentSession,
+  emailConflicts,
+  invalidCredentials,
+  invalidCurrentPassword,
+  sessionNotFound,
+  userInactive,
+} from './user.messages.js';
 import { hashPassword, placeholderPasswordHash, verifyPassword } from './user.password.js';
 import type { NewUser, UserRepository } from './user.repository.js';
 import type { SessionCache } from './user.session-cache.js';
@@ -89,8 +97,8 @@ export class UserService {
     const now = this.clock.now();
     const candidate = await this.repository.findLoginCandidate(email);
     const valid = await verifyPassword(password, candidate?.passwordHash ?? (await placeholderPasswordHash()));
-    if (!candidate || !valid) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos.');
-    if (candidate.deactivatedAt) throw new AppError(403, 'USER_INACTIVE', 'Esta conta está desativada.');
+    if (!candidate || !valid) throw new AppError(401, invalidCredentials.code, invalidCredentials.message);
+    if (candidate.deactivatedAt) throw new AppError(403, userInactive.code, userInactive.message);
 
     const absoluteExpiresAt = new Date(now.getTime() + this.policy.maxDays * DAY);
     const expiresAt = remember ? absoluteExpiresAt : this.idleExpiry(now, absoluteExpiresAt);
@@ -180,11 +188,7 @@ export class UserService {
     const now = this.clock.now();
     const stored = await this.repository.findPasswordHash(user.id);
     if (!stored || !(await verifyPassword(currentPassword, stored))) {
-      throw unprocessableField({
-        code: 'INVALID_CURRENT_PASSWORD',
-        field: 'currentPassword',
-        message: 'A senha atual está incorreta.',
-      });
+      throw unprocessableField(invalidCurrentPassword);
     }
     await this.repository.replacePassword(user.id, await hashPassword(password), sessionId, now);
     this.sessions.invalidateUser(user.id);

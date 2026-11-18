@@ -3,6 +3,8 @@ import { ZodError } from 'zod';
 import { logger } from '../config/logger.js';
 import { AppError, INVALID_DATA_MESSAGE, type FieldErrors } from '../lib/app-error.js';
 
+export const INTERNAL_ERROR_MESSAGE = 'Erro interno do servidor.';
+
 interface ErrorBody {
   message: string;
   code: string;
@@ -57,7 +59,7 @@ function toResponse(err: unknown): { status: number; body: ErrorBody } {
     return { status: clientError.status, body: { message: 'Requisição inválida.', code: 'BAD_REQUEST' } };
   }
 
-  return { status: 500, body: { message: 'Erro interno do servidor.', code: 'INTERNAL_ERROR' } };
+  return { status: 500, body: { message: INTERNAL_ERROR_MESSAGE, code: 'INTERNAL_ERROR' } };
 }
 
 export function notFoundHandler(_req: Request, _res: Response, next: NextFunction): void {

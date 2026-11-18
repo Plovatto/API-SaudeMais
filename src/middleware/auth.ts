@@ -7,9 +7,13 @@ import type { AuthContext, UserService } from '../modules/users/user.service.js'
 
 const contexts = new WeakMap<Request, AuthContext>();
 
-export const unauthenticated = () => new AppError(401, 'UNAUTHENTICATED', 'Sua sessão expirou. Entre novamente.');
+export const UNAUTHENTICATED_MESSAGE = 'Sua sessão expirou. Entre novamente.';
 
-export const forbidden = () => new AppError(403, 'FORBIDDEN', 'Você não tem acesso a esta área.');
+export const FORBIDDEN_MESSAGE = 'Você não tem acesso a esta área.';
+
+export const unauthenticated = () => new AppError(401, 'UNAUTHENTICATED', UNAUTHENTICATED_MESSAGE);
+
+export const forbidden = () => new AppError(403, 'FORBIDDEN', FORBIDDEN_MESSAGE);
 
 export const noStore: RequestHandler = (_req, res, next) => {
   res.set('Cache-Control', 'no-store');
