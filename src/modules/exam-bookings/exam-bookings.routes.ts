@@ -8,7 +8,7 @@ import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
 import { rateLimitDefaults } from '../../middleware/rate-limit.js';
 import { rescheduleSchema } from '../appointments/appointments.model.js';
-import { ACTIVE_LIMIT, patientConflict, rescheduleConflicts, sameSlotResponse } from '../bookings/bookings.messages.js';
+import { patientConflict, rescheduleConflicts, sameSlotResponse } from '../bookings/bookings.messages.js';
 import { MAX_AVAILABILITY_DAYS } from '../doctors/doctors.model.js';
 import type { ExamBookingsController } from './exam-bookings.controller.js';
 import {
@@ -45,7 +45,7 @@ documentOperation({
   operationId: 'bookExam',
   tag: tags.scheduling.name,
   summary: 'Agendar um exame',
-  description: `Agenda o exame do paciente logado, que já nasce confirmado (\`confirmed\`) e recebe um código público (\`EX-\` e seis letras ou números) para apresentar na unidade. \`startsAt\` precisa ser o início de uma vaga devolvida por \`GET /api/exam-availability\`; o fim vem da duração atual do tipo de exame. O exame ocupa o menor lugar livre da vaga, até a capacidade da oferta. Cada paciente tem no máximo ${ACTIVE_LIMIT} agendamentos ativos futuros, somando consultas e exames. Se o último lugar é disputado ao mesmo tempo, só um paciente consegue; os outros recebem \`NO_CAPACITY\`. Limite: 60 requisições por minuto por IP.`,
+  description: `Agenda o exame do paciente logado, que já nasce confirmado (\`confirmed\`) e recebe um código público (\`EX-\` e seis letras ou números) para apresentar na unidade. \`startsAt\` precisa ser o início de uma vaga devolvida por \`GET /api/exam-availability\`; o fim vem da duração atual do tipo de exame. O exame ocupa o menor lugar livre da vaga, até a capacidade da oferta. Os limites de agendamentos ativos futuros da política valem para todo paciente, sem exceção: no máximo \`maxActiveExams\` exames e \`maxActiveBookings\` agendamentos somando consultas e exames (\`ACTIVE_LIMIT\`). Se o último lugar é disputado ao mesmo tempo, só um paciente consegue; os outros recebem \`NO_CAPACITY\`. Limite: 60 requisições por minuto por IP.`,
   body: bookExamSchema,
   success: { status: 201, description: 'Exame agendado.', schema: examBookingSchema },
   errors: {

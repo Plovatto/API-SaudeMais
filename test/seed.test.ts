@@ -1,8 +1,7 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { ACTIVE_LIMIT } from '@/modules/bookings/bookings.messages.js';
-import { activeFutureCount } from '@/modules/bookings/bookings.repository.js';
+import { activeFutureCounts, activeLimits } from '@/modules/bookings/bookings.repository.js';
 import { EXAMPLE_DOCTOR, EXAMPLE_DOCTOR_PROFILE, EXAMPLE_PATIENT, SAMPLE_BOOKINGS } from '@/modules/seed/seed.data.js';
 import { seedTarget } from '@/modules/seed/seed-guard.js';
 import { as, buildUsersApp, HOUR, login } from './support/users.js';
@@ -209,7 +208,11 @@ describe('example accounts', () => {
       'exam:confirmed',
     ]);
     expect(unread.body).toEqual({ count: results });
-    expect(await activeFutureCount(context.db, user.id, context.clock.now())).toBeLessThan(ACTIVE_LIMIT);
+    const active = await activeFutureCounts(context.db, user.id, context.clock.now());
+    const limits = await activeLimits(context.db);
+    expect(active.appointment + active.exam).toBeLessThan(limits.maxActiveBookings);
+    expect(active.appointment).toBeLessThan(limits.maxActiveAppointments);
+    expect(active.exam).toBeLessThan(limits.maxActiveExams);
 
     context.clock.advance(24 * HOUR);
     await context.modules.seed.service.seed();

@@ -157,7 +157,7 @@ export class AppointmentsService {
     const now = this.clock.now();
     const context = await this.repository.lockDoctor(tx, { doctorId, specialtyId, now });
     if (!context) throw notFound(doctorNotFound);
-    await this.bookings.ensureActiveLimit(tx, patientId, now);
+    await this.bookings.ensureActiveLimit(tx, patientId, 'appointment', now);
     if (context.specialtyId !== specialtyId) throw unprocessableField(appointmentRules.specialtyMismatch);
     const startsAt = new Date(input.startsAt);
     const endsAt = slotEnd(context, startsAt, now);

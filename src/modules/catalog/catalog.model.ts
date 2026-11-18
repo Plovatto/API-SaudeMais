@@ -1,7 +1,7 @@
 import '../../docs/zod-extend.js';
 import { uuidParam } from '../../lib/params.js';
 import { z } from 'zod';
-import { examKinds } from '../../database/schema/catalog.js';
+import { DEFAULT_ACTIVE_LIMIT, examKinds, MAX_ACTIVE_LIMIT } from '../../database/schema/catalog.js';
 import { registry } from '../../docs/registry.js';
 import { paginatedSchema } from '../../lib/pagination.js';
 import { boundedText } from '../../lib/text.js';
@@ -172,6 +172,9 @@ export const examOfferSchema = registry.register(
   }),
 );
 
+const activeLimitField = (description: string) =>
+  z.number().int().min(1).max(MAX_ACTIVE_LIMIT).openapi({ description, example: DEFAULT_ACTIVE_LIMIT });
+
 const policyFields = {
   appointmentLateWindowHours: z.number().int().min(0).max(168).openapi({
     description: 'Antecedência, em horas, abaixo da qual cancelar uma consulta é tardio e reagendar é bloqueado.',
@@ -196,6 +199,11 @@ const policyFields = {
     .min(0)
     .max(10080)
     .openapi({ description: 'Antecedência mínima, em minutos, para agendar.', example: 60 }),
+  maxActiveBookings: activeLimitField(
+    'Agendamentos ativos futuros (pendentes ou confirmados) que cada paciente pode ter ao mesmo tempo, somando consultas e exames.',
+  ),
+  maxActiveAppointments: activeLimitField('Consultas ativas futuras que cada paciente pode ter ao mesmo tempo.'),
+  maxActiveExams: activeLimitField('Exames ativos futuros que cada paciente pode ter ao mesmo tempo.'),
 };
 
 export const policyInputSchema = registry.register('UpdatePolicyRequest', z.strictObject(policyFields));

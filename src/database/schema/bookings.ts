@@ -22,6 +22,7 @@ export const bookingEventTypes = [
 ] as const;
 export const bookingActorTypes = ['patient', 'doctor', 'admin', 'system', 'integration'] as const;
 
+export type BookingKind = (typeof bookingKinds)[number];
 export type BookingStatus = (typeof bookingStatuses)[number];
 export type VisitType = (typeof visitTypes)[number];
 export type CancellerRole = (typeof cancellerRoles)[number];

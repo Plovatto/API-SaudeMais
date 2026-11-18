@@ -18,6 +18,7 @@ API do Saúde+, um sistema de agendamento de consultas e exames para pacientes, 
 - Reserva dupla impedida no próprio banco por exclusion constraints, mesmo com pedidos simultâneos
 - Exames com capacidade por vaga e código público para apresentar na unidade
 - Reagendamento e cancelamento conforme a política, com cancelamento tardio dentro da janela
+- Política de agendamento editável pelo administrador: janelas, reagendamentos, horizonte, antecedência e limites de agendamentos ativos por paciente (total, consultas e exames); os limites de segurança, como login e redefinição de senha, ficam fixos no código
 - Confirmação, conclusão com pressão e peso e registro de falta pelo médico
 - Resultados de exame recebidos de um laboratório por chave de API, em versões imutáveis, com um simulador diário
 - Notificações por perfil e relatórios do administrador
