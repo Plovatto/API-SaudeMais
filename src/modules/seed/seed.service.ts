@@ -9,11 +9,17 @@ import { isWorkday } from '../../lib/week.js';
 import type { DoctorScheduleService } from '../doctor-schedule/doctor-schedule.service.js';
 import { newPublicCode } from '../exam-bookings/exam-bookings.code.js';
 import type { LabIntegrationService } from '../lab-integration/lab-integration.service.js';
+import { hashPassword, verifyPassword } from '../users/user.password.js';
+import type { SessionCache } from '../users/user.session-cache.js';
 import type { SeedAccount, UserService } from '../users/user.service.js';
 import {
   EXAM_TYPES,
   EXAMPLE_DOCTOR,
   EXAMPLE_DOCTOR_PROFILE,
+  EXAMPLE_MULTI,
+  EXAMPLE_MULTI_ID,
+  EXAMPLE_MULTI_PROFILE,
+  EXAMPLE_MULTI_ROLES,
   EXAMPLE_PATIENT,
   OFFERS,
   SAMPLE_BOOKINGS,
@@ -53,6 +59,7 @@ export class SeedService {
     private readonly schedules: DoctorScheduleService,
     private readonly clock: Clock,
     private readonly lab: LabIntegrationService,
+    private readonly sessions: SessionCache,
   ) {}
 
   async seed(): Promise<string[]> {
@@ -80,6 +87,65 @@ export class SeedService {
     const examplePatient = await this.createAccount(EXAMPLE_PATIENT);
     if (examplePatient) await this.addSampleBookings(examplePatient);
     return warnings;
+  }
+
+  async seedMultiProfile(): Promise<string[]> {
+    const warnings: string[] = [];
+    await this.restoreExample(warnings);
+    return warnings;
+  }
+
+  async restoreExample(warnings: string[] = []): Promise<boolean> {
+    const place = await this.doctorPlace(EXAMPLE_MULTI_PROFILE);
+    if (!place) {
+      warnings.push('Example account skipped: its specialty or unit is missing or inactive');
+      return false;
+    }
+    const { specialty, unit } = place;
+    const state = await this.repository.exampleState(EXAMPLE_MULTI_ID);
+    const roles = [...EXAMPLE_MULTI_ROLES].sort();
+    const intact =
+      state !== undefined &&
+      state.fullName === EXAMPLE_MULTI.fullName &&
+      state.email.toLowerCase() === EXAMPLE_MULTI.email &&
+      state.phone === null &&
+      state.birthDate === null &&
+      state.deactivatedAt === null &&
+      state.roles.join() === roles.join() &&
+      state.profile?.specialtyId === specialty.id &&
+      state.profile.unitId === unit.id &&
+      state.profile.registryNumber === EXAMPLE_MULTI_PROFILE.registryNumber &&
+      state.profile.registryUf === EXAMPLE_MULTI_PROFILE.registryUf &&
+      state.profile.appointmentDurationMin === null &&
+      state.preferences === 0 &&
+      (await verifyPassword(EXAMPLE_MULTI.password, state.passwordHash));
+    if (intact) return false;
+    try {
+      await this.repository.restoreExample(
+        {
+          id: EXAMPLE_MULTI_ID,
+          fullName: EXAMPLE_MULTI.fullName,
+          email: EXAMPLE_MULTI.email,
+          passwordHash: await hashPassword(EXAMPLE_MULTI.password),
+          roles,
+          specialtyId: specialty.id,
+          council: specialty.council,
+          unitId: unit.id,
+          registryNumber: EXAMPLE_MULTI_PROFILE.registryNumber,
+          registryUf: EXAMPLE_MULTI_PROFILE.registryUf,
+        },
+        this.clock.now(),
+      );
+    } catch (error) {
+      if (isUniqueViolation(error, 'users_email_key') || isUniqueViolation(error, 'doctor_profiles_registry_key')) {
+        warnings.push('Example account not restored: its e-mail or registry belongs to another account');
+        return false;
+      }
+      throw error;
+    }
+    this.sessions.invalidateUser(EXAMPLE_MULTI_ID);
+    await this.schedules.ensureDefault(EXAMPLE_MULTI_ID);
+    return true;
   }
 
   private async createDoctor(
@@ -215,13 +281,19 @@ export class SeedService {
     return seed ? this.repository.ensureUnit(seed) : Promise.resolve(undefined);
   }
 
-  private async grantProfile(userId: string, email: string, target: DoctorProfileTarget): Promise<string[]> {
+  private async doctorPlace(target: DoctorProfileTarget) {
     const specialtySeed = SPECIALTIES.find((specialty) => specialty.name === target.specialty);
     const specialty = specialtySeed ? await this.repository.ensureSpecialty(specialtySeed) : undefined;
     const unit = await this.unit(target.unit);
-    if (!specialty?.isActive || !unit?.isActive) {
+    return specialty?.isActive && unit?.isActive ? { specialty, unit } : undefined;
+  }
+
+  private async grantProfile(userId: string, email: string, target: DoctorProfileTarget): Promise<string[]> {
+    const place = await this.doctorPlace(target);
+    if (!place) {
       return [`Doctor profile for ${email} skipped: ${target.specialty} or ${target.unit} is missing or inactive`];
     }
+    const { specialty, unit } = place;
     try {
       await this.repository.grantDoctorProfile({
         userId,

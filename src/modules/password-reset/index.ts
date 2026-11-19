@@ -1,6 +1,5 @@
 import type { Database } from '../../database/pg-client.js';
 import type { Clock } from '../../lib/clock.js';
-import { MINUTE } from '../../lib/time.js';
 import type { MailQueue } from '../../mail/index.js';
 import { UserRepository } from '../users/user.repository.js';
 import type { SessionCache } from '../users/user.session-cache.js';
@@ -17,7 +16,7 @@ interface PasswordResetModuleDeps {
 }
 
 export function createPasswordResetModule({ db, clock, mail, appUrl, sessions }: PasswordResetModuleDeps) {
-  const resets = new PasswordResetRepository(db, { perUserPerDay: 3, globalPerDay: 100, minIntervalMs: 15 * MINUTE });
+  const resets = new PasswordResetRepository(db, { perUserPerHour: 5, globalPerDay: 100, minIntervalMs: 30_000 });
   const service = new PasswordResetService(resets, new UserRepository(db), sessions, mail, clock, appUrl);
   return { router: createPasswordResetRouter(service), service };
 }

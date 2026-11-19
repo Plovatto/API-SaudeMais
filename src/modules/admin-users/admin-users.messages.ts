@@ -25,7 +25,7 @@ export const adminConflicts = {
   resetNotSent: {
     code: 'RESET_NOT_SENT',
     field: '_root',
-    message: 'Um link foi enviado há pouco ou o limite do dia foi atingido. Tente mais tarde.',
+    message: 'Um link foi enviado há pouco ou o limite de links foi atingido. Tente mais tarde.',
   },
 } satisfies Record<string, FieldConflict>;
 

@@ -42,41 +42,50 @@ describe('POST /api/password-reset/request', () => {
     expect(context.mailer.sent[0]?.text).toContain('https://app.saudemais.test/redefinir-senha#token=');
   });
 
-  it('answers the same for an unknown e-mail, without sending anything', async () => {
+  it('says there is no account for an unknown e-mail, without sending anything', async () => {
     const context = await withAccount();
 
     const response = await requestReset(context.app, 'ninguem@email.com');
     await context.mail.drain();
 
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(404);
+    expect(response.body).toMatchObject({
+      code: 'ACCOUNT_NOT_FOUND',
+      fields: { email: 'Não encontramos uma conta com este e-mail.' },
+    });
     expect(context.mailer.sent).toHaveLength(0);
   });
 
-  it('waits 15 minutes between links and sends at most 3 per day', async () => {
+  it('waits 30 seconds between links and sends at most 5 per hour', async () => {
     const context = await withAccount();
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await requestReset(context.app).expect(204);
-      context.clock.advance(5 * MINUTE);
-    }
-    await context.mail.drain();
-    expect(context.mailer.sent).toHaveLength(2);
+    const statuses: number[] = [];
+    const ask = async (advanceSeconds: number) => {
+      context.clock.advance(advanceSeconds * 1000);
+      const response = await requestReset(context.app);
+      statuses.push(response.status);
+      if (response.status === 429) expect(response.body).toMatchObject({ code: 'RESET_TOO_SOON' });
+    };
 
-    context.clock.advance(20 * MINUTE);
-    await requestReset(context.app).expect(204);
-    context.clock.advance(20 * MINUTE);
-    await requestReset(context.app).expect(204);
+    await ask(0);
+    await ask(10);
+    for (let attempt = 0; attempt < 4; attempt += 1) await ask(31);
+    await ask(31);
+    context.clock.advance(61 * MINUTE);
+    await ask(0);
     await context.mail.drain();
 
-    expect(context.mailer.sent).toHaveLength(3);
+    expect(statuses).toEqual([204, 429, 204, 204, 204, 204, 429, 204]);
+    expect(context.mailer.sent).toHaveLength(6);
   });
 
-  it('keeps the 15 minutes between links across midnight', async () => {
+  it('keeps the 30 seconds between links across midnight', async () => {
     const context = await withAccount();
-    context.clock.advance(Date.parse('2026-11-21T02:55:00Z') - START.getTime());
+    context.clock.advance(Date.parse('2026-11-21T02:59:50Z') - START.getTime());
 
     await requestReset(context.app).expect(204);
-    context.clock.advance(10 * MINUTE);
-    await requestReset(context.app).expect(204);
+    context.clock.advance(20_000);
+    const refused = await requestReset(context.app).expect(429);
+    expect(refused.body).toMatchObject({ code: 'RESET_TOO_SOON' });
     await context.mail.drain();
 
     expect(context.mailer.sent).toHaveLength(1);
@@ -89,7 +98,7 @@ describe('POST /api/password-reset/request', () => {
       const created = await request(context.app).post('/api/users/register').send(registration({ email }));
       ids.push((created.body as { id: string }).id);
     }
-    const resets = new PasswordResetRepository(context.db, { perUserPerDay: 3, globalPerDay, minIntervalMs: 15 * MINUTE });
+    const resets = new PasswordResetRepository(context.db, { perUserPerHour: 5, globalPerDay, minIntervalMs: 30_000 });
     const now = context.clock.now();
     const token = (index: number) => ({
       requestedBy: null,

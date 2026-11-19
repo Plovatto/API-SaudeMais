@@ -24,6 +24,61 @@ describe('composeMail', () => {
   });
 });
 
+describe('mail layout', () => {
+  const mail = composeMail({
+    to: 'a@email.com',
+    subject: 'Assunto',
+    heading: 'Título <do> e-mail',
+    paragraphs: ['Primeiro parágrafo.', 'Segundo parágrafo.'],
+    link: { href: `${APP}/entrar`, label: 'Entrar agora' },
+    footer: 'Rodapé do aviso.',
+  });
+
+  it('wraps every message in the same branded layout', () => {
+    expect(mail.html).toContain('<!doctype html>');
+    expect(mail.html).toContain('lang="pt-BR"');
+    expect(mail.html).toContain('Saúde+');
+    expect(mail.html).toContain('Sua saúde, seus horários, em um só lugar.');
+    expect(mail.html).toContain('Rodapé do aviso.');
+  });
+
+  it('puts the heading, the paragraphs and the button in order', () => {
+    const order = ['Título &#60;do&#62; e-mail', 'Primeiro parágrafo.', 'Segundo parágrafo.', 'Entrar agora'].map((part) =>
+      mail.html.indexOf(part, mail.html.indexOf('<h1')),
+    );
+    expect(order.every((position) => position > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('shows the brand logo and links the legal pages of the app the link points to', () => {
+    expect(mail.attachments).toHaveLength(1);
+    const logo = mail.attachments?.[0];
+    expect(logo?.filename).toBe('email-logo.png');
+    expect(logo?.content.subarray(0, 8)).toEqual(Buffer.from('89504e470d0a1a0a', 'hex'));
+    expect(mail.html).toContain(`src="cid:${logo?.cid}"`);
+    expect(mail.html).toContain(`href="${APP}/privacidade"`);
+    expect(mail.html).toContain(`href="${APP}/termos"`);
+    expect(mail.html).toContain('Esta é uma mensagem automática.');
+  });
+
+  it('leaves out the legal links when the link has no web address', () => {
+    const plain = composeMail({
+      to: 'a@email.com',
+      subject: 'Assunto',
+      paragraphs: ['Texto.'],
+      link: { href: 'mailto:a@email.com', label: 'Escrever' },
+    });
+
+    expect(plain.html).not.toContain('/privacidade');
+  });
+
+  it('keeps a plain text version with the heading and the link', () => {
+    expect(mail.text).toBe(
+      ['Título <do> e-mail', 'Primeiro parágrafo.', 'Segundo parágrafo.', `Entrar agora: ${APP}/entrar`, 'Rodapé do aviso.'].join('\n\n'),
+    );
+  });
+});
+
 describe('notification topics', () => {
   it('picks the topic from the notice and from who receives it', () => {
     expect(topicOf('appointment_cancelled', 'patient')).toBe('booking_decision');

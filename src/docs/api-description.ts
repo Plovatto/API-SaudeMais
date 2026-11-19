@@ -61,7 +61,9 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`REGISTRY_TAKEN\` | 409 | O registro profissional já pertence a outro médico |
 | \`DOCTOR_PROFILE_EXISTS\` | 409 | A conta já tem perfil médico |
 | \`HAS_FUTURE_APPOINTMENTS\` | 409 | O médico tem consultas futuras que impedem a mudança |
-| \`RESET_NOT_SENT\` | 409 | Um link de redefinição foi enviado há pouco ou o limite do dia foi atingido |
+| \`RESET_NOT_SENT\` | 409 | Um link de redefinição foi enviado há pouco ou o limite de links foi atingido |
+| \`ACCOUNT_NOT_FOUND\` | 404 | Pedido de redefinição de senha para um e-mail sem conta ativa |
+| \`RESET_TOO_SOON\` | 429 | Pedido de redefinição recusado pelos limites: 30 segundos entre links e 5 por hora por conta, ou o teto diário do site |
 | \`TIME_OFF_EXISTS\` | 409 | O médico já bloqueou esse dia |
 | \`SLOT_TAKEN\` | 409 | O horário escolhido acabou de ser ocupado na agenda do médico |
 | \`NO_CAPACITY\` | 409 | Não há mais lugares na vaga de exame escolhida |
@@ -117,12 +119,13 @@ X-Api-Key: slab_<prefixo>_<segredo>
 
 ## Contas de exemplo
 
-O seed (\`npm run db:seed\`) cria uma vez, quando ainda não existem, duas contas de exemplo com agendamentos de exemplo:
+O seed (\`npm run db:seed\`) cria uma vez, quando ainda não existem, as contas de exemplo de paciente e de médico. A conta com os três perfis só é criada quando \`EXAMPLE_ACCOUNT_RESET=true\`:
 
 - Paciente: \`paciente@saudemais.test\`, senha \`paciente-demo-123\`.
 - Médico, que também é paciente e passa pela escolha de perfil: \`medico@saudemais.test\`, senha \`medico-demo-123\`.
+- Paciente, médico e administrador na mesma conta, para testar os três perfis: \`admin@saudemais.com\`, senha \`completo-demo-123\`.
 
-São contas comuns: seguem as mesmas regras e limites de qualquer conta, nunca são restauradas e o administrador pode editá-las, promovê-las ou desativá-las.
+As contas de paciente e de médico são comuns: seguem as mesmas regras e limites de qualquer conta, nunca são restauradas e o administrador pode editá-las, promovê-las ou desativá-las. A conta com os três perfis aceita qualquer alteração, volta ao original uma vez por dia quando \`EXAMPLE_ACCOUNT_RESET=true\` e nunca recebe e-mails.
 
 ## Rotinas automáticas
 

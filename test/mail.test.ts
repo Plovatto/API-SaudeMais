@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { describe, expect, it, vi } from 'vitest';
 import { captureLogger } from './support/capture-logger.js';
 import { ConsoleMailer } from '@/mail/console-mailer.js';
+import { composeMail } from '@/mail/compose.js';
 import { createMailer, MailQueue, type MailMessage } from '@/mail/index.js';
 import { SmtpMailer } from '@/mail/smtp-mailer.js';
 import { MemoryMailer } from './support/memory-mailer.js';
@@ -77,6 +78,26 @@ describe('mail drivers', () => {
     await new SmtpMailer(transporter, 'Saúde+ <saudemais.app@gmail.com>').send(message);
 
     expect(sendMail).toHaveBeenCalledWith({ from: 'Saúde+ <saudemais.app@gmail.com>', ...message });
+  });
+
+  it('includes the logo as an inline image in the generated email', async () => {
+    const transporter = nodemailer.createTransport({ streamTransport: true, buffer: true });
+    const delivery = vi.spyOn(transporter, 'sendMail');
+    const branded = composeMail({
+      to: message.to,
+      subject: message.subject,
+      paragraphs: ['Use o link para redefinir a senha.'],
+      link: { href: 'https://app.saudemais.test/redefinir-senha', label: 'Redefinir minha senha' },
+    });
+
+    await new SmtpMailer(transporter, 'Saúde+ <saudemais.app@gmail.com>').send(branded);
+
+    const { message: raw } = (await delivery.mock.results[0]?.value) as { message: Buffer };
+    const mime = raw.toString();
+    expect(mime).toContain('Content-Type: multipart/related');
+    expect(mime).toContain('Content-Type: image/png; name=email-logo.png');
+    expect(mime).toContain('Content-Disposition: inline; filename=email-logo.png');
+    expect(mime).toContain(`Content-ID: <${branded.attachments?.[0]?.cid}>`);
   });
 
   it('writes the message to the log in development', async () => {

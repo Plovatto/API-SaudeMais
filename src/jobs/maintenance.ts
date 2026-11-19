@@ -25,6 +25,7 @@ interface MaintenanceDeps {
   bookings: BookingsService;
   notifications: NotificationsService;
   reminders: Pick<EmailNotifier, 'remindUpcoming'>;
+  resetExample?: () => Promise<boolean>;
 }
 
 type LockRow = { acquired: boolean };
@@ -35,7 +36,22 @@ export function createMaintenance({
   bookings,
   notifications: notificationsService,
   reminders,
+  resetExample,
 }: MaintenanceDeps) {
+  let lastExampleReset = 0;
+  const restoreExample = async () => {
+    const now = clock.now().getTime();
+    if (!resetExample || (lastExampleReset > 0 && now - lastExampleReset < DAY)) return false;
+    try {
+      const restored = await resetExample();
+      lastExampleReset = now;
+      return restored;
+    } catch (err) {
+      logger.error({ err }, 'Example account reset failed');
+      return false;
+    }
+  };
+
   const purge = async () => {
     const { purged, recipients } = await db.transaction(async (tx) => {
       const now = clock.now();
@@ -77,6 +93,7 @@ export function createMaintenance({
     appointmentsCompleted: await bookings.completeStaleAppointments(),
     remindersSent: await reminders.remindUpcoming(),
     purged: await purge(),
+    exampleRestored: await restoreExample(),
   });
 
   const runExclusive = () =>

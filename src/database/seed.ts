@@ -22,6 +22,9 @@ try {
   await runMigrations(pool);
   const { seed } = createModulesFromEnv(env, createDb(pool), new MailQueue(new ConsoleMailer(logger), logger));
   for (const warning of await seed.service.seed()) logger.warn(warning);
+  if (env.EXAMPLE_ACCOUNT_RESET) {
+    for (const warning of await seed.service.seedMultiProfile()) logger.warn(warning);
+  }
   logger.info('Sample data ensured');
 } catch (err) {
   logger.fatal({ err }, 'Seeding failed');

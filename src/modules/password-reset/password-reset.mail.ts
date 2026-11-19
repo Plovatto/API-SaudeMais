@@ -5,6 +5,7 @@ export function resetEmail(to: string, link: string, minutes: number): MailMessa
   return composeMail({
     to,
     subject: 'Redefinição de senha do Saúde+',
+    heading: 'Redefina sua senha',
     paragraphs: [
       'Recebemos um pedido para redefinir a senha da sua conta no Saúde+.',
       `Abra o link abaixo em até ${minutes} minutos para criar uma nova senha.`,
@@ -18,6 +19,7 @@ export function welcomeEmail(to: string, link: string, hours: number): MailMessa
   return composeMail({
     to,
     subject: 'Sua conta no Saúde+ foi criada',
+    heading: 'Sua conta está pronta',
     paragraphs: [
       'Sua conta no Saúde+ foi criada pela equipe da clínica com este e-mail.',
       `Abra o link abaixo em até ${hours} horas para criar sua senha e entrar.`,

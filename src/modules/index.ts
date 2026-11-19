@@ -1,4 +1,5 @@
 import type { Env } from '../config/env.js';
+import { logger } from '../config/logger.js';
 import type { Database } from '../database/pg-client.js';
 import { createMaintenance } from '../jobs/maintenance.js';
 import { systemClock, type Clock } from '../lib/clock.js';
@@ -29,6 +30,7 @@ export interface ModulesDeps {
   policy: SessionPolicy;
   mail: MailQueue;
   appUrl: string;
+  resetExample?: boolean;
 }
 
 export function createModules(deps: ModulesDeps) {
@@ -64,6 +66,7 @@ export function createModules(deps: ModulesDeps) {
     schedules: doctorSchedule.service,
     clock: deps.clock,
     lab: labIntegration.service,
+    sessions,
   });
   const doctors = createDoctorsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const appointments = createAppointmentsModule({
@@ -100,6 +103,14 @@ export function createModules(deps: ModulesDeps) {
     bookings: bookings.service,
     notifications: notifications.service,
     reminders: email.notifier,
+    ...(deps.resetExample && {
+      resetExample: async () => {
+        const warnings: string[] = [];
+        const restored = await seed.service.restoreExample(warnings);
+        for (const warning of warnings) logger.warn(warning);
+        return restored;
+      },
+    }),
   });
   return {
     users,
@@ -136,7 +147,7 @@ export function createModules(deps: ModulesDeps) {
 }
 
 export function createModulesFromEnv(
-  config: Pick<Env, 'APP_PUBLIC_URL' | 'SESSION_TTL_HOURS' | 'SESSION_REMEMBER_DAYS'>,
+  config: Pick<Env, 'APP_PUBLIC_URL' | 'SESSION_TTL_HOURS' | 'SESSION_REMEMBER_DAYS' | 'EXAMPLE_ACCOUNT_RESET'>,
   db: Database,
   mail: MailQueue,
 ) {
@@ -145,6 +156,7 @@ export function createModulesFromEnv(
     mail,
     clock: systemClock,
     appUrl: config.APP_PUBLIC_URL,
+    resetExample: config.EXAMPLE_ACCOUNT_RESET,
     policy: { idleHours: config.SESSION_TTL_HOURS, maxDays: config.SESSION_REMEMBER_DAYS, maxSessionsPerUser: 10 },
   });
 }

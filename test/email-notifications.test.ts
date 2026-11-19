@@ -152,7 +152,7 @@ describe('notification e-mails', () => {
 
     await vi.waitFor(() => expect(sentTo(PATIENT_EMAIL)).toHaveLength(1));
     expect(sentTo(PATIENT_EMAIL)[0]?.subject).toBe('Pedido de consulta não confirmado · Saúde+');
-    expect(sentTo(PATIENT_EMAIL)[0]?.html).toContain('<a href="https://app.saudemais.test/paciente/consultas/nova">');
+    expect(sentTo(PATIENT_EMAIL)[0]?.html).toContain('href="https://app.saudemais.test/paciente/consultas/nova"');
     expect(sentTo(other)).toEqual([]);
   });
 });

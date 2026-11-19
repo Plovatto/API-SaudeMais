@@ -3,12 +3,13 @@ import type { Database } from '../../database/pg-client.js';
 import { passwordResetTokens, type ResetTokenPurpose } from '../../database/schema/password-reset-tokens.js';
 import { users } from '../../database/schema/users.js';
 import { recordAudit, type AuditEntry } from '../../lib/audit.js';
+import { HOUR } from '../../lib/time.js';
 import { applyNewPassword } from '../users/user.repository.js';
 
 const LOCK_NAMESPACE = 727_002;
 
 interface ResetLimits {
-  perUserPerDay: number;
+  perUserPerHour: number;
   globalPerDay: number;
   minIntervalMs: number;
 }
@@ -35,11 +36,12 @@ export class PasswordResetRepository {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_NAMESPACE}, 0)`);
       const recentSince = new Date(now.getTime() - this.limits.minIntervalMs);
-      const since = recentSince < dayStart ? recentSince : dayStart;
+      const hourSince = new Date(now.getTime() - HOUR);
+      const since = new Date(Math.min(recentSince.getTime(), dayStart.getTime(), hourSince.getTime()));
       const [today] = await tx
         .select({
           total: sql<number>`count(*) filter (where ${passwordResetTokens.purpose} = 'reset' and ${passwordResetTokens.requestedBy} is null and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
-          forUser: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
+          forUser: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} >= ${hourSince})::int`,
           recent: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} > ${recentSince})::int`,
         })
         .from(passwordResetTokens)
@@ -47,7 +49,7 @@ export class PasswordResetRepository {
       if (
         !today ||
         (requestedBy === null && today.total >= this.limits.globalPerDay) ||
-        today.forUser >= this.limits.perUserPerDay ||
+        today.forUser >= this.limits.perUserPerHour ||
         today.recent > 0
       ) {
         return false;
