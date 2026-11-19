@@ -1,11 +1,13 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull, notInArray } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { bookingEvents, bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { doctorTimeOff } from '../../database/schema/doctor-schedule.js';
 import { integrationClients } from '../../database/schema/integration-clients.js';
-import { userRoles, users } from '../../database/schema/users.js';
+import { emailPreferences } from '../../database/schema/email-preferences.js';
+import { sessions } from '../../database/schema/sessions.js';
+import { userRoles, users, type Role } from '../../database/schema/users.js';
 import type { HealthMetricsInput } from '../appointments/appointments.model.js';
 import { insertMetrics } from '../appointments/appointments.repository.js';
 import { freeLanes, lanesInUse } from '../exam-bookings/exam-bookings.repository.js';
@@ -29,6 +31,19 @@ interface DoctorProfileSeed {
   registryNumber: string;
   registryUf: string;
   now: Date;
+}
+
+export interface ExampleAccountSpec {
+  id: string;
+  fullName: string;
+  email: string;
+  passwordHash: string;
+  roles: readonly Role[];
+  specialtyId: string;
+  council: string;
+  unitId: string;
+  registryNumber: string;
+  registryUf: string;
 }
 
 export interface SampleBooking {
@@ -72,6 +87,75 @@ export class SeedRepository {
 
   async ensureOffer(unitId: string, examTypeId: string, capacityPerSlot: number): Promise<void> {
     await this.db.insert(unitExamOffers).values({ unitId, examTypeId, capacityPerSlot }).onConflictDoNothing();
+  }
+
+  async exampleState(id: string) {
+    const [user] = await this.db
+      .select({
+        fullName: users.fullName,
+        email: users.email,
+        phone: users.phone,
+        birthDate: users.birthDate,
+        passwordHash: users.passwordHash,
+        deactivatedAt: users.deactivatedAt,
+      })
+      .from(users)
+      .where(eq(users.id, id));
+    if (!user) return undefined;
+    const roleRows = await this.db.select({ role: userRoles.role }).from(userRoles).where(eq(userRoles.userId, id));
+    const [profile] = await this.db
+      .select({
+        specialtyId: doctorProfiles.specialtyId,
+        unitId: doctorProfiles.unitId,
+        registryNumber: doctorProfiles.registryNumber,
+        registryUf: doctorProfiles.registryUf,
+        appointmentDurationMin: doctorProfiles.appointmentDurationMin,
+      })
+      .from(doctorProfiles)
+      .where(eq(doctorProfiles.userId, id));
+    const [preferences] = await this.db
+      .select({ total: count() })
+      .from(emailPreferences)
+      .where(eq(emailPreferences.userId, id));
+    return { ...user, roles: roleRows.map(({ role }) => role).sort(), profile, preferences: preferences?.total ?? 0 };
+  }
+
+  restoreExample(spec: ExampleAccountSpec, now: Date): Promise<void> {
+    return this.db.transaction(async (tx) => {
+      const account = {
+        fullName: spec.fullName,
+        email: spec.email,
+        phone: null,
+        birthDate: null,
+        passwordHash: spec.passwordHash,
+        passwordChangedAt: null,
+        deactivatedAt: null,
+        updatedAt: now,
+      };
+      await tx
+        .insert(users)
+        .values({ id: spec.id, ...account })
+        .onConflictDoUpdate({ target: users.id, set: account });
+      await tx.delete(userRoles).where(and(eq(userRoles.userId, spec.id), notInArray(userRoles.role, [...spec.roles])));
+      await tx
+        .insert(userRoles)
+        .values(spec.roles.map((role) => ({ userId: spec.id, role, grantedAt: now })))
+        .onConflictDoNothing();
+      const profile = {
+        specialtyId: spec.specialtyId,
+        council: spec.council,
+        unitId: spec.unitId,
+        registryNumber: spec.registryNumber,
+        registryUf: spec.registryUf,
+        appointmentDurationMin: null,
+      };
+      await tx
+        .insert(doctorProfiles)
+        .values({ userId: spec.id, ...profile })
+        .onConflictDoUpdate({ target: doctorProfiles.userId, set: profile });
+      await tx.delete(sessions).where(eq(sessions.userId, spec.id));
+      await tx.delete(emailPreferences).where(eq(emailPreferences.userId, spec.id));
+    });
   }
 
   async userIdByEmail(email: string): Promise<string | undefined> {

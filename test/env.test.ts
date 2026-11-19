@@ -18,6 +18,8 @@ describe('parseEnv', () => {
   it('runs the maintenance scheduler by default only in production', () => {
     expect(parseEnv({ ...dev, MAINTENANCE_SCHEDULER: 'true' }).MAINTENANCE_SCHEDULER).toBe(true);
     expect(() => parseEnv({ ...dev, MAINTENANCE_SCHEDULER: 'yes' })).toThrow(/MAINTENANCE_SCHEDULER/);
+    expect(parseEnv({ ...dev, EXAMPLE_ACCOUNT_RESET: 'true' }).EXAMPLE_ACCOUNT_RESET).toBe(true);
+    expect(parseEnv(dev).EXAMPLE_ACCOUNT_RESET).toBe(false);
   });
 
   it('applies defaults for local development', () => {
@@ -32,6 +34,7 @@ describe('parseEnv', () => {
       SESSION_REMEMBER_DAYS: 7,
       APP_PUBLIC_URL: 'http://localhost:5173',
       MAINTENANCE_SCHEDULER: false,
+      EXAMPLE_ACCOUNT_RESET: false,
       MAIL_DRIVER: 'console',
       SMTP_HOST: 'smtp.gmail.com',
       SMTP_PORT: 465,
@@ -81,6 +84,7 @@ describe('parseEnv', () => {
       SESSION_REMEMBER_DAYS: 7,
       APP_PUBLIC_URL: 'https://plovatto.github.io/SaudeMais',
       MAINTENANCE_SCHEDULER: true,
+      EXAMPLE_ACCOUNT_RESET: false,
       SMTP_HOST: 'smtp.gmail.com',
       SMTP_PORT: 465,
       MAIL_DRIVER: 'smtp',

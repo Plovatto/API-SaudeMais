@@ -1,15 +1,17 @@
-import { and, eq, gt, inArray, isNull, lte, not, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lte, ne, not, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Database } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { units } from '../../database/schema/catalog.js';
 import { emailPreferences, type EmailTopic } from '../../database/schema/email-preferences.js';
 import { users } from '../../database/schema/users.js';
+import { EXAMPLE_ACCOUNT_ID } from '../../lib/example-account.js';
 
 const doctorUsers = alias(users, 'doctor_users');
 
 const wantsEmail = (topic: EmailTopic) => and(
   isNull(users.deactivatedAt),
+  ne(users.id, EXAMPLE_ACCOUNT_ID),
   sql`not exists (select 1 from ${emailPreferences} where ${emailPreferences.userId} = ${users.id} and ${emailPreferences.topic} = ${topic} and not ${emailPreferences.enabled})`,
 );
 

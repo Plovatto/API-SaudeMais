@@ -1,5 +1,7 @@
 import type { BookingStatus, VisitType } from '../../database/schema/bookings.js';
 import type { ExamKind } from '../../database/schema/catalog.js';
+import type { Role } from '../../database/schema/users.js';
+import { EXAMPLE_ACCOUNT_ID } from '../../lib/example-account.js';
 import { WORKDAYS } from '../../lib/week.js';
 import type { HealthMetricsInput } from '../appointments/appointments.model.js';
 import type { ResultInput } from '../lab-integration/lab-integration.model.js';
@@ -113,6 +115,24 @@ export const EXAMPLE_DOCTOR_PROFILE: DoctorProfileTarget = {
   specialty: 'Clínica Geral',
   unit: 'Unidade Central',
   registryNumber: '999999',
+  registryUf: 'SP',
+};
+
+export const EXAMPLE_MULTI_ID = EXAMPLE_ACCOUNT_ID;
+
+export const EXAMPLE_MULTI_ROLES: readonly Role[] = ['admin', 'doctor', 'patient'];
+
+export const EXAMPLE_MULTI: SeedAccount = {
+  fullName: 'Admin Saúde+',
+  email: 'admin@saudemais.com',
+  password: 'completo-demo-123',
+  roles: [...EXAMPLE_MULTI_ROLES],
+};
+
+export const EXAMPLE_MULTI_PROFILE: DoctorProfileTarget = {
+  specialty: 'Clínica Geral',
+  unit: 'Unidade Sul',
+  registryNumber: '888888',
   registryUf: 'SP',
 };
 
