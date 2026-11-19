@@ -29,7 +29,7 @@ export class SmtpMailer implements Mailer {
     private readonly from: string,
   ) {}
 
-  async send({ to, subject, html, text }: MailMessage): Promise<void> {
-    await this.transporter.sendMail({ from: this.from, to, subject, html, text });
+  async send(message: MailMessage): Promise<void> {
+    await this.transporter.sendMail({ ...message, from: this.from });
   }
 }

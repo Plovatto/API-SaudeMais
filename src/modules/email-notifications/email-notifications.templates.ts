@@ -101,6 +101,7 @@ export function noticeEmail(
   return composeMail({
     to: recipient.email,
     subject: `${notice.subject} · Saúde+`,
+    heading: notice.subject,
     paragraphs: [`Olá, ${firstName(recipient.fullName)}.`, notice.body(params, role)],
     link: { href: `${appUrl}${notice.path(bookingId, role)}`, label: notice.label },
     footer: footerFor(appUrl, role),
@@ -112,6 +113,7 @@ export function reminderEmail(reminder: Reminder, appUrl: string): MailMessage {
   return composeMail({
     to: reminder.email,
     subject: `Lembrete do seu ${reminder.kind === 'exam' ? 'exame' : 'agendamento'} · Saúde+`,
+    heading: `Lembrete do seu ${reminder.kind === 'exam' ? 'exame' : 'agendamento'}`,
     paragraphs: [
       `Olá, ${firstName(reminder.fullName)}.`,
       `Lembrete: ${what} é ${longDate.format(reminder.startsAt)}, na ${reminder.unitName} (${reminder.unitAddress}).`,
