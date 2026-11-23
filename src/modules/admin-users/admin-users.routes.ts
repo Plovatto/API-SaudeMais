@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from 'express';
 import {
   conflictResponse,
   errorResponse,
+  exampleRestrictedResponse,
   forbiddenResponse,
   notFoundResponse,
   serverBusyResponse,
@@ -47,14 +48,15 @@ interface Operation extends Omit<OperationDoc, 'tag' | 'errors'> {
   conflict?: ReturnType<typeof conflictResponse>;
   unprocessable?: FieldConflict;
   busy?: boolean;
+  restricted?: boolean;
 }
 
-function document({ notFound, conflict, unprocessable, busy, ...operation }: Operation) {
+function document({ notFound, conflict, unprocessable, busy, restricted, ...operation }: Operation) {
   documentOperation({
     ...operation,
     tag: tags.administration.name,
     errors: {
-      403: forbiddenResponse,
+      403: restricted ? exampleRestrictedResponse : forbiddenResponse,
       ...(operation.params && { 404: notFound ? notFoundResponse(notFound) : userMissing }),
       ...(conflict && { 409: conflict }),
       ...(unprocessable && { 422: unavailableResponse(unprocessable) }),
@@ -85,6 +87,7 @@ document({
   conflict: conflictResponse(emailConflicts.users_email_key, inDoctorProfile(adminConflicts.registryTaken)),
   unprocessable: inDoctorProfile(unavailable.specialty),
   busy: true,
+  restricted: true,
   success: { status: 201, description: 'Usuário cadastrado.', ...detail },
 });
 document({
@@ -124,6 +127,7 @@ document({
     'Bloqueia o login e encerra todas as sessões; cancela os agendamentos ativos futuros da pessoa, como paciente e como médico, e avisa a outra parte (`appointment_cancelled`). Não é possível desativar a própria conta nem o último administrador. Repetir não tem efeito.',
   params: idParams,
   conflict: conflictResponse(adminConflicts.selfOrLastAdmin),
+  restricted: true,
   success: { status: 200, description: 'Conta desativada.', ...detail },
 });
 document({
@@ -154,6 +158,7 @@ document({
   description: 'Concede o perfil de administrador. Para médicos, use o perfil médico. Repetir não tem efeito.',
   params: roleParams,
   conflict: conflictResponse(adminConflicts.inactive),
+  restricted: true,
   success: { status: 200, description: 'Perfil concedido.', ...detail },
 });
 document({
@@ -164,6 +169,7 @@ document({
   description: 'Não é possível tirar o perfil da própria conta nem do último administrador ativo.',
   params: roleParams,
   conflict: conflictResponse(adminConflicts.selfOrLastAdmin),
+  restricted: true,
   success: { status: 200, description: 'Perfil removido.', ...detail },
 });
 document({

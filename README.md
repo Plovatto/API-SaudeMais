@@ -123,7 +123,7 @@ LAB_API_KEY=
 
 `ADMIN_EMAIL` e `ADMIN_PASSWORD` criam o primeiro administrador ao iniciar (senha com 12 ou mais caracteres).
 
-`EXAMPLE_ACCOUNT_RESET` (padrão `false`; use `true` só em um ambiente de exemplo, sem dados reais, porque cria pelo seed e mantém uma conta de administrador com senha pública) restaura uma vez por dia a conta de exemplo `admin@saudemais.com`: nome, e-mail, telefone, data de nascimento, senha, perfis (paciente, médico e administrador), dados de médico e preferências de e-mail voltam ao original, e a conta é reativada. As sessões só são encerradas quando algo havia mudado. Os agendamentos feitos pelos visitantes e o que eles alteram em outras contas ou nas configurações não são desfeitos. A conta nunca recebe e-mails.
+`EXAMPLE_ACCOUNT_RESET` (padrão `false`; use `true` só em um ambiente de exemplo, sem dados reais, porque cria pelo seed e mantém uma conta de administrador com senha pública) restaura uma vez por dia a conta de exemplo `admin@saudemais.com`: nome, e-mail, telefone, data de nascimento, senha, perfis (paciente, médico e administrador), dados de médico e preferências de e-mail voltam ao original, e a conta é reativada. As sessões só são encerradas quando algo havia mudado. Os agendamentos feitos pelos visitantes e o que eles alteram em outras contas ou nas configurações não são desfeitos. Por isso, essa conta não dá nem tira o perfil de administrador, não cadastra nem desativa administradores e não cria integrações de laboratório. A conta nunca recebe e-mails.
 
 `MAIL_DRIVER=console` escreve os e-mails no log; em produção, use `smtp` com `SMTP_USER`, `SMTP_PASS` e `MAIL_FROM`.
 

@@ -3,6 +3,7 @@ import type { Role } from '../../database/schema/users.js';
 import { conflictError, notFound, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
+import { refuseExampleEscalation } from '../../lib/example-account.js';
 import type { Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { forbidden } from '../../middleware/auth.js';
@@ -56,6 +57,7 @@ export class AdminUserService {
     actor: Actor,
     { fullName, email, phone, role, doctorProfile }: CreateUserInput,
   ): Promise<AdminUserDetail> {
+    if (role === 'admin') refuseExampleEscalation(actor.actorId);
     const passwordHash = await unusablePasswordHash();
     const roles = [...new Set<Role>(['patient', role])];
     const user = await withConstraintConflicts(
@@ -104,6 +106,7 @@ export class AdminUserService {
       async (tx, user, defer) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
         if (user.deactivatedAt) return undefined;
+        if (user.roles.includes('admin')) refuseExampleEscalation(actor.actorId);
         await this.ensureAnotherAdmin(tx, user);
         defer(await this.cancelBookings(tx, user, ['patient', 'doctor'], actor));
         await this.repository.setDeactivated(tx, id, this.clock.now());
@@ -131,6 +134,7 @@ export class AdminUserService {
   }
 
   grantAdmin(actor: Actor, id: string) {
+    refuseExampleEscalation(actor.actorId);
     return this.change(actor, id, 'user.role_granted', async (tx, user) => {
       active(user);
       if (user.roles.includes('admin')) return undefined;
@@ -147,6 +151,7 @@ export class AdminUserService {
       async (tx, user) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
         if (!user.roles.includes('admin')) return undefined;
+        refuseExampleEscalation(actor.actorId);
         await this.ensureAnotherAdmin(tx, user);
         await this.repository.revokeRole(tx, id, 'admin');
         return { role: 'admin' };

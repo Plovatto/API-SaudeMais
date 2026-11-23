@@ -1,5 +1,11 @@
 import { Router, type RequestHandler } from 'express';
-import { conflictResponse, errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
+import {
+  conflictResponse,
+  errorResponse,
+  exampleRestrictedResponse,
+  forbiddenResponse,
+  notFoundResponse,
+} from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { labKeySecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
@@ -62,7 +68,7 @@ documentOperation({
     'Cria um cliente de integração e gera a chave de API (`slab_`, 8 letras ou números do prefixo, `_` e 43 caracteres do segredo de 32 bytes). A chave completa aparece só nesta resposta: a API guarda apenas o hash SHA-256. A criação fica na auditoria. Limite: 120 requisições por minuto por IP.',
   body: createClientSchema,
   success: { status: 201, description: 'Integração criada, com a chave.', schema: createdClientSchema },
-  errors: { 403: forbiddenResponse, 409: conflictResponse(clientConflicts.integration_clients_name_key) },
+  errors: { 403: exampleRestrictedResponse, 409: conflictResponse(clientConflicts.integration_clients_name_key) },
 });
 
 documentOperation({
