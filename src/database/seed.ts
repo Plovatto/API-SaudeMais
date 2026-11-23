@@ -9,7 +9,7 @@ import { createDb, createPool } from './pg-client.js';
 
 let host: string;
 try {
-  host = seedTarget(env.NODE_ENV, env.DATABASE_URL, process.env.SEED_ALLOW_PRODUCTION);
+  host = seedTarget(env.NODE_ENV, env.DATABASE_URL, process.env.SEED_ALLOW_PRODUCTION, process.env.SEED_ALLOW_REMOTE);
 } catch (err) {
   logger.fatal({ err }, 'Seeding refused');
   process.exit(1);
