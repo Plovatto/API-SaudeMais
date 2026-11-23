@@ -153,4 +153,17 @@ describe('POST /api/users/login', () => {
     expect(stranger.status).toBe(429);
     expect(owner.status).toBe(200);
   }, 60_000);
+
+  it('counts only live sessions as a known address', async () => {
+    const context = await withAccount();
+    const credentials = { email: 'ana.silva@email.com', password: 'senha-segura-123', remember: false };
+    await context.auth.login(credentials, { ip: '198.51.100.1', userAgent: null });
+
+    const live = await context.auth.knownDevice('ana.silva@email.com', '198.51.100.1');
+    const other = await context.auth.knownDevice('ana.silva@email.com', '198.51.100.2');
+    context.clock.advance(12 * HOUR + 1);
+    const expired = await context.auth.knownDevice('ana.silva@email.com', '198.51.100.1');
+
+    expect([live, other, expired]).toEqual([true, false, false]);
+  });
 });
