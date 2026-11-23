@@ -70,7 +70,7 @@ export function createMaintenance({
           resetTokens: await deleted(
             tx
               .delete(passwordResetTokens)
-              .where(lt(passwordResetTokens.createdAt, before(RETENTION.resetTokens)))
+              .where(lt(passwordResetTokens.expiresAt, before(RETENTION.resetTokens)))
               .returning({ id: passwordResetTokens.id }),
           ),
           notifications: oldNotifications.length,

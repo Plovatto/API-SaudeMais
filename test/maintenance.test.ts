@@ -159,20 +159,18 @@ describe('maintenance', () => {
     });
   });
 
-  it('purges expired sessions and old reset tokens, notifications and audit logs', async () => {
+  it('purges expired sessions, reset tokens 48 hours after they expire, and old notifications and audit logs', async () => {
     const patientId = await userId(registration().email);
     context.clock.advance(12 * HOUR - 1);
-    const token = (suffix: string, age: number) => {
-      const createdAt = later(-age);
-      return {
-        userId: patientId,
-        tokenHash: suffix.padStart(64, '0'),
-        createdAt,
-        expiresAt: new Date(createdAt.getTime() + HOUR),
-        revokedAt: createdAt,
-      };
+    const token = (suffix: string, sinceExpiry: number, lifetime = HOUR) => {
+      const expiresAt = later(-sinceExpiry);
+      const createdAt = new Date(expiresAt.getTime() - lifetime);
+      return { userId: patientId, tokenHash: suffix.padStart(64, '0'), createdAt, expiresAt, revokedAt: createdAt };
     };
-    await context.db.insert(passwordResetTokens).values([token('1', 48 * HOUR + 1), token('2', 48 * HOUR)]);
+    const welcome = { ...token('3', -12 * HOUR, 72 * HOUR), revokedAt: null };
+    await context.db
+      .insert(passwordResetTokens)
+      .values([token('1', 48 * HOUR + 1), token('2', 48 * HOUR), welcome]);
     await context.db.insert(notifications).values(
       [90 * DAY + 1, 90 * DAY].map((age) => ({
         userId: patientId,
@@ -193,5 +191,6 @@ describe('maintenance', () => {
     context.clock.advance(1);
     expect((await run()).purged).toEqual({ sessions: 2, resetTokens: 1, notifications: 1, auditLogs: 1 });
     expect((await run()).purged).toEqual(NOTHING_PURGED);
+    expect(await context.db.select({ id: passwordResetTokens.id }).from(passwordResetTokens)).toHaveLength(1);
   });
 });

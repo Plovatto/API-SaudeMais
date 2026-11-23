@@ -56,6 +56,13 @@ export class EmailNotificationsRepository {
       .where(and(inArray(users.id, userIds), wantsEmail(topic)));
   }
 
+  async releaseReminders(bookingIds: string[], claimedAt: Date): Promise<void> {
+    await this.db
+      .update(bookings)
+      .set({ remindedAt: null })
+      .where(and(inArray(bookings.id, bookingIds), eq(bookings.remindedAt, claimedAt)));
+  }
+
   claimReminders(now: Date, until: Date): Promise<Reminder[]> {
     return this.db.transaction(async (tx) => {
       const due = await tx
