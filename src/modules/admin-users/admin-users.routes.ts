@@ -129,6 +129,7 @@ document({
     'Bloqueia o login e encerra todas as sessões; cancela os agendamentos ativos futuros da pessoa, como paciente e como médico, e avisa a outra parte (`appointment_cancelled`). Não é possível desativar a própria conta nem o último administrador. Repetir não tem efeito.',
   params: idParams,
   conflict: conflictResponse(adminConflicts.selfOrLastAdmin),
+  restricted: true,
   success: { status: 200, description: 'Conta desativada.', ...detail },
 });
 document({
@@ -170,6 +171,7 @@ document({
   description: 'Não é possível tirar o perfil da própria conta nem do último administrador ativo.',
   params: roleParams,
   conflict: conflictResponse(adminConflicts.selfOrLastAdmin),
+  restricted: true,
   success: { status: 200, description: 'Perfil removido.', ...detail },
 });
 document({

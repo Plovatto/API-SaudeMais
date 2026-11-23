@@ -7,7 +7,7 @@ import type { NotificationsService } from '@/modules/notifications/notifications
 import { EXAMPLE_MULTI, EXAMPLE_MULTI_ID } from '@/modules/seed/seed.data.js';
 import { createTestDb } from './support/create-test-db.js';
 import { fixedClock } from './support/fixed-clock.js';
-import { as, buildUsersApp, createPatient, login, START } from './support/users.js';
+import { as, buildUsersApp, createAdmin, createPatient, login, START } from './support/users.js';
 
 const credentials = { email: EXAMPLE_MULTI.email, password: EXAMPLE_MULTI.password };
 
@@ -101,6 +101,14 @@ describe('example account', () => {
       await post('/api/admin/users', { ...person, role: 'admin' }),
       await post('/api/admin/integration-clients', { name: 'Laboratório Visitante' }),
     ];
+
+    await createAdmin(context, 'admin.real@email.com');
+    const [admin] = (await context.db.execute(sql`select id from users where email = 'admin.real@email.com'`))
+      .rows as { id: string }[];
+    refused.push(
+      await request(context.app).delete(`/api/admin/users/${admin?.id}/roles/admin`).set(as(token)),
+      await post(`/api/admin/users/${admin?.id}/deactivate`),
+    );
 
     for (const response of refused) {
       expect(response.status).toBe(403);

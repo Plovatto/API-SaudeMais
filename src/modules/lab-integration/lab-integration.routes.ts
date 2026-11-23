@@ -1,6 +1,12 @@
 import { Router, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { conflictResponse, errorResponse, exampleRestrictedResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
+import {
+  conflictResponse,
+  errorResponse,
+  exampleRestrictedResponse,
+  forbiddenResponse,
+  notFoundResponse,
+} from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { labKeySecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';

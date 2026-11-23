@@ -106,6 +106,7 @@ export class AdminUserService {
       async (tx, user, defer) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
         if (user.deactivatedAt) return undefined;
+        if (user.roles.includes('admin')) refuseExampleEscalation(actor.actorId);
         await this.ensureAnotherAdmin(tx, user);
         defer(await this.cancelBookings(tx, user, ['patient', 'doctor'], actor));
         await this.repository.setDeactivated(tx, id, this.clock.now());
@@ -150,6 +151,7 @@ export class AdminUserService {
       async (tx, user) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
         if (!user.roles.includes('admin')) return undefined;
+        refuseExampleEscalation(actor.actorId);
         await this.ensureAnotherAdmin(tx, user);
         await this.repository.revokeRole(tx, id, 'admin');
         return { role: 'admin' };
