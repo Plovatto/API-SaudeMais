@@ -4,6 +4,7 @@ import { conflictError, notFound, unprocessableField } from '../../lib/app-error
 import { recordAudit, type Actor, type AuditActor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
+import { refuseExampleEscalation } from '../../lib/example-account.js';
 import type { Pagination } from '../../lib/pagination.js';
 import { retryOnDeadlock } from '../../lib/pg-errors.js';
 import { CLINIC_TIME_ZONE, dayRangeIn, instantOfWallClock, MINUTE } from '../../lib/time.js';
@@ -67,6 +68,7 @@ export class LabIntegrationService {
   }
 
   async createClient({ name }: CreateClientInput, actor: AuditActor): Promise<CreatedClient> {
+    refuseExampleEscalation(actor.actorId);
     const { apiKey, ...key } = newApiKey();
     const client = await withConstraintConflicts(
       () => this.repository.createClient({ name, ...key, createdAt: this.clock.now() }, actor),
