@@ -236,4 +236,17 @@ describe('reminders', () => {
     expect(await remindedAt(id)).toBeNull();
     expect((await runMaintenance()).remindersSent).toBe(1);
   });
+
+  it('keeps a reminder the full mail queue dropped for the next run', async () => {
+    const id = await appointment(PATIENT_EMAIL, 'confirmed', later(3 * HOUR));
+    const enqueue = vi.spyOn(context.mail, 'enqueue').mockReturnValueOnce(false);
+
+    const dropped = await runMaintenance();
+
+    expect(dropped.remindersSent).toBe(0);
+    expect(await remindedAt(id)).toBeNull();
+    enqueue.mockRestore();
+    expect((await runMaintenance()).remindersSent).toBe(1);
+    expect(sentTo(PATIENT_EMAIL)).toHaveLength(1);
+  });
 });

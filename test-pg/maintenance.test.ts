@@ -41,7 +41,8 @@ describe('maintenance on PostgreSQL', () => {
   const expiredNotices = async () =>
     (
       await pool.query<{ total: number }>(
-        "select count(*)::int as total from notifications where type = 'appointment_expired'",
+        `select count(*)::int as total from notifications n join bookings b on b.id = n.booking_id
+         where n.type = 'appointment_expired' and b.starts_at = timestamptz '2026-01-05T10:00:00Z'`,
       )
     ).rows[0]?.total;
 

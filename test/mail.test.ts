@@ -53,8 +53,10 @@ describe('mail queue limits', () => {
     const stuck = { send: () => new Promise<void>((resolve) => (release = resolve)) };
     const queue = new MailQueue(stuck, logger);
 
-    for (let index = 0; index < 201; index += 1) queue.enqueue(message);
+    const accepted = Array.from({ length: 201 }, () => queue.enqueue(message));
 
+    expect(accepted.filter(Boolean)).toHaveLength(200);
+    expect(accepted.at(-1)).toBe(false);
     expect(lines.join('')).toContain('E-mail queue full');
     release();
   });
