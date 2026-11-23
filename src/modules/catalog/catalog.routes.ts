@@ -1,16 +1,14 @@
 import type { ResponseConfig } from '@asteasolutions/zod-to-openapi';
 import { idParams } from '../../lib/params.js';
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { MAX_ACTIVE_LIMIT } from '../../database/schema/catalog.js';
 import { conflictResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
 import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { paginationQuery } from '../../lib/pagination.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import type { CatalogController } from './catalog.controller.js';
 import {
   capacityInUse,
@@ -239,8 +237,8 @@ interface CatalogRouterDeps {
 }
 
 export function createCatalogRouter({ controller, requireAuth, requireAdmin }: CatalogRouterDeps): Router {
-  const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
-  const adminLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
+  const readLimit = limitRequests(120);
+  const adminLimit = limitRequests(120);
   const adminOnly = [noStore, requireAuth, requireAdmin];
 
   const router = Router();

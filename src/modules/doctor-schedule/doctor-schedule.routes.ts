@@ -1,5 +1,4 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import {
   conflictResponse,
@@ -9,9 +8,8 @@ import {
 } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import type { DoctorScheduleController } from './doctor-schedule.controller.js';
 import { MAX_BOOKING_HORIZON_DAYS } from '../catalog/catalog.model.js';
 import { scheduleMessages } from './doctor-schedule.messages.js';
@@ -128,7 +126,7 @@ interface DoctorScheduleRouterDeps {
 
 export function createDoctorScheduleRouter({ controller, requireAuth, requireDoctor }: DoctorScheduleRouterDeps): Router {
   const doctor = (limit: number) => [
-    rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit }),
+    limitRequests(limit),
     noStore,
     requireAuth,
     requireDoctor,

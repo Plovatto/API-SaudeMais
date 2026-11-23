@@ -1,5 +1,5 @@
 import { Router, type Request, type RequestHandler } from 'express';
-import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
+import { ipKeyGenerator } from 'express-rate-limit';
 import { errorResponse, fieldErrorExample, notFoundResponse, serverBusyResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { publicSecurity } from '../../docs/registry.js';
@@ -7,7 +7,7 @@ import { tags } from '../../docs/tags.js';
 import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { authOf, noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import type { UserController } from './user.controller.js';
 import {
   currentSession,
@@ -177,29 +177,20 @@ interface UserRouterDeps {
 }
 
 export function createUserRouter({ controller, requireAuth }: UserRouterDeps): Router {
-  const registerLimit = rateLimit({ ...rateLimitDefaults, windowMs: 60 * MINUTE, limit: 10 });
-  const loginLimitByIp = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 30 });
-  const loginLimitByEmailAndIp = rateLimit({
-    ...rateLimitDefaults,
-    windowMs: 15 * MINUTE,
-    limit: 5,
+  const registerLimit = limitRequests(10, 60 * MINUTE);
+  const loginLimitByIp = limitRequests(30, 15 * MINUTE);
+  const loginLimitByEmailAndIp = limitRequests(5, 15 * MINUTE, {
     skipSuccessfulRequests: true,
     keyGenerator: (req) => `${emailOf(req)}|${ipOf(req)}`,
   });
-  const loginLimitByEmail = rateLimit({
-    ...rateLimitDefaults,
-    windowMs: 60 * MINUTE,
-    limit: 50,
+  const loginLimitByEmail = limitRequests(50, 60 * MINUTE, {
     skipSuccessfulRequests: true,
     keyGenerator: (req) => emailOf(req) || `ip:${ipOf(req)}`,
   });
-  const sessionLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
-  const profileLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
-  const passwordLimit = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 10 });
-  const passwordLimitByAccount = rateLimit({
-    ...rateLimitDefaults,
-    windowMs: 15 * MINUTE,
-    limit: 5,
+  const sessionLimit = limitRequests(60);
+  const profileLimit = limitRequests(120);
+  const passwordLimit = limitRequests(10, 15 * MINUTE);
+  const passwordLimitByAccount = limitRequests(5, 15 * MINUTE, {
     skipSuccessfulRequests: true,
     keyGenerator: (req) => authOf(req).user.id,
   });

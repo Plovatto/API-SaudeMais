@@ -1,12 +1,10 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { paginationQuery } from '../../lib/pagination.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import type { ExamResultsController } from './exam-results.controller.js';
 import { noExamReview, resultNotFound } from './exam-results.messages.js';
 import {
@@ -97,8 +95,8 @@ export function createExamResultsRouter({
   requirePatient,
   requireDoctor,
 }: ExamResultsRouterDeps): Router {
-  const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
-  const pdfLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 20 });
+  const readLimit = limitRequests(120);
+  const pdfLimit = limitRequests(20);
   const router = Router();
   router.get(patientPath, readLimit, noStore, requireAuth, requirePatient, controller.patientResults);
   router.get(`${patientPath}/:bookingId/pdf`, pdfLimit, noStore, requireAuth, requirePatient, controller.patientPdf);

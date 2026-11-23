@@ -1,12 +1,10 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { conflictResponse, errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { idParams } from '../../lib/params.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import { rescheduleSchema } from '../appointments/appointments.model.js';
 import { patientConflict, rescheduleConflicts, sameSlotResponse } from '../bookings/bookings.messages.js';
 import { MAX_AVAILABILITY_DAYS } from '../doctors/doctors.model.js';
@@ -123,8 +121,8 @@ interface ExamBookingsRouterDeps {
 }
 
 export function createExamBookingsRouter({ controller, requireAuth, requirePatient }: ExamBookingsRouterDeps): Router {
-  const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
-  const writeLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
+  const readLimit = limitRequests(120);
+  const writeLimit = limitRequests(60);
   const patientOnly = [noStore, requireAuth, requirePatient];
   const router = Router();
   router.get('/api/exam-availability', readLimit, ...patientOnly, controller.availability);

@@ -1,5 +1,4 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import {
   conflictResponse,
   errorResponse,
@@ -12,9 +11,8 @@ import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import type { FieldConflict } from '../../lib/app-error.js';
 import { idParams } from '../../lib/params.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import { WELCOME_TOKEN_HOURS } from '../password-reset/password-reset.service.js';
 import { updateProfileSchema } from '../users/user.model.js';
 import { emailConflicts } from '../users/user.messages.js';
@@ -220,7 +218,7 @@ interface AdminUserRouterDeps {
 }
 
 export function createAdminUserRouter({ controller, requireAuth, requireAdmin }: AdminUserRouterDeps): Router {
-  const adminLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
+  const adminLimit = limitRequests(120);
   const adminOnly = [noStore, requireAuth, requireAdmin];
 
   const router = Router();

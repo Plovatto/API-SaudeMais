@@ -77,6 +77,16 @@ export const cancellationColumns = {
   cancelledAt: bookings.cancelledAt,
 };
 
+export const bookingColumns = (now: Date) => ({
+  id: bookings.id,
+  status: effectiveStatus(now),
+  startsAt: bookings.startsAt,
+  endsAt: bookings.endsAt,
+  notes: bookings.notes,
+  ...placeColumns,
+  cancellation: cancellationColumns,
+});
+
 interface CancellationRow {
   byRole: CancellerRole | null;
   reason: string | null;

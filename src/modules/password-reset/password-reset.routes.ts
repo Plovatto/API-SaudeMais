@@ -1,11 +1,10 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { errorResponse, serverBusyResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { publicSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
 import { MINUTE } from '../../lib/time.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import { resetConfirmSchema, resetRequestSchema } from './password-reset.model.js';
 import {
   INVALID_RESET_TOKEN_MESSAGE,
@@ -55,8 +54,8 @@ documentOperation({
 });
 
 export function createPasswordResetRouter(service: PasswordResetService): Router {
-  const requestLimit = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 10 });
-  const confirmLimit = rateLimit({ ...rateLimitDefaults, windowMs: 15 * MINUTE, limit: 20 });
+  const requestLimit = limitRequests(10, 15 * MINUTE);
+  const confirmLimit = limitRequests(20, 15 * MINUTE);
   const request: RequestHandler = async (req, res) => {
     await service.request(resetRequestSchema.parse(req.body));
     res.status(204).end();

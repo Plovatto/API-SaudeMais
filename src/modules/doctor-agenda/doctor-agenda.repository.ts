@@ -14,11 +14,10 @@ import { unaccentMatch } from '../../lib/search.js';
 import { civilDayStartIn, CLINIC_TIME_ZONE, type DayRange } from '../../lib/time.js';
 import { doctorActions } from '../bookings/booking-policy.js';
 import {
-  cancellationColumns,
+  bookingColumns,
   countWhere,
   futureWith,
   noStatusTotals,
-  placeColumns,
   startsWithin,
   statusTotals,
   viewOf,
@@ -61,15 +60,9 @@ async function list(tx: Transaction, { doctorId, tab, from, to, search, now, ...
   );
   const select = tx
     .select({
-      id: bookings.id,
-      status: effectiveStatus(now),
+      ...bookingColumns(now),
       visitType: sql<VisitType>`${bookings.visitType}`,
-      startsAt: bookings.startsAt,
-      endsAt: bookings.endsAt,
-      notes: bookings.notes,
       patient: { id: users.id, fullName: users.fullName, phone: reachablePhone(now) },
-      ...placeColumns,
-      cancellation: cancellationColumns,
     })
     .from(bookings)
     .innerJoin(users, eq(users.id, bookings.patientId))

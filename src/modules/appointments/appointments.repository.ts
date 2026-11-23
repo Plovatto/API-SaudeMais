@@ -1,7 +1,7 @@
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { alias, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { readSnapshot, type Database, type Transaction } from '../../database/pg-client.js';
-import { bookings, effectiveStatus, type VisitType } from '../../database/schema/bookings.js';
+import { bookings, type VisitType } from '../../database/schema/bookings.js';
 import { specialties, units } from '../../database/schema/catalog.js';
 import { doctorProfiles } from '../../database/schema/doctor-profiles.js';
 import { healthMetrics } from '../../database/schema/health-metrics.js';
@@ -9,10 +9,9 @@ import { users, type Role } from '../../database/schema/users.js';
 import { doctorActions } from '../bookings/booking-policy.js';
 import {
   actionsAt,
-  cancellationColumns,
+  bookingColumns,
   eventsOf,
   ofAccount,
-  placeColumns,
   recordCreated,
   splitActions,
   viewOf,
@@ -145,16 +144,10 @@ export class AppointmentsRepository {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .select({
-          id: bookings.id,
-          status: effectiveStatus(now),
+          ...bookingColumns(now),
           visitType: sql<VisitType>`${bookings.visitType}`,
-          startsAt: bookings.startsAt,
-          endsAt: bookings.endsAt,
-          notes: bookings.notes,
           patient: { id: users.id, fullName: users.fullName },
           doctor: { id: doctorUsers.id, fullName: doctorUsers.fullName },
-          ...placeColumns,
-          cancellation: cancellationColumns,
           createdAt: bookings.createdAt,
           rescheduleCount: bookings.rescheduleCount,
         })

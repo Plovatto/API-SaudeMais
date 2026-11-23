@@ -1,5 +1,4 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import {
   conflictResponse,
   errorResponse,
@@ -15,7 +14,7 @@ import { idParams } from '../../lib/params.js';
 import { MINUTE } from '../../lib/time.js';
 import { clientOf, INVALID_API_KEY_MESSAGE } from '../../middleware/api-key.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import type { LabIntegrationController } from './lab-integration.controller.js';
 import {
   clientConflicts,
@@ -143,11 +142,8 @@ export function createLabIntegrationRouter({
   requireAdmin,
   requireApiKey,
 }: LabIntegrationRouterDeps): Router {
-  const adminLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
-  const labLimit = rateLimit({
-    ...rateLimitDefaults,
-    windowMs: MINUTE,
-    limit: LAB_LIMIT,
+  const adminLimit = limitRequests(120);
+  const labLimit = limitRequests(LAB_LIMIT, MINUTE, {
     keyGenerator: (req) => clientOf(req),
   });
   const adminOnly = [adminLimit, noStore, requireAuth, requireAdmin];
