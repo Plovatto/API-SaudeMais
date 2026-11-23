@@ -135,7 +135,7 @@ Uma rotina de manutenção grava o que o tempo já decidiu. Ela aproveita quando
 - Pedido de consulta \`pending\` cujo horário chegou passa a \`expired\`, e o paciente recebe a notificação \`appointment_expired\`. Antes disso, as listas já o mostram como \`expired\`.
 - Exame \`confirmed\` cujo horário terminou passa a \`completed\`.
 - Consulta \`confirmed\` que começou há 72 horas sem registro do médico passa a \`completed\`, com o sistema como autor no histórico.
-- Sessões vencidas são apagadas, assim como links de redefinição de senha com mais de 48 horas, notificações com mais de 90 dias e registros de auditoria com mais de 180 dias.
+- Sessões vencidas são apagadas, assim como links de redefinição de senha vencidos há mais de 48 horas, notificações com mais de 90 dias e registros de auditoria com mais de 180 dias.
 
 ## Datas
 

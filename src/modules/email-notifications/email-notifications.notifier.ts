@@ -25,8 +25,9 @@ export class EmailNotifier {
   async remindUpcoming(): Promise<number> {
     const now = this.clock.now();
     const reminders = await this.repository.claimReminders(now, new Date(now.getTime() + REMINDER_WINDOW));
-    for (const reminder of reminders) this.mail.enqueue(reminderEmail(reminder, this.appUrl));
-    return reminders.length;
+    const dropped = reminders.filter((reminder) => !this.mail.enqueue(reminderEmail(reminder, this.appUrl)));
+    if (dropped.length > 0) await this.repository.releaseReminders(dropped.map(({ bookingId }) => bookingId), now);
+    return reminders.length - dropped.length;
   }
 
   private async send(deliveries: Delivery[]): Promise<void> {

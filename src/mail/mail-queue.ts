@@ -20,10 +20,10 @@ export class MailQueue {
     private readonly logger: Logger,
   ) {}
 
-  enqueue(message: MailMessage): void {
+  enqueue(message: MailMessage): boolean {
     if (this.pending.size >= MAX_PENDING) {
       this.logger.error({ mail: { subject: message.subject } }, 'E-mail queue full; message dropped');
-      return;
+      return false;
     }
     const delivery = Promise.resolve()
       .then(() => this.mailer.send(message))
@@ -32,6 +32,7 @@ export class MailQueue {
       })
       .finally(() => this.pending.delete(delivery));
     this.pending.add(delivery);
+    return true;
   }
 
   async drain(): Promise<void> {
