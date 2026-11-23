@@ -183,6 +183,7 @@ document({
   body: doctorProfileInputSchema,
   conflict: conflictResponse(adminConflicts.registryTaken, adminConflicts.profileExists, adminConflicts.inactive),
   unprocessable: unavailable.specialty,
+  restricted: true,
   success: { status: 201, description: 'Perfil médico criado.', ...detail },
 });
 document({
@@ -208,6 +209,7 @@ document({
     'Tira o perfil de médico da conta; os dados do registro ficam guardados para o histórico e podem voltar a valer com um novo POST. As consultas ativas futuras que ele atende são canceladas e os pacientes recebem o aviso `appointment_cancelled`.',
   params: idParams,
   notFound: doctorProfileNotFound,
+  restricted: true,
   success: { status: 200, description: 'Perfil médico removido.', ...detail },
 });
 

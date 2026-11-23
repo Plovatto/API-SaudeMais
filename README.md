@@ -93,7 +93,7 @@ A API estará disponível em:
 http://localhost:3001
 ```
 
-As migrations rodam ao iniciar. Para criar dados de exemplo (especialidades, unidades, exames, médicos e pacientes), rode `npm run db:seed`. Ele cria só o que falta, inclusive as contas de exemplo `paciente@saudemais.test` (senha `paciente-demo-123`) e `medico@saudemais.test` (senha `medico-demo-123`) com alguns agendamentos. São contas comuns: nunca são restauradas e seguem as mesmas regras de qualquer conta.
+As migrations rodam ao iniciar. Para criar dados de exemplo (especialidades, unidades, exames, médicos e pacientes), rode `npm run db:seed`. Ele cria só o que falta, inclusive as contas de exemplo `paciente@saudemais.test` (senha `paciente-demo-123`) e `medico@saudemais.test` (senha `medico-demo-123`) com alguns agendamentos. São contas comuns: nunca são restauradas e seguem as mesmas regras de qualquer conta. O seed recusa `NODE_ENV=production` sem `SEED_ALLOW_PRODUCTION=1` e, fora de produção, recusa um banco remoto (que não seja `localhost`, IP privado ou nome interno) sem `SEED_ALLOW_REMOTE=1`, para não gravar as contas de senha pública num banco da nuvem por engano.
 
 ## Variáveis de Ambiente
 
@@ -123,7 +123,7 @@ LAB_API_KEY=
 
 `ADMIN_EMAIL` e `ADMIN_PASSWORD` criam o primeiro administrador ao iniciar (senha com 12 ou mais caracteres).
 
-`EXAMPLE_ACCOUNT_RESET` (padrão `false`; use `true` só em um ambiente de exemplo, sem dados reais, porque cria pelo seed e mantém uma conta de administrador com senha pública) restaura uma vez por dia a conta de exemplo `admin@saudemais.com`: nome, e-mail, telefone, data de nascimento, senha, perfis (paciente, médico e administrador), dados de médico e preferências de e-mail voltam ao original, e a conta é reativada. As sessões só são encerradas quando algo havia mudado. Os agendamentos feitos pelos visitantes e o que eles alteram em outras contas ou nas configurações não são desfeitos. Por isso, essa conta não dá nem tira o perfil de administrador, não cadastra nem desativa administradores e não cria integrações de laboratório. A conta nunca recebe e-mails.
+`EXAMPLE_ACCOUNT_RESET` (padrão `false`; use `true` só em um ambiente de exemplo, sem dados reais, porque cria pelo seed e mantém uma conta de administrador com senha pública) restaura uma vez por dia a conta de exemplo `admin@saudemais.com`: nome, e-mail, telefone, data de nascimento, senha, perfis (paciente, médico e administrador), dados de médico e preferências de e-mail voltam ao original, e a conta é reativada. As sessões só são encerradas quando algo havia mudado. Os agendamentos feitos pelos visitantes e o que eles alteram em outras contas ou nas configurações não são desfeitos. Por isso, essa conta não dá nem tira os perfis de médico e de administrador, não cadastra médicos nem administradores, não desativa administradores e não cria integrações de laboratório. A conta nunca recebe e-mails.
 
 `MAIL_DRIVER=console` escreve os e-mails no log; em produção, use `smtp` com `SMTP_USER`, `SMTP_PASS` e `MAIL_FROM`.
 

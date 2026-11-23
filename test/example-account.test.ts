@@ -87,7 +87,7 @@ describe('example account', () => {
     expect(me.status).toBe(401);
   });
 
-  it('cannot hand out admin access or create lab integrations', async () => {
+  it('cannot hand out or take away doctor and admin profiles or create lab integrations', async () => {
     const context = await seeded();
     const token = ((await login(context.app, credentials)).body as { token: string }).token;
     const visitor = await createPatient(context, 'visitante@email.com');
@@ -108,6 +108,22 @@ describe('example account', () => {
     refused.push(
       await request(context.app).delete(`/api/admin/users/${admin?.id}/roles/admin`).set(as(token)),
       await post(`/api/admin/users/${admin?.id}/deactivate`),
+    );
+
+    const [place] = (
+      await context.db.execute(sql`
+        select s.id as "specialtyId", u.id as "unitId" from specialties s, units u
+        where s.is_active and u.is_active limit 1
+      `)
+    ).rows as { specialtyId: string; unitId: string }[];
+    const [doctor] = (
+      await context.db.execute(sql`select user_id as id from doctor_profiles where user_id <> ${EXAMPLE_MULTI_ID} limit 1`)
+    ).rows as { id: string }[];
+    const doctorProfile = { ...place, registryNumber: '654321', registryUf: 'SP' };
+    refused.push(
+      await post('/api/admin/users', { ...person, email: 'medico.visitante@email.com', role: 'doctor', doctorProfile }),
+      await post(`/api/admin/users/${patient?.id}/doctor-profile`, doctorProfile),
+      await request(context.app).delete(`/api/admin/users/${doctor?.id}/doctor-profile`).set(as(token)),
     );
 
     for (const response of refused) {

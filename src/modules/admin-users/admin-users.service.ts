@@ -57,7 +57,7 @@ export class AdminUserService {
     actor: Actor,
     { fullName, email, phone, role, doctorProfile }: CreateUserInput,
   ): Promise<AdminUserDetail> {
-    if (role === 'admin') refuseExampleEscalation(actor.actorId);
+    if (role !== 'patient') refuseExampleEscalation(actor.actorId);
     const passwordHash = await unusablePasswordHash();
     const roles = [...new Set<Role>(['patient', role])];
     const user = await withConstraintConflicts(
@@ -161,6 +161,7 @@ export class AdminUserService {
   }
 
   createDoctorProfile(actor: Actor, id: string, input: DoctorProfileInput) {
+    refuseExampleEscalation(actor.actorId);
     return this.change(actor, id, 'doctor_profile.created', async (tx, user) => {
       active(user);
       if (user.roles.includes('doctor')) throw conflictError(adminConflicts.profileExists);
@@ -196,6 +197,7 @@ export class AdminUserService {
   deleteDoctorProfile(actor: Actor, id: string) {
     return this.change(actor, id, 'doctor_profile.deleted', async (tx, user, defer) => {
       if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
+      refuseExampleEscalation(actor.actorId);
       defer(await this.cancelBookings(tx, user, ['doctor'], actor));
       await this.repository.revokeRole(tx, id, 'doctor');
       return {};
