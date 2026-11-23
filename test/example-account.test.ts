@@ -7,7 +7,7 @@ import type { NotificationsService } from '@/modules/notifications/notifications
 import { EXAMPLE_MULTI, EXAMPLE_MULTI_ID } from '@/modules/seed/seed.data.js';
 import { createTestDb } from './support/create-test-db.js';
 import { fixedClock } from './support/fixed-clock.js';
-import { as, buildUsersApp, login, START } from './support/users.js';
+import { as, buildUsersApp, createPatient, login, START } from './support/users.js';
 
 const credentials = { email: EXAMPLE_MULTI.email, password: EXAMPLE_MULTI.password };
 
@@ -85,6 +85,32 @@ describe('example account', () => {
 
     const me = await request(context.app).get('/api/me').set(as(token));
     expect(me.status).toBe(401);
+  });
+
+  it('cannot hand out admin access or create lab integrations', async () => {
+    const context = await seeded();
+    const token = ((await login(context.app, credentials)).body as { token: string }).token;
+    const visitor = await createPatient(context, 'visitante@email.com');
+    const [patient] = (await context.db.execute(sql`select id from users where email = 'visitante@email.com'`))
+      .rows as { id: string }[];
+    const post = (path: string, body?: object) => request(context.app).post(path).set(as(token)).send(body);
+    const person = { fullName: 'Carla Mendes', email: 'carla.mendes@email.com', phone: '(11) 98765-4321' };
+
+    const refused = [
+      await post(`/api/admin/users/${patient?.id}/roles/admin`),
+      await post('/api/admin/users', { ...person, role: 'admin' }),
+      await post('/api/admin/integration-clients', { name: 'Laboratório Visitante' }),
+    ];
+
+    for (const response of refused) {
+      expect(response.status).toBe(403);
+      expect(response.body).toMatchObject({ code: 'EXAMPLE_ACCOUNT_RESTRICTED' });
+    }
+    expect((await post('/api/admin/users', { ...person, role: 'patient' })).status).toBe(201);
+    const me = await request(context.app).get('/api/me').set(as(visitor));
+    expect((me.body as { roles: string[] }).roles).toEqual(['patient']);
+    const clients = await context.db.execute(sql`select 1 from integration_clients where name = 'Laboratório Visitante'`);
+    expect(clients.rows).toHaveLength(0);
   });
 
   it('is created again when a visitor removed it', async () => {

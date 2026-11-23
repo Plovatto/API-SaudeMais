@@ -2,6 +2,7 @@ import './zod-extend.js';
 import { z } from 'zod';
 import { INTERNAL_ERROR_MESSAGE, INVALID_DATA_MESSAGE, type FieldConflict } from '../lib/app-error.js';
 import { FORBIDDEN_MESSAGE, UNAUTHENTICATED_MESSAGE } from '../middleware/auth.js';
+import { EXAMPLE_ACCOUNT_RESTRICTED_MESSAGE } from '../lib/example-account.js';
 import { TOO_MANY_REQUESTS_MESSAGE } from '../middleware/rate-limit.js';
 import { SERVER_BUSY_MESSAGE } from '../modules/users/user.password.js';
 import { registry } from './registry.js';
@@ -66,6 +67,11 @@ export const forbiddenResponse = errorResponse('A conta não tem o perfil exigid
   message: FORBIDDEN_MESSAGE,
   code: 'FORBIDDEN',
 });
+
+export const exampleRestrictedResponse = errorResponse(
+  'A conta não tem o perfil exigido (`FORBIDDEN`) ou é a conta de exemplo, que não dá acesso de administrador nem cria integrações (`EXAMPLE_ACCOUNT_RESTRICTED`).',
+  { message: EXAMPLE_ACCOUNT_RESTRICTED_MESSAGE, code: 'EXAMPLE_ACCOUNT_RESTRICTED' },
+);
 
 export const tooManyRequestsResponse = errorResponse(
   'Limite de tentativas atingido (`TOO_MANY_REQUESTS`). O cabeçalho `RateLimit` diz quando tentar de novo.',
