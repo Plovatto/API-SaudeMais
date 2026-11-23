@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import type { AfterCommit, Transaction } from '../../database/pg-client.js';
 import type { Role } from '../../database/schema/users.js';
 import { AppError, invalidData, notFound, unprocessable, unprocessableField } from '../../lib/app-error.js';
@@ -81,6 +82,10 @@ export class UserService {
       { fullName, email, phone, passwordHash, roles: ['patient'], termsVersion: TERMS_VERSION },
       (tx, user) => this.notifications.notifyAdmins(tx, { type: 'user_registered', params: { userId: user.id } }),
     );
+  }
+
+  knownDevice(email: string, ip: string | undefined): Promise<boolean> {
+    return email && ip && isIP(ip) ? this.repository.hasSessionFrom(email, ip, this.clock.now()) : Promise.resolve(false);
   }
 
   async createAccount(

@@ -136,4 +136,34 @@ describe('POST /api/users/login', () => {
     expect(blocked.body).toMatchObject({ code: 'TOO_MANY_REQUESTS' });
     expect(other.status).toBe(200);
   });
+
+  it('keeps the owner signing in from a known address after wrong passwords from many others', async () => {
+    const db = await createTestDb();
+    const { app } = buildTestApp({ TRUST_PROXY_HOPS: 1 }, { db });
+    await request(app).post('/api/users/register').send(registration()).expect(201);
+    const from = (ip: string, body: Record<string, unknown> = {}) => login(app, body).set('X-Forwarded-For', ip);
+    await from('198.51.100.1').expect(200);
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      await from(`203.0.113.${Math.floor(attempt / 5) + 1}`, { password: 'senha-errada-123' }).expect(401);
+    }
+
+    const stranger = await from('203.0.113.200');
+    const owner = await from('198.51.100.1');
+
+    expect(stranger.status).toBe(429);
+    expect(owner.status).toBe(200);
+  }, 60_000);
+
+  it('counts only live sessions as a known address', async () => {
+    const context = await withAccount();
+    const credentials = { email: 'ana.silva@email.com', password: 'senha-segura-123', remember: false };
+    await context.auth.login(credentials, { ip: '198.51.100.1', userAgent: null });
+
+    const live = await context.auth.knownDevice('ana.silva@email.com', '198.51.100.1');
+    const other = await context.auth.knownDevice('ana.silva@email.com', '198.51.100.2');
+    context.clock.advance(12 * HOUR + 1);
+    const expired = await context.auth.knownDevice('ana.silva@email.com', '198.51.100.1');
+
+    expect([live, other, expired]).toEqual([true, false, false]);
+  });
 });

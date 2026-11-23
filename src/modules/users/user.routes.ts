@@ -61,7 +61,7 @@ documentOperation({
   tag: tags.accounts.name,
   summary: 'Entrar',
   description:
-    'Confere e-mail e senha e devolve um token de sessão. Sem "Lembrar de mim", a sessão expira após 12 horas sem uso; com ele, dura 7 dias. Nenhuma sessão passa de 7 dias. Senha errada e e-mail inexistente recebem a mesma resposta. Limites: 30 tentativas por IP e 5 senhas erradas por e-mail e IP a cada 15 minutos, e 50 senhas erradas por e-mail por hora.',
+    'Confere e-mail e senha e devolve um token de sessão. Sem "Lembrar de mim", a sessão expira após 12 horas sem uso; com ele, dura 7 dias. Nenhuma sessão passa de 7 dias. Senha errada e e-mail inexistente recebem a mesma resposta. Limites: 30 tentativas por IP e 5 senhas erradas por e-mail e IP a cada 15 minutos, e 50 senhas erradas por e-mail por hora. Esse último limite não vale para um IP que já tem sessão da conta, para que errar a senha de alguém não tranque essa pessoa no aparelho que ela usa.',
   auth: publicSecurity,
   body: loginSchema,
   success: { status: 200, description: 'Login feito.', schema: loginResponseSchema },
@@ -174,9 +174,10 @@ documentOperation({
 interface UserRouterDeps {
   controller: UserController;
   requireAuth: RequestHandler;
+  knownDevice: (email: string, ip: string | undefined) => Promise<boolean>;
 }
 
-export function createUserRouter({ controller, requireAuth }: UserRouterDeps): Router {
+export function createUserRouter({ controller, requireAuth, knownDevice }: UserRouterDeps): Router {
   const registerLimit = limitRequests(10, 60 * MINUTE);
   const loginLimitByIp = limitRequests(30, 15 * MINUTE);
   const loginLimitByEmailAndIp = limitRequests(5, 15 * MINUTE, {
@@ -186,6 +187,7 @@ export function createUserRouter({ controller, requireAuth }: UserRouterDeps): R
   const loginLimitByEmail = limitRequests(50, 60 * MINUTE, {
     skipSuccessfulRequests: true,
     keyGenerator: (req) => emailOf(req) || `ip:${ipOf(req)}`,
+    skip: (req) => knownDevice(emailOf(req), req.ip),
   });
   const sessionLimit = limitRequests(60);
   const profileLimit = limitRequests(120);

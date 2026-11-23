@@ -69,7 +69,7 @@ export const forbiddenResponse = errorResponse('A conta não tem o perfil exigid
 });
 
 export const exampleRestrictedResponse = errorResponse(
-  'A conta não tem o perfil exigido (`FORBIDDEN`) ou é a conta de exemplo, que não dá nem tira acesso de administrador e não cria integrações (`EXAMPLE_ACCOUNT_RESTRICTED`).',
+  'A conta não tem o perfil exigido (`FORBIDDEN`) ou é a conta de exemplo, que não dá nem tira os perfis de médico e de administrador e não cria integrações (`EXAMPLE_ACCOUNT_RESTRICTED`).',
   { message: EXAMPLE_ACCOUNT_RESTRICTED_MESSAGE, code: 'EXAMPLE_ACCOUNT_RESTRICTED' },
 );
 
