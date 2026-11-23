@@ -15,10 +15,9 @@ import { pageOf } from '../../lib/pagination.js';
 import { latestMetrics } from '../appointments/appointments.repository.js';
 import {
   actionsAt,
-  cancellationColumns,
+  bookingColumns,
   countWhere,
   hasResult,
-  placeColumns,
   splitActions,
   viewOf,
 } from '../bookings/bookings.repository.js';
@@ -59,19 +58,13 @@ export class PatientBookingsRepository {
     return this.db.transaction(async (tx) => {
       const select = tx
         .select({
-          id: bookings.id,
+          ...bookingColumns(now),
           kind: bookings.kind,
-          status: effectiveStatus(now),
-          startsAt: bookings.startsAt,
-          endsAt: bookings.endsAt,
-          notes: bookings.notes,
           visitType: sql<VisitType | null>`${bookings.visitType}`,
           doctor: { id: doctorUsers.id, fullName: doctorUsers.fullName },
           examType: { id: examTypes.id, name: examTypes.name },
           publicCode: bookings.publicCode,
           hasResult,
-          ...placeColumns,
-          cancellation: cancellationColumns,
           rescheduleCount: bookings.rescheduleCount,
         })
         .from(bookings)

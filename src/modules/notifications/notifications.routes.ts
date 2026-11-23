@@ -1,12 +1,10 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { idParams } from '../../lib/params.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import type { NotificationsController } from './notifications.controller.js';
 import { notificationNotFound } from './notifications.messages.js';
 import { areaQuery, notificationPageSchema, notificationsQuery, unreadCountSchema } from './notifications.model.js';
@@ -72,8 +70,8 @@ interface NotificationsRouterDeps {
 }
 
 export function createNotificationsRouter({ controller, requireAuth }: NotificationsRouterDeps): Router {
-  const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
-  const writeLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
+  const readLimit = limitRequests(120);
+  const writeLimit = limitRequests(60);
   const router = Router();
   router.get(path, readLimit, noStore, requireAuth, controller.page);
   router.get(`${path}/unread-count`, readLimit, noStore, requireAuth, controller.unreadCount);

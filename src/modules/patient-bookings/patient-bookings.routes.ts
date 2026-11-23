@@ -1,11 +1,9 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { forbiddenResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import type { PatientBookingsController } from './patient-bookings.controller.js';
 import { patientBookingPageSchema, patientBookingsQuery, patientHomeSchema } from './patient-bookings.model.js';
 
@@ -48,7 +46,7 @@ export function createPatientBookingsRouter({
   requireAuth,
   requirePatient,
 }: PatientBookingsRouterDeps): Router {
-  const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
+  const readLimit = limitRequests(120);
   const router = Router();
   router.get(`${path}/home`, readLimit, noStore, requireAuth, requirePatient, controller.home);
   router.get(`${path}/bookings`, readLimit, noStore, requireAuth, requirePatient, controller.page);

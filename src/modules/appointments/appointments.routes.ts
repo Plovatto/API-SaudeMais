@@ -1,12 +1,10 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { conflictResponse, errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { idParams } from '../../lib/params.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import { notStarted, patientConflict, rescheduleConflicts, sameSlotResponse } from '../bookings/bookings.messages.js';
 import { doctorNotFound } from '../doctors/doctors.messages.js';
 import type { AppointmentsController } from './appointments.controller.js';
@@ -191,8 +189,8 @@ export function createAppointmentsRouter({
   requirePatient,
   requireDoctor,
 }: AppointmentsRouterDeps): Router {
-  const readLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
-  const writeLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 60 });
+  const readLimit = limitRequests(120);
+  const writeLimit = limitRequests(60);
   const router = Router();
   router.post(path, writeLimit, noStore, requireAuth, requirePatient, controller.book);
   router.get(`${path}/:id`, readLimit, noStore, requireAuth, controller.detail);

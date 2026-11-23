@@ -1,11 +1,9 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { forbiddenResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import {
   adminReportSchema,
   DEFAULT_REPORT_DAYS,
@@ -55,11 +53,11 @@ interface AdminReportsRouterDeps {
 }
 
 export function createAdminReportsRouter({ service, requireAuth, requireAdmin }: AdminReportsRouterDeps): Router {
-  const reportsLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 30 });
+  const reportsLimit = limitRequests(30);
   const report: RequestHandler = async (req, res) => {
     res.json(await service.report(reportsQuery.parse(req.query)));
   };
-  const exportLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 20 });
+  const exportLimit = limitRequests(20);
   const exportReport: RequestHandler = async (req, res) => {
     const { fileName, content } = await service.export(reportExportQuery.parse(req.query));
     res.attachment(fileName).send(content);

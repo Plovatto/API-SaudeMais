@@ -1,11 +1,9 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { forbiddenResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
-import { MINUTE } from '../../lib/time.js';
 import { noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import { adminHomeSchema } from './admin-home.model.js';
 import type { AdminHomeService } from './admin-home.service.js';
 
@@ -28,7 +26,7 @@ interface AdminHomeRouterDeps {
 }
 
 export function createAdminHomeRouter({ service, requireAuth, requireAdmin }: AdminHomeRouterDeps): Router {
-  const homeLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
+  const homeLimit = limitRequests(120);
   const summary: RequestHandler = async (_req, res) => {
     res.json(await service.summary());
   };

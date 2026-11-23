@@ -1,6 +1,5 @@
 import './lib/zod-locale.js';
 import cors from 'cors';
-import { rateLimit } from 'express-rate-limit';
 import express, { type Express, type Router } from 'express';
 import helmet from 'helmet';
 import type { Logger } from 'pino';
@@ -9,8 +8,7 @@ import { env, type Env } from './config/env.js';
 import { serializeError } from './config/create-logger.js';
 import { logger as defaultLogger } from './config/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
-import { MINUTE } from './lib/time.js';
-import { rateLimitDefaults } from './middleware/rate-limit.js';
+import { limitRequests } from './middleware/rate-limit.js';
 import { createDocsRouter } from './routes/docs.js';
 import { createHealthRouter } from './routes/health.js';
 
@@ -73,7 +71,7 @@ export function createApp({ config = env, logger = defaultLogger, routers = [] }
       persistAuthorization: config.NODE_ENV !== 'production',
     }),
   );
-  app.use(rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 300 }));
+  app.use(limitRequests(300));
   for (const router of routers) app.use(router);
 
   app.use(notFoundHandler);

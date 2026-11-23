@@ -1,12 +1,10 @@
 import { Router, type RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { errorResponse } from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
-import { MINUTE } from '../../lib/time.js';
 import { authOf, noStore } from '../../middleware/auth.js';
-import { rateLimitDefaults } from '../../middleware/rate-limit.js';
+import { limitRequests } from '../../middleware/rate-limit.js';
 import { emailPreferenceSchema, topicNotAvailable, updateEmailPreferencesSchema } from './email-notifications.model.js';
 import type { EmailNotificationsService } from './email-notifications.service.js';
 
@@ -46,7 +44,7 @@ interface EmailNotificationsRouterDeps {
 }
 
 export function createEmailNotificationsRouter({ service, requireAuth }: EmailNotificationsRouterDeps): Router {
-  const profileLimit = rateLimit({ ...rateLimitDefaults, windowMs: MINUTE, limit: 120 });
+  const profileLimit = limitRequests(120);
   const router = Router();
   router.get(path, noStore, profileLimit, requireAuth, async (req, res) => {
     res.json(await service.preferences(authOf(req)));
