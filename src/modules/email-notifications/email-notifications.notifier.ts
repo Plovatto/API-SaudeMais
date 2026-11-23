@@ -1,14 +1,14 @@
 import { logger } from '../../config/logger.js';
 import type { EmailTopic } from '../../database/schema/email-preferences.js';
 import type { Clock } from '../../lib/clock.js';
-import { DAY } from '../../lib/time.js';
+import { DAY, MINUTE } from '../../lib/time.js';
 import type { MailQueue } from '../../mail/index.js';
 import type { Delivery } from '../notifications/notifications.service.js';
 import { topicOf } from './email-notifications.model.js';
 import type { EmailNotificationsRepository } from './email-notifications.repository.js';
 import { noticeEmail, reminderEmail } from './email-notifications.templates.js';
 
-const REMINDER_WINDOW = DAY;
+const REMINDER_WINDOW = DAY + 10 * MINUTE;
 
 export class EmailNotifier {
   constructor(

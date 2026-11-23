@@ -202,6 +202,15 @@ describe('reminders', () => {
     expect(await remindedAt(pending)).toBeNull();
   });
 
+  it('covers the gap between two maintenance runs so a reminder is never skipped', async () => {
+    const justAfterADay = await appointment(PATIENT_EMAIL, 'confirmed', later(24 * HOUR + 5 * MINUTE));
+    const tooFar = await appointment(PATIENT_EMAIL, 'confirmed', later(24 * HOUR + 40 * MINUTE));
+
+    expect((await runMaintenance()).remindersSent).toBe(1);
+    expect(await remindedAt(justAfterADay)).toEqual(context.clock.now());
+    expect(await remindedAt(tooFar)).toBeNull();
+  });
+
   it('marks but does not e-mail patients who turned reminders off', async () => {
     await choose(context.patient, { preferences: [{ topic: 'booking_reminder', enabled: false }] }).expect(200);
     const quiet = await appointment(PATIENT_EMAIL, 'confirmed', later(3 * HOUR));
