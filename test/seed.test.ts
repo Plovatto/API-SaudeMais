@@ -300,7 +300,17 @@ describe('seedTarget', () => {
   });
 
   it('accepts local and private databases outside production', () => {
-    const hosts = ['localhost', '127.0.0.1', '[::1]', 'postgres', '10.0.0.5', '172.20.0.2', '192.168.1.9', 'db.local'];
+    const hosts = [
+      'localhost',
+      '127.0.0.1',
+      '[::1]',
+      '[fd12:3456::1]',
+      'postgres',
+      '10.0.0.5',
+      '172.20.0.2',
+      '192.168.1.9',
+      'db.local',
+    ];
 
     for (const host of hosts) {
       expect(seedTarget('development', `postgres://u:p@${host}:5432/saudemais`, undefined)).toBe(host);
@@ -311,7 +321,9 @@ describe('seedTarget', () => {
     const remote = 'postgres://u:p@ep-cool-name.sa-east-1.aws.neon.tech/saudemais';
 
     expect(() => seedTarget('development', remote, undefined)).toThrow(/SEED_ALLOW_REMOTE/);
-    expect(() => seedTarget('test', 'postgres://u:p@172.32.0.1/db', undefined)).toThrow(/SEED_ALLOW_REMOTE/);
+    for (const host of ['172.32.0.1', '[2600:1f18::1]', '10.db.example.com', '127.example.com']) {
+      expect(() => seedTarget('test', `postgres://u:p@${host}/db`, undefined)).toThrow(/SEED_ALLOW_REMOTE/);
+    }
     expect(seedTarget('development', remote, undefined, '1')).toBe('ep-cool-name.sa-east-1.aws.neon.tech');
     expect(seedTarget('production', remote, '1')).toBe('ep-cool-name.sa-east-1.aws.neon.tech');
   });

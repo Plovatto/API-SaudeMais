@@ -78,12 +78,12 @@ export interface ActiveSession {
 export class UserRepository {
   constructor(private readonly db: Database) {}
 
-  async hasSessionFrom(email: string, ip: string): Promise<boolean> {
+  async hasSessionFrom(email: string, ip: string, now: Date): Promise<boolean> {
     const [row] = await this.db
       .select({ id: sessions.id })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(users.email, email), sql`${sessions.ip} = ${ip}::inet`))
+      .where(and(eq(users.email, email), sql`${sessions.ip} = ${ip}::inet`, gt(sessions.expiresAt, now)))
       .limit(1);
     return row !== undefined;
   }

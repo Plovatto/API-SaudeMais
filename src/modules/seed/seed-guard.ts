@@ -1,15 +1,15 @@
+import { isIP } from 'node:net';
+
 const LOCAL_SUFFIXES = ['.local', '.localhost', '.internal'];
 const PRIVATE_IPV4 = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
+const PRIVATE_IPV6 = /^(::1$|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/;
 
 function isLocalHost(hostname: string): boolean {
   const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  return (
-    host === 'localhost' ||
-    host === '::1' ||
-    !host.includes('.') ||
-    PRIVATE_IPV4.test(host) ||
-    LOCAL_SUFFIXES.some((suffix) => host.endsWith(suffix))
-  );
+  const version = isIP(host);
+  if (version === 4) return PRIVATE_IPV4.test(host);
+  if (version === 6) return PRIVATE_IPV6.test(host);
+  return host === 'localhost' || !host.includes('.') || LOCAL_SUFFIXES.some((suffix) => host.endsWith(suffix));
 }
 
 export function seedTarget(

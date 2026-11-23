@@ -85,7 +85,7 @@ export class UserService {
   }
 
   knownDevice(email: string, ip: string | undefined): Promise<boolean> {
-    return email && ip && isIP(ip) ? this.repository.hasSessionFrom(email, ip) : Promise.resolve(false);
+    return email && ip && isIP(ip) ? this.repository.hasSessionFrom(email, ip, this.clock.now()) : Promise.resolve(false);
   }
 
   async createAccount(

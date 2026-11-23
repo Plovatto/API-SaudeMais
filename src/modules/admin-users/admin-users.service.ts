@@ -195,9 +195,9 @@ export class AdminUserService {
   }
 
   deleteDoctorProfile(actor: Actor, id: string) {
+    refuseExampleEscalation(actor.actorId);
     return this.change(actor, id, 'doctor_profile.deleted', async (tx, user, defer) => {
       if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
-      refuseExampleEscalation(actor.actorId);
       defer(await this.cancelBookings(tx, user, ['doctor'], actor));
       await this.repository.revokeRole(tx, id, 'doctor');
       return {};
