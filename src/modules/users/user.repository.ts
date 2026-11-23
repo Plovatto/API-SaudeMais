@@ -78,6 +78,16 @@ export interface ActiveSession {
 export class UserRepository {
   constructor(private readonly db: Database) {}
 
+  async hasSessionFrom(email: string, ip: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .innerJoin(users, eq(users.id, sessions.userId))
+      .where(and(eq(users.email, email), sql`${sessions.ip} = ${ip}::inet`))
+      .limit(1);
+    return row !== undefined;
+  }
+
   async createUser(
     { fullName, email, phone, passwordHash, roles, termsVersion, grantedBy, now }: NewUser,
     onCreated?: (tx: Transaction, user: PublicUser) => Promise<AfterCommit>,

@@ -28,7 +28,11 @@ export function createUsersModule({ db, clock, policy, notifications, sessions }
   placeholderPasswordHash().catch(() => undefined);
   const service = new UserService(new UserRepository(db), clock, policy, notifications, sessions);
   const requireAuth = createRequireAuth(service);
-  const router = createUserRouter({ controller: createUserController(service), requireAuth });
+  const router = createUserRouter({
+    controller: createUserController(service),
+    requireAuth,
+    knownDevice: (email, ip) => service.knownDevice(email, ip),
+  });
   const bootstrap = async (admin: InitialAdmin | undefined): Promise<void> => {
     if (!admin) return;
     await service.ensureAccount({ fullName: 'Administrador', ...admin, roles: ['patient', 'admin'] });
