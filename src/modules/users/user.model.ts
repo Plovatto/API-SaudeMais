@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { EARLIEST_BIRTH_DATE, roles } from '../../database/schema/users.js';
 import { registry } from '../../docs/registry.js';
 import { boundedText } from '../../lib/text.js';
-import { invalidBirthDate } from './user.messages.js';
+import { invalidBirthDate, MAX_AGE_YEARS } from './user.messages.js';
 
 const E164 = /^\+[1-9][0-9]{9,14}$/;
 
@@ -95,7 +95,7 @@ export const updateProfileSchema = registry.register(
         ])
         .optional()
         .openapi({
-          description: `Data de nascimento (AAAA-MM-DD), de ${EARLIEST_BIRTH_DATE} até hoje no fuso de São Paulo. Envie \`null\` para remover.`,
+          description: `Data de nascimento (AAAA-MM-DD), de no máximo ${MAX_AGE_YEARS} anos atrás até hoje no fuso de São Paulo (nunca antes de ${EARLIEST_BIRTH_DATE}). Envie \`null\` para remover.`,
           example: '1986-03-12',
         }),
     })
