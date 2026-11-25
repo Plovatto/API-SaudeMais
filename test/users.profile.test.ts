@@ -76,6 +76,34 @@ describe('GET and PATCH /api/me', () => {
     });
   });
 
+  it('accepts a birth date up to 120 years ago and rejects an older one', async () => {
+    const { app } = await buildUsersApp();
+    const token = await registerAndLogin(app);
+
+    const oldest = await request(app).patch('/api/me').set(as(token)).send({ birthDate: '1906-11-20' });
+    const older = await request(app).patch('/api/me').set(as(token)).send({ birthDate: '1906-11-19' });
+
+    expect(oldest.status).toBe(200);
+    expect(older.status).toBe(400);
+    expect(older.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      fields: { birthDate: 'Informe uma data de nascimento de até 120 anos atrás.' },
+    });
+  });
+
+  it('keeps accepting a stored birth date that became older than 120 years', async () => {
+    const { app, clock } = await buildUsersApp();
+    const token = await registerAndLogin(app, { remember: true });
+    await request(app).patch('/api/me').set(as(token)).send({ birthDate: '1906-11-20' });
+
+    clock.advance(48 * HOUR);
+    const kept = await request(app).patch('/api/me').set(as(token)).send({ fullName: 'Nome Novo', birthDate: '1906-11-20' });
+    const changed = await request(app).patch('/api/me').set(as(token)).send({ birthDate: '1906-11-21' });
+
+    expect(kept.status).toBe(200);
+    expect(changed.status).toBe(400);
+  });
+
   it('uses the São Paulo day, not the UTC day, to tell the future', async () => {
     const { app, clock } = await buildUsersApp();
     clock.advance(13 * HOUR);

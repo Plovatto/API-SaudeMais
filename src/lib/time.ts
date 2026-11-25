@@ -46,6 +46,12 @@ export function civilDateIn(timeZone: string, instant: Date): string {
   return civilDate(wallClockIn(timeZone, instant));
 }
 
+export function civilYearsBefore(day: string, years: number): string {
+  const [year = 0, month = 1, date = 1] = day.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year - years, month - 1, date));
+  return shifted.getUTCMonth() === month - 1 ? civilDate(shifted.getTime()) : civilDate(shifted.getTime() - DAY);
+}
+
 export function startOfDayIn(timeZone: string, date: Date): Date {
   const wallClock = wallClockIn(timeZone, date);
   return instantOfWallClock(timeZone, wallClock - (wallClock % DAY));

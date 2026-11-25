@@ -21,6 +21,12 @@ export const invalidBirthDate = 'Informe uma data de nascimento válida.';
 
 export const birthDateInFuture = { birthDate: 'A data de nascimento não pode ser no futuro.' };
 
+export const MAX_AGE_YEARS = 120;
+
+export const birthDateTooOld = {
+  birthDate: `Informe uma data de nascimento de até ${MAX_AGE_YEARS} anos atrás.`,
+};
+
 export const emailConflicts = {
   users_email_key: { code: 'EMAIL_TAKEN', field: 'email', message: 'Este e-mail já está cadastrado.' },
 } satisfies Record<string, FieldConflict>;
