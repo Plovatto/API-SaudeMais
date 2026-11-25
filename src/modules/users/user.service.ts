@@ -7,7 +7,7 @@ import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
-import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDateIn } from '../../lib/time.js';
+import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDateIn, civilYearsBefore } from '../../lib/time.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import type {
   ChangePasswordInput,
@@ -185,8 +185,9 @@ export class UserService {
   async updateProfile(userId: string, { fullName, phone, birthDate }: UpdateProfileInput): Promise<Profile> {
     const today = civilDateIn(CLINIC_TIME_ZONE, this.clock.now());
     if (birthDate && birthDate > today) throw invalidData(birthDateInFuture);
-    if (birthDate && birthDate < `${Number(today.slice(0, 4)) - MAX_AGE_YEARS}${today.slice(4)}`) {
-      throw invalidData(birthDateTooOld);
+    if (birthDate && birthDate < civilYearsBefore(today, MAX_AGE_YEARS)) {
+      const stored = await this.repository.findProfile(userId);
+      if (stored?.birthDate !== birthDate) throw invalidData(birthDateTooOld);
     }
     await this.repository.updateProfile(userId, definedFields({ fullName, phone, birthDate }));
     this.sessions.invalidateUser(userId);

@@ -95,7 +95,7 @@ export const updateProfileSchema = registry.register(
         ])
         .optional()
         .openapi({
-          description: `Data de nascimento (AAAA-MM-DD), de no máximo ${MAX_AGE_YEARS} anos atrás até hoje no fuso de São Paulo (nunca antes de ${EARLIEST_BIRTH_DATE}). Envie \`null\` para remover.`,
+          description: `Data de nascimento (AAAA-MM-DD), de no máximo ${MAX_AGE_YEARS} anos atrás até hoje no fuso de São Paulo. Uma data já salva continua aceita. Envie \`null\` para remover.`,
           example: '1986-03-12',
         }),
     })
