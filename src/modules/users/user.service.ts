@@ -21,6 +21,8 @@ import type {
 } from './user.model.js';
 import {
   birthDateInFuture,
+  birthDateTooOld,
+  MAX_AGE_YEARS,
   currentSession,
   emailConflicts,
   invalidCredentials,
@@ -181,8 +183,10 @@ export class UserService {
   }
 
   async updateProfile(userId: string, { fullName, phone, birthDate }: UpdateProfileInput): Promise<Profile> {
-    if (birthDate && birthDate > civilDateIn(CLINIC_TIME_ZONE, this.clock.now())) {
-      throw invalidData(birthDateInFuture);
+    const today = civilDateIn(CLINIC_TIME_ZONE, this.clock.now());
+    if (birthDate && birthDate > today) throw invalidData(birthDateInFuture);
+    if (birthDate && birthDate < `${Number(today.slice(0, 4)) - MAX_AGE_YEARS}${today.slice(4)}`) {
+      throw invalidData(birthDateTooOld);
     }
     await this.repository.updateProfile(userId, definedFields({ fullName, phone, birthDate }));
     this.sessions.invalidateUser(userId);
