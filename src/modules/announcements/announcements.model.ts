@@ -10,13 +10,14 @@ import { registry } from '../../docs/registry.js';
 import { paginatedSchema, paginationQuery } from '../../lib/pagination.js';
 import { boundedText } from '../../lib/text.js';
 import { areaQuery } from '../notifications/notifications.model.js';
+import { endNotAfterStart } from './announcements.messages.js';
 
 export const MAX_VISIBLE_ANNOUNCEMENTS = 5;
 
 export const announcementStatuses = ['scheduled', 'active', 'ended'] as const;
 export type AnnouncementStatus = (typeof announcementStatuses)[number];
 
-export const endBeforeStart = { path: ['endsAt'], message: 'O fim precisa ser depois do início.' };
+export const endBeforeStart = { path: ['endsAt'], message: endNotAfterStart };
 
 const instant = (description: string, example: string) =>
   z.iso.datetime({ offset: true, error: 'Use data e hora no formato ISO 8601.' }).openapi({ description, example });
