@@ -34,7 +34,7 @@ documentOperation({
   operationId: 'getAdminReportInsights',
   tag: tags.administration.name,
   summary: 'Ver os indicadores de uso',
-  description: `Complementa \`GET /api/admin/reports\` com os mesmos períodos e regras: mapa de calor de horários de maior procura (dia da semana ISO e hora de início no fuso de São Paulo, sem cancelados nem expirados), antecedência dos agendamentos em faixas com a mediana, os ${TOP_DOCTORS} médicos com mais consultas, todas as unidades com agendamentos, contas novas por intervalo e remarcações. Tudo lido no mesmo instante do banco. Só números: nada de dados pessoais. Limite: 30 requisições por minuto por IP.`,
+  description: `Complementa \`GET /api/admin/reports\` com os mesmos períodos e regras: mapa de calor de horários de maior procura (dia da semana ISO e hora de início no fuso de São Paulo, sem cancelados nem expirados), antecedência dos agendamentos em faixas com a mediana, os ${TOP_DOCTORS} médicos com mais consultas, todas as unidades com agendamentos, contas novas por intervalo e remarcações. Tudo lido no mesmo instante do banco. Só números e nomes de médicos e unidades, sem dados de pacientes. Limite: 30 requisições por minuto por IP.`,
   query: reportsQuery,
   success: { status: 200, description: 'Indicadores do período.', schema: adminInsightsSchema },
   errors: { 403: forbiddenResponse },
@@ -46,7 +46,7 @@ documentOperation({
   operationId: 'exportAdminReport',
   tag: tags.administration.name,
   summary: 'Exportar os relatórios',
-  description: `Gera o mesmo relatório de \`GET /api/admin/reports\`, com os mesmos períodos e regras, como arquivo para baixar: \`pdf\` para imprimir (resumo de consultas e exames, série por dia ou semana e especialidades e exames mais procurados, médicos e unidades) ou \`xlsx\` para abrir em planilha (abas Resumo, Série, Especialidades, Exames, Médicos e Unidades, com números, datas e percentuais de verdade). Responde como anexo (\`Content-Disposition: attachment; filename=relatorio_<início>_a_<fim>.<formato>\`). Só números, sem dados pessoais. Limite: 20 arquivos por minuto por IP.`,
+  description: `Gera o mesmo relatório de \`GET /api/admin/reports\`, com os mesmos períodos e regras, como arquivo para baixar: \`pdf\` para imprimir (resumo de consultas e exames, série por dia ou semana e especialidades e exames mais procurados, médicos e unidades) ou \`xlsx\` para abrir em planilha (abas Resumo, Série, Especialidades, Exames, Médicos e Unidades, com números, datas e percentuais de verdade). Responde como anexo (\`Content-Disposition: attachment; filename=relatorio_<início>_a_<fim>.<formato>\`). Só números e nomes de médicos e unidades, sem dados de pacientes. Limite: 20 arquivos por minuto por IP.`,
   query: reportExportQuery,
   success: {
     status: 200,
