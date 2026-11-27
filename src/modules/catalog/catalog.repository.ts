@@ -1,6 +1,7 @@
 import { and, asc, eq, exists, gt, inArray, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
+import type { AuditAction } from '../../database/schema/audit-logs.js';
 import { bookings } from '../../database/schema/bookings.js';
 import { examTypes, settings, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
@@ -272,7 +273,7 @@ export class CatalogRepository {
     if (scope && (await hasActiveFuture(tx, scope, this.clock.now()))) throw new InUseError();
   }
 
-  private createAudited<Row extends { id: string }>(
+  private createAudited<Row extends { id: string; name: string }>(
     entity: CatalogEntity,
     actor: Actor,
     insert: (tx: Transaction) => Promise<Row[]>,
@@ -280,7 +281,13 @@ export class CatalogRepository {
     return this.db.transaction(async (tx) => {
       const [row] = await insert(tx);
       if (!row) throw new Error(`Insert into ${entity} returned no row`);
-      await recordAudit(tx, { ...actor, action: `${entity}.created`, entityType: entity, entityId: row.id });
+      await recordAudit(tx, {
+        ...actor,
+        action: `${entity}.created`,
+        entityType: entity,
+        entityId: row.id,
+        metadata: { name: row.name },
+      });
       return row;
     });
   }
@@ -345,6 +352,7 @@ function sortHours(hours: HourRow[]): HourRow[] {
 }
 
 function changeEntry(entityType: CatalogEntity, entityId: string, changes: Record<string, unknown>) {
-  const action = changes.isActive === false ? 'deactivated' : changes.isActive === true ? 'activated' : 'updated';
-  return { action: `${entityType}.${action}`, entityType, entityId, metadata: { fields: Object.keys(changes) } };
+  const change = changes.isActive === false ? 'deactivated' : changes.isActive === true ? 'activated' : 'updated';
+  const action: AuditAction = `${entityType}.${change}`;
+  return { action, entityType, entityId, metadata: { fields: Object.keys(changes) } };
 }

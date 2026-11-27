@@ -1,10 +1,11 @@
 import { runAfterCommit, type AfterCommit, type Transaction } from '../../database/pg-client.js';
+import type { AuditAction } from '../../database/schema/audit-logs.js';
 import type { Role } from '../../database/schema/users.js';
 import { conflictError, notFound, unprocessableField, type FieldConflict } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
 import { refuseExampleEscalation } from '../../lib/example-account.js';
-import type { Actor } from '../../lib/audit.js';
+import type { Actor, AuditEntry } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { forbidden } from '../../middleware/auth.js';
 import type { BookingSide } from '../bookings/bookings.repository.js';
@@ -128,7 +129,7 @@ export class AdminUserService {
     const user = await this.detail(id);
     if (user.deactivatedAt) throw conflictError(adminConflicts.inactive);
     if (!(await this.repository.isActiveAdmin(this.repository.reader, actor.actorId))) throw forbidden();
-    const audit = { ...actor, action: 'user.password_reset_sent', entityType: 'user', entityId: id };
+    const audit: AuditEntry = { ...actor, action: 'user.password_reset_sent', entityType: 'user', entityId: id };
     if (!(await this.passwordReset.sendLink(user, actor.actorId, audit)))
       throw conflictError(adminConflicts.resetNotSent);
   }
@@ -207,7 +208,7 @@ export class AdminUserService {
   private async change(
     actor: Actor,
     id: string,
-    action: string,
+    action: AuditAction,
     work: (
       tx: Transaction,
       user: LockedUser,

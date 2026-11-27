@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -192,6 +192,17 @@ describe('maintenance', () => {
 
     expect((await run()).purged).toEqual({ ...NOTHING_PURGED, notifications: 1, auditLogs: 1 });
   });
+
+  it('purges old audit logs in batches and counts them all', async () => {
+    const old = later(-181 * DAY);
+    await context.db.execute(sql`
+      insert into audit_logs (actor_type, action, created_at)
+      select 'system', 'policy.updated', ${old.toISOString()}::timestamptz from generate_series(1, 5001)
+    `);
+
+    expect((await run()).purged).toEqual({ ...NOTHING_PURGED, auditLogs: 5001 });
+    expect((await run()).purged).toEqual(NOTHING_PURGED);
+  }, 60_000);
 
   it('purges expired sessions, reset tokens 48 hours after they expire, and old notifications and audit logs', async () => {
     const patientId = await userId(registration().email);

@@ -1,6 +1,6 @@
-import { lt, lte, sql } from 'drizzle-orm';
+import { asc, inArray, lt, lte, sql } from 'drizzle-orm';
 import { logger } from '../config/logger.js';
-import type { Database } from '../database/pg-client.js';
+import type { Database, Transaction } from '../database/pg-client.js';
 import { settings } from '../database/schema/catalog.js';
 import { auditLogs } from '../database/schema/audit-logs.js';
 import { notifications } from '../database/schema/notifications.js';
@@ -16,6 +16,29 @@ import type { NotificationsService } from '../modules/notifications/notification
 const MAINTENANCE_LOCK = 727_004;
 
 const RESET_TOKEN_RETENTION = 48 * HOUR;
+const AUDIT_PURGE_BATCH = 5000;
+
+async function purgeAuditLogs(tx: Transaction, before: Date): Promise<number> {
+  let purged = 0;
+  for (;;) {
+    const batch = await tx
+      .delete(auditLogs)
+      .where(
+        inArray(
+          auditLogs.id,
+          tx
+            .select({ id: auditLogs.id })
+            .from(auditLogs)
+            .where(lt(auditLogs.createdAt, before))
+            .orderBy(asc(auditLogs.createdAt))
+            .limit(AUDIT_PURGE_BATCH),
+        ),
+      )
+      .returning({ id: auditLogs.id });
+    purged += batch.length;
+    if (batch.length < AUDIT_PURGE_BATCH) return purged;
+  }
+}
 
 interface MaintenanceDeps {
   db: Database;
@@ -76,12 +99,7 @@ export function createMaintenance({
               .returning({ id: passwordResetTokens.id }),
           ),
           notifications: oldNotifications.length,
-          auditLogs: await deleted(
-            tx
-              .delete(auditLogs)
-              .where(lt(auditLogs.createdAt, before(retention.auditDays * DAY)))
-              .returning({ id: auditLogs.id }),
-          ),
+          auditLogs: await purgeAuditLogs(tx, before(retention.auditDays * DAY)),
         },
       };
     });

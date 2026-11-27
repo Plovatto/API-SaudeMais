@@ -165,7 +165,7 @@ export class LabIntegrationRepository {
     await tx.insert(examResultVersions).values(version);
   }
 
-  private audit(tx: Transaction, action: string, { id, keyPrefix }: ClientRow, actor: AuditActor) {
+  private audit(tx: Transaction, action: 'created' | 'revoked', { id, keyPrefix }: ClientRow, actor: AuditActor) {
     return recordAudit(tx, {
       ...actor,
       action: `integration_client.${action}`,
