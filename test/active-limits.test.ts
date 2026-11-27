@@ -14,6 +14,10 @@ const DEFAULT_POLICY = {
   maxActiveBookings: 5,
   maxActiveAppointments: 5,
   maxActiveExams: 5,
+  reminderLeadHours: 24,
+  autoCompleteAfterHours: 72,
+  notificationRetentionDays: 90,
+  auditRetentionDays: 180,
 };
 
 let context: Clinic;

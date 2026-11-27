@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bookings, users, type BookingStatus } from '@/database/schema/index.js';
+import { bookings, settings, users, type BookingStatus } from '@/database/schema/index.js';
 import { lockSeen, moveBooking } from '@/modules/bookings/bookings.repository.js';
 import { EXAMPLE_PATIENT } from '@/modules/seed/seed.data.js';
 import { createDoctor, doctorNamed, setupClinic, type Clinic } from './support/doctors.js';
@@ -200,6 +200,16 @@ describe('reminders', () => {
     expect(await remindedAt(soon)).toEqual(context.clock.now());
     expect(await remindedAt(tomorrowLater)).toBeNull();
     expect(await remindedAt(pending)).toBeNull();
+  });
+
+  it('follows the reminder lead time configured in the policy', async () => {
+    await context.db.update(settings).set({ reminderLeadHours: 48 });
+    const inTwoDays = await appointment(PATIENT_EMAIL, 'confirmed', later(47 * HOUR));
+    const tooFar = await appointment(PATIENT_EMAIL, 'confirmed', later(49 * HOUR));
+
+    expect((await runMaintenance()).remindersSent).toBe(1);
+    expect(await remindedAt(inTwoDays)).toEqual(context.clock.now());
+    expect(await remindedAt(tooFar)).toBeNull();
   });
 
   it('covers the gap between two maintenance runs so a reminder is never skipped', async () => {

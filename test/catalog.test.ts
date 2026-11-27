@@ -268,6 +268,10 @@ const fullPolicy = {
   maxActiveBookings: 8,
   maxActiveAppointments: 6,
   maxActiveExams: 4,
+  reminderLeadHours: 48,
+  autoCompleteAfterHours: 24,
+  notificationRetentionDays: 30,
+  auditRetentionDays: 365,
 };
 
 describe('booking policy', () => {
@@ -288,6 +292,10 @@ describe('booking policy', () => {
       maxActiveBookings: 5,
       maxActiveAppointments: 5,
       maxActiveExams: 5,
+      reminderLeadHours: 24,
+      autoCompleteAfterHours: 72,
+      notificationRetentionDays: 90,
+      auditRetentionDays: 180,
       updatedAt: anyText,
     });
   });
