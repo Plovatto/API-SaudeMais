@@ -4,6 +4,7 @@ import type { Database } from '../database/pg-client.js';
 import { createMaintenance } from '../jobs/maintenance.js';
 import { systemClock, type Clock } from '../lib/clock.js';
 import type { MailQueue } from '../mail/index.js';
+import { createAdminAuditModule } from './admin-audit/index.js';
 import { createAdminHomeModule } from './admin-home/index.js';
 import { createAdminReportsModule } from './admin-reports/index.js';
 import { createAdminUsersModule } from './admin-users/index.js';
@@ -96,6 +97,7 @@ export function createModules(deps: ModulesDeps) {
   });
   const examResults = createExamResultsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
+  const adminAudit = createAdminAuditModule({ db: deps.db, requireAuth: users.requireAuth });
   const adminReports = createAdminReportsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const maintenance = createMaintenance({
     db: deps.db,
@@ -119,6 +121,7 @@ export function createModules(deps: ModulesDeps) {
     adminUsers,
     seed,
     adminHome,
+    adminAudit,
     doctorSchedule,
     doctors,
     appointments,
@@ -132,6 +135,7 @@ export function createModules(deps: ModulesDeps) {
       adminUsers.router,
       adminHome.router,
       adminReports.router,
+      adminAudit.router,
       doctorSchedule.router,
       doctors.router,
       appointments.router,
