@@ -6,6 +6,7 @@ import {
   DEFAULT_REPORT_DAYS,
   MAX_DAILY_DAYS,
   rateOf,
+  type AdminInsights,
   reportPeriod,
   type AdminReport,
   type ReportExportQuery,
@@ -21,6 +22,18 @@ const noKindTotals = {
   cancelledBy: { patient: 0, doctor: 0, admin: 0, system: 0 },
 };
 
+const noLeadTime = {
+  sameDay: 0,
+  upTo3Days: 0,
+  upTo7Days: 0,
+  upTo14Days: 0,
+  upTo30Days: 0,
+  over30Days: 0,
+  medianHours: null,
+  rescheduledBookings: 0,
+  reschedules: 0,
+};
+
 const renderers = { pdf: renderReportPdf, xlsx: renderReportXlsx };
 
 const shiftDays = (date: string, days: number) => civilDate(Date.parse(date) + days * DAY);
@@ -31,38 +44,59 @@ export class AdminReportsService {
     private readonly clock: Clock,
   ) {}
 
-  async report(query: ReportsQuery): Promise<AdminReport> {
-    const now = this.clock.now();
+  private periodOf(query: ReportsQuery, now: Date) {
     const to = query.to ?? civilDateIn(CLINIC_TIME_ZONE, now);
     const period = reportPeriod.parse({ from: query.from ?? shiftDays(to, 1 - DEFAULT_REPORT_DAYS), to });
     const length = (Date.parse(period.to) - Date.parse(period.from)) / DAY + 1;
     const days = length > MAX_DAILY_DAYS ? 7 : 1;
-    const { kinds, series, topSpecialties, topExamTypes } = await this.repository.report(
-      civilPeriodIn(CLINIC_TIME_ZONE, period),
-      { from: period.from, days },
-      now,
-    );
+    return {
+      range: civilPeriodIn(CLINIC_TIME_ZONE, period),
+      buckets: { from: period.from, days },
+      period: { ...period, granularity: days === 1 ? ('day' as const) : ('week' as const) },
+      starts: Array.from({ length: Math.ceil(length / days) }, (_, index) => shiftDays(period.from, index * days)),
+    };
+  }
+
+  async report(query: ReportsQuery): Promise<AdminReport> {
+    const now = this.clock.now();
+    const { range, buckets, period, starts } = this.periodOf(query, now);
+    const { kinds, series, topSpecialties, topExamTypes } = await this.repository.report(range, buckets, now);
     const byKind = new Map(kinds.map(({ kind, ...totals }) => [kind, totals]));
     const byBucket = new Map(series.map(({ bucket, ...totals }) => [bucket, totals]));
     const appointments = byKind.get('appointment') ?? noKindTotals;
     return {
-      period: { ...period, granularity: days === 1 ? 'day' : 'week' },
+      period,
       appointments: { ...appointments, noShowRate: rateOf(appointments.noShow, appointments.completed) },
       exams: byKind.get('exam') ?? noKindTotals,
-      series: Array.from({ length: Math.ceil(length / days) }, (_, index) => ({
-        start: shiftDays(period.from, index * days),
-        ...(byBucket.get(index) ?? noStatusTotals),
-      })),
+      series: starts.map((start, index) => ({ start, ...(byBucket.get(index) ?? noStatusTotals) })),
       topSpecialties,
       topExamTypes,
     };
   }
 
+  async insights(query: ReportsQuery): Promise<AdminInsights> {
+    const now = this.clock.now();
+    const { range, buckets, period, starts } = this.periodOf(query, now);
+    const { signups, leadTime, ...rest } = await this.repository.insights(range, buckets, now);
+    const { rescheduledBookings, reschedules, ...lead } = leadTime[0] ?? noLeadTime;
+    const byBucket = new Map(signups.map(({ bucket, total }) => [bucket, total]));
+    return {
+      period,
+      ...rest,
+      leadTime: lead,
+      signups: {
+        total: signups.reduce((total, bucket) => total + bucket.total, 0),
+        series: starts.map((start, index) => ({ start, total: byBucket.get(index) ?? 0 })),
+      },
+      reschedules: { bookings: rescheduledBookings, total: reschedules },
+    };
+  }
+
   async export({ format, ...query }: ReportExportQuery) {
-    const report = await this.report(query);
+    const [report, insights] = await Promise.all([this.report(query), this.insights(query)]);
     return {
       fileName: reportFileName(report, format),
-      content: await renderers[format](report, this.clock.now()),
+      content: await renderers[format](report, insights, this.clock.now()),
     };
   }
 }

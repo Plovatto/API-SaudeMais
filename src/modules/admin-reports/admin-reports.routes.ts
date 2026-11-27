@@ -5,10 +5,12 @@ import { tags } from '../../docs/tags.js';
 import { noStore } from '../../middleware/auth.js';
 import { limitRequests } from '../../middleware/rate-limit.js';
 import {
+  adminInsightsSchema,
   adminReportSchema,
   DEFAULT_REPORT_DAYS,
   exportMediaTypes,
   MAX_REPORT_DAYS,
+  TOP_DOCTORS,
   reportExportQuery,
   reportsQuery,
 } from './admin-reports.model.js';
@@ -28,11 +30,23 @@ documentOperation({
 
 documentOperation({
   method: 'get',
+  path: '/api/admin/reports/insights',
+  operationId: 'getAdminReportInsights',
+  tag: tags.administration.name,
+  summary: 'Ver os indicadores de uso',
+  description: `Complementa \`GET /api/admin/reports\` com os mesmos períodos e regras: mapa de calor de horários de maior procura (dia da semana ISO e hora de início no fuso de São Paulo, sem cancelados nem expirados), antecedência dos agendamentos em faixas com a mediana, os ${TOP_DOCTORS} médicos com mais consultas, todas as unidades com agendamentos, contas novas por intervalo e remarcações. Tudo lido no mesmo instante do banco. Só números: nada de dados pessoais. Limite: 30 requisições por minuto por IP.`,
+  query: reportsQuery,
+  success: { status: 200, description: 'Indicadores do período.', schema: adminInsightsSchema },
+  errors: { 403: forbiddenResponse },
+});
+
+documentOperation({
+  method: 'get',
   path: '/api/admin/reports/export',
   operationId: 'exportAdminReport',
   tag: tags.administration.name,
   summary: 'Exportar os relatórios',
-  description: `Gera o mesmo relatório de \`GET /api/admin/reports\`, com os mesmos períodos e regras, como arquivo para baixar: \`pdf\` para imprimir (resumo de consultas e exames, série por dia ou semana e especialidades e exames mais procurados) ou \`xlsx\` para abrir em planilha (abas Resumo, Série, Especialidades e Exames, com números, datas e percentuais de verdade). Responde como anexo (\`Content-Disposition: attachment; filename=relatorio_<início>_a_<fim>.<formato>\`). Só números, sem dados pessoais. Limite: 20 arquivos por minuto por IP.`,
+  description: `Gera o mesmo relatório de \`GET /api/admin/reports\`, com os mesmos períodos e regras, como arquivo para baixar: \`pdf\` para imprimir (resumo de consultas e exames, série por dia ou semana e especialidades e exames mais procurados, médicos e unidades) ou \`xlsx\` para abrir em planilha (abas Resumo, Série, Especialidades, Exames, Médicos e Unidades, com números, datas e percentuais de verdade). Responde como anexo (\`Content-Disposition: attachment; filename=relatorio_<início>_a_<fim>.<formato>\`). Só números, sem dados pessoais. Limite: 20 arquivos por minuto por IP.`,
   query: reportExportQuery,
   success: {
     status: 200,
@@ -57,6 +71,9 @@ export function createAdminReportsRouter({ service, requireAuth, requireAdmin }:
   const report: RequestHandler = async (req, res) => {
     res.json(await service.report(reportsQuery.parse(req.query)));
   };
+  const insights: RequestHandler = async (req, res) => {
+    res.json(await service.insights(reportsQuery.parse(req.query)));
+  };
   const exportLimit = limitRequests(20);
   const exportReport: RequestHandler = async (req, res) => {
     const { fileName, content } = await service.export(reportExportQuery.parse(req.query));
@@ -64,6 +81,7 @@ export function createAdminReportsRouter({ service, requireAuth, requireAdmin }:
   };
   const router = Router();
   router.get('/api/admin/reports', reportsLimit, noStore, requireAuth, requireAdmin, report);
+  router.get('/api/admin/reports/insights', reportsLimit, noStore, requireAuth, requireAdmin, insights);
   router.get('/api/admin/reports/export', exportLimit, noStore, requireAuth, requireAdmin, exportReport);
   return router;
 }
