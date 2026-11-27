@@ -1,14 +1,14 @@
 import { logger } from '../../config/logger.js';
 import type { EmailTopic } from '../../database/schema/email-preferences.js';
 import type { Clock } from '../../lib/clock.js';
-import { DAY, MINUTE } from '../../lib/time.js';
+import { HOUR, MINUTE } from '../../lib/time.js';
 import type { MailQueue } from '../../mail/index.js';
 import type { Delivery } from '../notifications/notifications.service.js';
 import { topicOf } from './email-notifications.model.js';
 import type { EmailNotificationsRepository } from './email-notifications.repository.js';
 import { noticeEmail, reminderEmail } from './email-notifications.templates.js';
 
-const REMINDER_WINDOW = DAY + 10 * MINUTE;
+const REMINDER_SLACK = 10 * MINUTE;
 
 export class EmailNotifier {
   constructor(
@@ -24,7 +24,8 @@ export class EmailNotifier {
 
   async remindUpcoming(): Promise<number> {
     const now = this.clock.now();
-    const reminders = await this.repository.claimReminders(now, new Date(now.getTime() + REMINDER_WINDOW));
+    const leadHours = await this.repository.reminderLeadHours();
+    const reminders = await this.repository.claimReminders(now, new Date(now.getTime() + leadHours * HOUR + REMINDER_SLACK));
     const dropped = reminders.filter((reminder) => !this.mail.enqueue(reminderEmail(reminder, this.appUrl)));
     if (dropped.length > 0) await this.repository.releaseReminders(dropped.map(({ bookingId }) => bookingId), now);
     return reminders.length - dropped.length;

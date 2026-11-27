@@ -69,6 +69,10 @@ const policyColumns = {
   maxActiveBookings: settings.maxActiveBookings,
   maxActiveAppointments: settings.maxActiveAppointments,
   maxActiveExams: settings.maxActiveExams,
+  reminderLeadHours: settings.reminderLeadHours,
+  autoCompleteAfterHours: settings.autoCompleteAfterHours,
+  notificationRetentionDays: settings.notificationRetentionDays,
+  auditRetentionDays: settings.auditRetentionDays,
   updatedAt: settings.updatedAt,
 };
 

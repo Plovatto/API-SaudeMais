@@ -217,7 +217,7 @@ document({
   operationId: 'adminGetPolicy',
   summary: 'Ver a política de agendamento',
   description:
-    'Janelas de cancelamento tardio, limite de reagendamentos, horizonte, antecedência mínima e limites de agendamentos ativos futuros por paciente (total, consultas e exames). Os limites de segurança, como tentativas de login e de redefinição de senha, ficam fixos no código e não aparecem aqui.',
+    'Janelas de cancelamento tardio, limite de reagendamentos, horizonte, antecedência mínima e limites de agendamentos ativos futuros por paciente (total, consultas e exames), além das rotinas automáticas: antecedência do lembrete por e-mail, prazo para concluir consultas sem desfecho e retenção de notificações e de registros de auditoria. Os limites de segurança, como tentativas de login e de redefinição de senha, ficam fixos no código e não aparecem aqui.',
   success: { status: 200, description: 'Política em vigor.', schema: policySchema },
 });
 document({
@@ -225,7 +225,7 @@ document({
   path: '/api/admin/policy',
   operationId: 'adminUpdatePolicy',
   summary: 'Alterar a política de agendamento',
-  description: `Substitui todos os valores da política e registra \`policy.updated\` na auditoria. Vale para as próximas ações de pacientes e médicos: baixar um limite de agendamentos ativos não cancela nada, só impede novos agendamentos enquanto o paciente estiver no limite. Cada limite de agendamentos ativos fica entre 1 e ${MAX_ACTIVE_LIMIT}. O limite por tipo e o limite total valem juntos, então o menor dos dois é o que bloqueia primeiro.`,
+  description: `Substitui todos os valores da política e registra \`policy.updated\` na auditoria. Vale para as próximas ações de pacientes e médicos: baixar um limite de agendamentos ativos não cancela nada, só impede novos agendamentos enquanto o paciente estiver no limite. Cada limite de agendamentos ativos fica entre 1 e ${MAX_ACTIVE_LIMIT}. O limite por tipo e o limite total valem juntos, então o menor dos dois é o que bloqueia primeiro. As rotinas valem a partir da próxima execução: reduzir a retenção apaga na limpeza seguinte o que ficar mais antigo que o novo prazo, e os registros de auditoria só são apagados depois de \`auditRetentionDays\` dias.`,
   body: policyInputSchema,
   success: { status: 200, description: 'Política atualizada.', schema: policySchema },
 });
