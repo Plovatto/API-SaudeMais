@@ -19,4 +19,5 @@ CREATE TABLE "announcements" (
 --> statement-breakpoint
 ALTER TABLE "announcements" ADD CONSTRAINT "announcements_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "announcements" ADD CONSTRAINT "announcements_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "announcements_active_idx" ON "announcements" USING btree ("starts_at","ends_at");
+CREATE INDEX "announcements_active_idx" ON "announcements" USING btree ("starts_at","ends_at");--> statement-breakpoint
+CREATE TRIGGER announcements_set_updated_at BEFORE UPDATE ON "announcements" FOR EACH ROW EXECUTE FUNCTION set_updated_at();
