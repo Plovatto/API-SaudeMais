@@ -57,8 +57,7 @@ export class AdminReportsService {
     };
   }
 
-  async report(query: ReportsQuery): Promise<AdminReport> {
-    const now = this.clock.now();
+  async report(query: ReportsQuery, now = this.clock.now()): Promise<AdminReport> {
     const { range, buckets, period, starts } = this.periodOf(query, now);
     const { kinds, series, topSpecialties, topExamTypes } = await this.repository.report(range, buckets, now);
     const byKind = new Map(kinds.map(({ kind, ...totals }) => [kind, totals]));
@@ -74,8 +73,7 @@ export class AdminReportsService {
     };
   }
 
-  async insights(query: ReportsQuery): Promise<AdminInsights> {
-    const now = this.clock.now();
+  async insights(query: ReportsQuery, now = this.clock.now()): Promise<AdminInsights> {
     const { range, buckets, period, starts } = this.periodOf(query, now);
     const { signups, leadTime, ...rest } = await this.repository.insights(range, buckets, now);
     const { rescheduledBookings, reschedules, ...lead } = leadTime[0] ?? noLeadTime;
@@ -93,10 +91,11 @@ export class AdminReportsService {
   }
 
   async export({ format, ...query }: ReportExportQuery) {
-    const [report, insights] = await Promise.all([this.report(query), this.insights(query)]);
+    const now = this.clock.now();
+    const [report, insights] = await Promise.all([this.report(query, now), this.insights(query, now)]);
     return {
       fileName: reportFileName(report, format),
-      content: await renderers[format](report, insights, this.clock.now()),
+      content: await renderers[format](report, insights, now),
     };
   }
 }

@@ -1,6 +1,8 @@
 import request from 'supertest';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { DAY } from '@/lib/time.js';
+import { AdminReportsRepository } from '@/modules/admin-reports/admin-reports.repository.js';
+import { AdminReportsService } from '@/modules/admin-reports/admin-reports.service.js';
 import { binary } from './support/binary.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
 import { insertAppointment, insertExam, REPORT_PATIENT as PATIENT } from './support/report-bookings.js';
@@ -238,6 +240,24 @@ describe('GET /api/admin/reports', () => {
 
 describe('GET /api/admin/reports/export', () => {
   const period = { from: '2026-11-10', to: '2026-11-20' };
+
+  it('reads the clock once so the report and the insights share one period', async () => {
+    const repository = new AdminReportsRepository(context.db);
+    const report = vi.spyOn(repository, 'report');
+    const insights = vi.spyOn(repository, 'insights');
+    let current = context.clock.now().getTime();
+    const drifting = {
+      now: () => {
+        current += DAY;
+        return new Date(current);
+      },
+    };
+
+    await new AdminReportsService(repository, drifting).export({ format: 'xlsx' });
+
+    expect(report.mock.calls[0]?.[0]).toEqual(insights.mock.calls[0]?.[0]);
+    expect(report.mock.calls[0]?.[2]).toEqual(insights.mock.calls[0]?.[2]);
+  });
 
   it('downloads the report of the period as a pdf attachment', async () => {
     const response = await exportOf({ ...period, format: 'pdf' }).expect(200);
