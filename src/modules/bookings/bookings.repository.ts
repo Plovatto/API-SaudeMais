@@ -23,7 +23,6 @@ export type BookingSide = 'patient' | 'doctor';
 
 export type Outcome = Extract<BookingStatus, 'completed' | 'no_show'>;
 
-
 export interface Canceller {
   role: CancellerRole;
   userId: string | null;

@@ -36,7 +36,7 @@ export const topicsFor = (owned: readonly Role[]) => emailTopics.filter((topic) 
 
 const topic = z.enum(emailTopics).openapi({
   description:
-    'Assunto do aviso: `booking_reminder` (lembrete cerca de 24 horas antes), `booking_decision` (confirmação, cancelamento ou pedido não confirmado), `exam_result` (resultado disponível), `appointment_request` (pedido novo ou reagendado), `appointment_cancellation` (consulta cancelada pelo paciente ou pela administração) e `user_registration` (conta nova).',
+    'Assunto do aviso: `booking_reminder` (lembrete com a antecedência definida na política em `reminderLeadHours`), `booking_decision` (confirmação, cancelamento ou pedido não confirmado), `exam_result` (resultado disponível), `appointment_request` (pedido novo ou reagendado), `appointment_cancellation` (consulta cancelada pelo paciente ou pela administração) e `user_registration` (conta nova).',
   example: 'booking_reminder',
 });
 
