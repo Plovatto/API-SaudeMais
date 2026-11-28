@@ -46,7 +46,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`BAD_REQUEST\` | 400 ou 415 | Requisição malformada, como parâmetro de URL inválido, charset ou codificação não suportados |
 | \`UNAUTHENTICATED\` | 401 | Rota exige login e o token falta, é inválido ou expirou |
 | \`FORBIDDEN\` | 403 | A conta não tem o perfil exigido pela rota |
-| \`EXAMPLE_ACCOUNT_RESTRICTED\` | 403 | A conta de exemplo não dá nem tira os perfis de médico e de administrador, não cadastra médicos nem administradores, não desativa administradores e não cria integrações de laboratório |
+| \`EXAMPLE_ACCOUNT_RESTRICTED\` | 403 | A conta de exemplo tentou uma alteração que a restauração diária não desfaz; veja Contas de exemplo |
 | \`INVALID_API_KEY\` | 401 | Rota do laboratório sem a chave \`X-Api-Key\` ou com chave inválida ou revogada |
 | \`INVALID_RESET_TOKEN\` | 400 | Link de redefinição de senha inválido, usado ou vencido |
 | \`INVALID_CURRENT_PASSWORD\` | 422 | A senha atual informada na troca de senha está errada |
@@ -126,7 +126,7 @@ O seed (\`npm run db:seed\`) cria uma vez, quando ainda não existem, as contas 
 - Médico, que também é paciente e passa pela escolha de perfil: \`medico@saudemais.test\`, senha \`medico-demo-123\`.
 - Paciente, médico e administrador na mesma conta, para testar os três perfis: \`admin@saudemais.com\`, senha \`completo-demo-123\`.
 
-As contas de paciente e de médico são comuns: seguem as mesmas regras e limites de qualquer conta, nunca são restauradas e o administrador pode editá-las, promovê-las ou desativá-las. A conta com os três perfis aceita qualquer alteração, exceto dar ou tirar os perfis de médico e de administrador, cadastrar médicos ou administradores, desativar administradores e criar integrações de laboratório (\`EXAMPLE_ACCOUNT_RESTRICTED\`), porque isso não seria desfeito pela restauração. Ela volta ao original uma vez por dia quando \`EXAMPLE_ACCOUNT_RESET=true\` e nunca recebe e-mails.
+As contas de paciente e de médico são comuns: seguem as mesmas regras e limites de qualquer conta, nunca são restauradas e o administrador pode editá-las, promovê-las ou desativá-las. A conta com os três perfis aceita qualquer alteração, exceto dar ou tirar os perfis de médico e de administrador, cadastrar usuários, reativar médicos ou administradores, alterar perfis médicos, desativar administradores, trocar a própria senha, renomear ou desativar a unidade e a especialidade do próprio perfil médico e criar integrações de laboratório (\`EXAMPLE_ACCOUNT_RESTRICTED\`), porque isso não seria desfeito pela restauração. Ela volta ao original uma vez por dia quando \`EXAMPLE_ACCOUNT_RESET=true\` e nunca recebe e-mails.
 
 ## Rotinas automáticas
 
