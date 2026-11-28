@@ -8,6 +8,7 @@ export const MAX_REPORT_DAYS = 366;
 export const DEFAULT_REPORT_DAYS = 30;
 export const MAX_DAILY_DAYS = 62;
 export const TOP_ITEMS = 5;
+export const TOP_DOCTORS = 10;
 
 export const reportsQuery = z.strictObject({
   from: civilDay.optional().openapi({
@@ -37,6 +38,15 @@ export const reportExportQuery = reportsQuery.extend({
 });
 
 export const reportPeriod = withPeriodRules(z.object(periodShape), MAX_REPORT_DAYS);
+
+const periodSchema = z.object({
+  from: z.iso.date().openapi({ description: 'Primeiro dia, no fuso de São Paulo.', example: '2026-10-22' }),
+  to: z.iso.date().openapi({ description: 'Último dia, incluído.', example: '2026-11-20' }),
+  granularity: z.enum(['day', 'week']).openapi({
+    description: `Tamanho dos intervalos das séries: dia até ${MAX_DAILY_DAYS} dias de período, semana acima disso.`,
+    example: 'day',
+  }),
+});
 
 const statusTotalsShape = {
   total: countSchema('Todos os agendamentos do período.', 140),
@@ -74,14 +84,7 @@ const rankedSchema = z.object({
 export const adminReportSchema = registry.register(
   'AdminReport',
   z.object({
-    period: z.object({
-      from: z.iso.date().openapi({ description: 'Primeiro dia, no fuso de São Paulo.', example: '2026-10-22' }),
-      to: z.iso.date().openapi({ description: 'Último dia, incluído.', example: '2026-11-20' }),
-      granularity: z.enum(['day', 'week']).openapi({
-        description: `Tamanho dos intervalos da série: dia até ${MAX_DAILY_DAYS} dias de período, semana acima disso.`,
-        example: 'day',
-      }),
-    }),
+    period: periodSchema,
     appointments: kindTotalsSchema
       .extend({
         noShowRate: z.number().min(0).max(1).nullable().openapi({
@@ -114,6 +117,86 @@ export const adminReportSchema = registry.register(
   }),
 );
 
+const outcomeShape = {
+  total: countSchema('Agendamentos do período em qualquer situação.', 42),
+  completed: countSchema('Concluídos.', 30),
+  noShow: countSchema('Faltas registradas.', 4),
+  cancelled: countSchema('Cancelados.', 5),
+};
+
+export const adminInsightsSchema = registry.register(
+  'AdminInsights',
+  z.object({
+    period: periodSchema,
+    heatmap: z
+      .array(
+        z.object({
+          weekday: z.int().min(1).max(7).openapi({ description: 'Dia da semana ISO: 1 é segunda e 7 é domingo.', example: 2 }),
+          hour: z.int().min(0).max(23).openapi({ description: 'Hora cheia do início, no fuso de São Paulo.', example: 9 }),
+          total: countSchema('Agendamentos que começam nesse dia da semana e hora.', 12),
+        }),
+      )
+      .openapi({
+        description:
+          'Agendamentos não cancelados e não expirados do período, por dia da semana e hora de início. Só aparecem as combinações com agendamentos.',
+      }),
+    leadTime: z
+      .object({
+        sameDay: countSchema('Marcados com menos de 24 horas de antecedência.', 10),
+        upTo3Days: countSchema('Marcados com 24 horas a menos de 3 dias de antecedência.', 20),
+        upTo7Days: countSchema('Marcados com 3 a menos de 7 dias de antecedência.', 30),
+        upTo14Days: countSchema('Marcados com 7 a menos de 14 dias de antecedência.', 25),
+        upTo30Days: countSchema('Marcados com 14 a menos de 30 dias de antecedência.', 15),
+        over30Days: countSchema('Marcados com 30 dias ou mais de antecedência.', 5),
+        medianHours: z.number().nonnegative().nullable().openapi({
+          description: 'Mediana da antecedência em horas, com uma casa; nulo sem agendamentos no período.',
+          example: 96.5,
+        }),
+      })
+      .openapi({
+        description:
+          'Antecedência entre o pedido e o início dos agendamentos do período, em qualquer situação, em faixas.',
+      }),
+    doctors: z
+      .array(z.object({ id: z.uuid(), name: z.string().openapi({ example: 'Dra. Ana Ferreira' }), ...outcomeShape }))
+      .openapi({
+        description: `Os ${TOP_DOCTORS} médicos com mais consultas no período, em qualquer situação, da maior para a menor; empates pelo nome.`,
+      }),
+    units: z
+      .array(
+        z.object({
+          id: z.uuid(),
+          name: z.string().openapi({ example: 'Unidade Centro' }),
+          ...outcomeShape,
+          appointments: countSchema('Consultas do período.', 30),
+          exams: countSchema('Exames do período.', 12),
+        }),
+      )
+      .openapi({
+        description: 'Todas as unidades com agendamentos no período, da maior para a menor; empates pelo nome.',
+      }),
+    signups: z
+      .object({
+        total: countSchema('Contas criadas no período.', 18),
+        series: z
+          .array(
+            z.object({
+              start: z.iso.date().openapi({ description: 'Primeiro dia do intervalo.', example: '2026-10-22' }),
+              total: countSchema('Contas criadas no intervalo.', 2),
+            }),
+          )
+          .openapi({ description: 'Contas criadas por intervalo, com os mesmos intervalos da série do relatório.' }),
+      })
+      .openapi({ description: 'Contas novas no período.' }),
+    reschedules: z
+      .object({
+        bookings: countSchema('Agendamentos do período remarcados ao menos uma vez.', 9),
+        total: countSchema('Soma das remarcações desses agendamentos.', 11),
+      })
+      .openapi({ description: 'Remarcações dos agendamentos do período.' }),
+  }),
+);
+
 export function rateOf(part: number, rest: number): number | null {
   const whole = part + rest;
   return whole === 0 ? null : Math.round((part / whole) * 1000) / 1000;
@@ -123,3 +206,4 @@ export type ReportsQuery = z.infer<typeof reportsQuery>;
 export type ReportExportQuery = z.infer<typeof reportExportQuery>;
 export type ReportFormat = ReportExportQuery['format'];
 export type AdminReport = z.infer<typeof adminReportSchema>;
+export type AdminInsights = z.infer<typeof adminInsightsSchema>;

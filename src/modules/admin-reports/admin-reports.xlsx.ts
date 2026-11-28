@@ -2,6 +2,8 @@ import writeXlsxFile, { type Cell, type Row, type Sheet } from 'write-excel-file
 import { BRAND_COLOR } from '../../lib/brand.js';
 import { clinicDateTime } from '../../lib/time.js';
 import {
+  BREAKDOWNS,
+  type ExportInsights,
   periodLabel,
   RANKINGS,
   REPORT_TITLE,
@@ -74,7 +76,7 @@ function seriesSheet(report: AdminReport): Sheet<Buffer> {
   );
 }
 
-export function renderReportXlsx(report: AdminReport, generatedAt: Date): Promise<Buffer> {
+export function renderReportXlsx(report: AdminReport, insights: ExportInsights, generatedAt: Date): Promise<Buffer> {
   const workbook: Workbook = [
     summarySheet(report, generatedAt),
     seriesSheet(report),
@@ -84,6 +86,14 @@ export function renderReportXlsx(report: AdminReport, generatedAt: Date): Promis
         [label, 'Agendamentos'],
         of(report).map(({ name, total }) => [name, { value: total, type: Number }]),
         [36, 16],
+      ),
+    ),
+    ...BREAKDOWNS.map(({ sheet, label, labels, of }) =>
+      tableSheet(
+        sheet,
+        [label, ...labels],
+        of(insights).map(({ name, values }) => [name, ...values.map((value) => ({ value, type: Number }))]),
+        [36, ...labels.map((text) => Math.max(12, text.length + 2))],
       ),
     ),
   ];
