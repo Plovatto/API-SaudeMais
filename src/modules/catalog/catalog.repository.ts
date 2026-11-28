@@ -1,9 +1,17 @@
-import { and, asc, eq, exists, gt, inArray, type SQL } from 'drizzle-orm';
+import { and, asc, eq, exists, gt, inArray, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import type { AuditAction } from '../../database/schema/audit-logs.js';
 import { bookings } from '../../database/schema/bookings.js';
-import { examTypes, settings, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
+import {
+  MAX_ACTIVE_CATALOG_ITEMS,
+  examTypes,
+  settings,
+  specialties,
+  unitExamOffers,
+  unitHours,
+  units,
+} from '../../database/schema/catalog.js';
 import { recordAudit, type Actor } from '../../lib/audit.js';
 import type { Clock } from '../../lib/clock.js';
 import { pageOf, type Page, type Pagination } from '../../lib/pagination.js';
@@ -27,6 +35,13 @@ import { capacityInUse, inUse, type CatalogEntity, type Conflict } from './catal
 
 export type { Actor };
 type ExamTypeStatus = 'missing' | 'inactive' | 'active';
+
+export class CatalogLimitError extends Error {
+  constructor(readonly entity: CatalogEntity) {
+    super('Catalog limit reached');
+    this.name = 'CatalogLimitError';
+  }
+}
 
 export class InUseError extends Error {
   constructor(readonly conflict: Conflict = inUse) {
@@ -77,17 +92,42 @@ const policyColumns = {
   updatedAt: settings.updatedAt,
 };
 
+const LIMIT_LOCK_NAMESPACE = 727_005;
+
 interface Lockable {
   table: PgTable;
   id: AnyPgColumn;
   name: AnyPgColumn<{ data: string; notNull: true }>;
   booked: AnyPgColumn;
+  isActive: AnyPgColumn;
+  limitLock: number;
 }
 
 const lockable: Record<CatalogEntity, Lockable> = {
-  specialty: { table: specialties, id: specialties.id, name: specialties.name, booked: bookings.specialtyId },
-  unit: { table: units, id: units.id, name: units.name, booked: bookings.unitId },
-  exam_type: { table: examTypes, id: examTypes.id, name: examTypes.name, booked: bookings.examTypeId },
+  specialty: {
+    table: specialties,
+    id: specialties.id,
+    name: specialties.name,
+    booked: bookings.specialtyId,
+    isActive: specialties.isActive,
+    limitLock: 1,
+  },
+  unit: {
+    table: units,
+    id: units.id,
+    name: units.name,
+    booked: bookings.unitId,
+    isActive: units.isActive,
+    limitLock: 2,
+  },
+  exam_type: {
+    table: examTypes,
+    id: examTypes.id,
+    name: examTypes.name,
+    booked: bookings.examTypeId,
+    isActive: examTypes.isActive,
+    limitLock: 3,
+  },
 };
 
 export type CurrentNameGuard = (currentName: string) => void;
@@ -102,6 +142,7 @@ export class CatalogRepository {
   constructor(
     private readonly db: Database,
     private readonly clock: Clock,
+    private readonly activeLimit: number = MAX_ACTIVE_CATALOG_ITEMS,
   ) {}
 
   activeSpecialties(): Promise<Specialty[]> {
@@ -306,12 +347,20 @@ export class CatalogRepository {
     if (scope && (await hasActiveFuture(tx, scope, this.clock.now()))) throw new InUseError();
   }
 
+  private async ensureRoom(tx: Transaction, entity: CatalogEntity): Promise<void> {
+    const { table, isActive, limitLock } = lockable[entity];
+    await tx.execute(sql`select pg_advisory_xact_lock(${LIMIT_LOCK_NAMESPACE}, ${limitLock})`);
+    const active = await tx.$count(table, eq(isActive, true));
+    if (active >= this.activeLimit) throw new CatalogLimitError(entity);
+  }
+
   private createAudited<Row extends { id: string; name: string }>(
     entity: CatalogEntity,
     actor: Actor,
     insert: (tx: Transaction) => Promise<Row[]>,
   ): Promise<Row> {
     return this.db.transaction(async (tx) => {
+      await this.ensureRoom(tx, entity);
       const [row] = await insert(tx);
       if (!row) throw new Error(`Insert into ${entity} returned no row`);
       await recordAudit(tx, {
@@ -334,9 +383,10 @@ export class CatalogRepository {
     guard = allowAny,
   ): Promise<Row | undefined> {
     return this.db.transaction(async (tx) => {
-      const currentName = await lockRow(tx, entity, id);
-      if (currentName === undefined) return undefined;
-      guard(currentName);
+      const current = await lockRow(tx, entity, id);
+      if (!current) return undefined;
+      guard(current.name);
+      if (!current.isActive && changes.isActive === true) await this.ensureRoom(tx, entity);
       const [row] = await update(tx);
       if (changes.isActive === false) await this.ensureUnused(tx, eq(lockable[entity].booked, id));
       if (row) await recordAudit(tx, { ...actor, ...changeEntry(entity, id, changes) });
@@ -360,17 +410,24 @@ export class CatalogRepository {
           rows.map((row) => row.id),
         ),
       );
-    return rows.map((row) => ({
-      ...row,
-      hours: sortHours(hours.filter((hour) => hour.unitId === row.id).map(({ unitId: _unitId, ...hour }) => hour)),
-    }));
+    const hoursByUnit = new Map<string, HourRow[]>();
+    for (const { unitId, ...hour } of hours) {
+      const unitHoursList = hoursByUnit.get(unitId);
+      if (unitHoursList) unitHoursList.push(hour);
+      else hoursByUnit.set(unitId, [hour]);
+    }
+    return rows.map((row) => ({ ...row, hours: sortHours(hoursByUnit.get(row.id) ?? []) }));
   }
 }
 
-async function lockRow(tx: Transaction, entity: CatalogEntity, id: string): Promise<string | undefined> {
-  const { table, id: idColumn, name } = lockable[entity];
-  const [row] = await tx.select({ name }).from(table).where(eq(idColumn, id)).for('no key update');
-  return row?.name;
+async function lockRow(
+  tx: Transaction,
+  entity: CatalogEntity,
+  id: string,
+): Promise<{ name: string; isActive: boolean } | undefined> {
+  const { table, id: idColumn, name, isActive } = lockable[entity];
+  const [row] = await tx.select({ name, isActive }).from(table).where(eq(idColumn, id)).for('no key update');
+  return row ? { name: row.name, isActive: Boolean(row.isActive) } : undefined;
 }
 
 async function replaceHours(tx: Transaction, unitId: string, hours: HourRow[]): Promise<void> {

@@ -35,6 +35,9 @@ export const auditActions = [
   'exam_result.created',
   'exam_result.amended',
   'exam_result.read',
+  'announcement.created',
+  'announcement.updated',
+  'announcement.deleted',
 ] as const;
 export type AuditAction = (typeof auditActions)[number];
 
