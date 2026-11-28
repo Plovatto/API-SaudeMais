@@ -11,7 +11,7 @@ import { as, buildUsersApp, createAdmin, createPatient, login, START } from './s
 
 const credentials = { email: EXAMPLE_MULTI.email, password: EXAMPLE_MULTI.password };
 
-async function exampleToken(app: Awaited<ReturnType<typeof seeded>>['app']) {
+async function exampleToken(app: Seeded['app']) {
   return ((await login(app, credentials)).body as { token: string }).token;
 }
 
@@ -103,9 +103,9 @@ describe('example account', () => {
     expect(me.status).toBe(401);
   });
 
-  it('cannot hand out or take away doctor and admin profiles or create lab integrations', async () => {
+  it('cannot hand out or take away doctor and admin profiles or create or revoke lab integrations', async () => {
     const context = await seeded();
-    const token = ((await login(context.app, credentials)).body as { token: string }).token;
+    const token = await exampleToken(context.app);
     const visitor = await createPatient(context, 'visitante@email.com');
     const [patient] = (await context.db.execute(sql`select id from users where email = 'visitante@email.com'`))
       .rows as { id: string }[];
@@ -141,7 +141,14 @@ describe('example account', () => {
       await post(`/api/admin/users/${patient?.id}/doctor-profile`, doctorProfile),
       await request(context.app).delete(`/api/admin/users/${doctor?.id}/doctor-profile`).set(as(token)),
       await post('/api/admin/users', { ...person, role: 'patient' }),
+      await post(`/api/admin/users/${doctor?.id}/deactivate`),
     );
+
+    const [labClient] = (await context.db.execute(sql`select id from integration_clients limit 1`)).rows as {
+      id: string;
+    }[];
+    expect(labClient).toBeDefined();
+    refused.push(await post(`/api/admin/integration-clients/${labClient?.id}/revoke`));
 
     const patchProfile = (id: string | undefined, body: object) =>
       request(context.app).patch(`/api/admin/users/${id}/doctor-profile`).set(as(token)).send(body);
@@ -168,13 +175,15 @@ describe('example account', () => {
     expect(reactivatedAdmins.rows).toHaveLength(0);
     const me = await request(context.app).get('/api/me').set(as(visitor));
     expect((me.body as { roles: string[] }).roles).toEqual(['patient']);
+    const revoked = await context.db.execute(sql`select 1 from integration_clients where revoked_at is not null`);
+    expect(revoked.rows).toHaveLength(0);
     const clients = await context.db.execute(sql`select 1 from integration_clients where name = 'Laboratório Visitante'`);
     expect(clients.rows).toHaveLength(0);
   });
 
   it('still deactivates and reactivates patients', async () => {
     const context = await seeded();
-    const token = ((await login(context.app, credentials)).body as { token: string }).token;
+    const token = await exampleToken(context.app);
     await createPatient(context, 'visitante@email.com');
     const [patient] = (await context.db.execute(sql`select id from users where email = 'visitante@email.com'`))
       .rows as { id: string }[];

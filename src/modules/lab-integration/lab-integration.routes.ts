@@ -81,7 +81,7 @@ documentOperation({
     'Revoga a chave na hora: as próximas chamadas com ela recebem `INVALID_API_KEY`. Os resultados já publicados continuam guardados. Revogar de novo não muda nada e devolve a integração como está. A revogação fica na auditoria. Limite: 120 requisições por minuto por IP.',
   params: idParams,
   success: { status: 200, description: 'Integração revogada.', schema: integrationClientSchema },
-  errors: { 403: forbiddenResponse, 404: notFoundResponse(clientNotFound) },
+  errors: { 403: exampleRestrictedResponse, 404: notFoundResponse(clientNotFound) },
 });
 
 documentOperation({
