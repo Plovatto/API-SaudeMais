@@ -58,7 +58,7 @@ export class AdminUserService {
     actor: Actor,
     { fullName, email, phone, role, doctorProfile }: CreateUserInput,
   ): Promise<AdminUserDetail> {
-    if (role !== 'patient') refuseExampleEscalation(actor.actorId);
+    refuseExampleEscalation(actor.actorId);
     const passwordHash = await unusablePasswordHash();
     const roles = [...new Set<Role>(['patient', role])];
     const user = await withConstraintConflicts(
@@ -107,7 +107,7 @@ export class AdminUserService {
       async (tx, user, defer) => {
         if (id === actor.actorId) throw conflictError(adminConflicts.selfOrLastAdmin);
         if (user.deactivatedAt) return undefined;
-        if (user.roles.includes('admin')) refuseExampleEscalation(actor.actorId);
+        if (user.roles.some((role) => role !== 'patient')) refuseExampleEscalation(actor.actorId);
         await this.ensureAnotherAdmin(tx, user);
         defer(await this.cancelBookings(tx, user, ['patient', 'doctor'], actor));
         await this.repository.setDeactivated(tx, id, this.clock.now());
@@ -120,6 +120,7 @@ export class AdminUserService {
   reactivate(actor: Actor, id: string) {
     return this.change(actor, id, 'user.reactivated', async (tx, user) => {
       if (!user.deactivatedAt) return undefined;
+      if (user.roles.some((role) => role !== 'patient')) refuseExampleEscalation(actor.actorId);
       await this.repository.setDeactivated(tx, id, null);
       return {};
     });
@@ -173,6 +174,7 @@ export class AdminUserService {
   }
 
   updateDoctorProfile(actor: Actor, id: string, input: UpdateDoctorProfileInput) {
+    refuseExampleEscalation(actor.actorId);
     return this.change(actor, id, 'doctor_profile.updated', async (tx, user) => {
       if (!user.roles.includes('doctor')) throw notFound(doctorProfileNotFound);
       const changes = definedFields(input);

@@ -3,7 +3,13 @@ import { idParams } from '../../lib/params.js';
 import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import { MAX_ACTIVE_CATALOG_ITEMS, MAX_ACTIVE_LIMIT } from '../../database/schema/catalog.js';
-import { conflictResponse, errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
+import {
+  conflictResponse,
+  errorResponse,
+  exampleRestrictedResponse,
+  forbiddenResponse,
+  notFoundResponse,
+} from '../../docs/common-schemas.js';
 import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { paginationQuery } from '../../lib/pagination.js';
@@ -62,15 +68,16 @@ interface Operation extends Omit<OperationDoc, 'tag' | 'errors' | 'success'> {
   entity?: CatalogEntity;
   success: { status: 200 | 201; description: string; schema: z.ZodType };
   conflict?: ResponseConfig;
+  restricted?: boolean;
   limited?: boolean;
 }
 
-function document({ admin = true, entity = 'unit', conflict, limited, ...operation }: Operation) {
+function document({ admin = true, entity = 'unit', conflict, restricted, limited, ...operation }: Operation) {
   documentOperation({
     ...operation,
     tag: admin ? tags.administration.name : tags.catalog.name,
     errors: {
-      ...(admin && { 403: forbiddenResponse }),
+      ...(admin && { 403: restricted ? exampleRestrictedResponse : forbiddenResponse }),
       ...(operation.params && { 404: notFoundOf(entity) }),
       ...(conflict && { 409: conflict }),
       ...(limited && { 422: limitResponse(entity) }),
@@ -142,6 +149,7 @@ document({
   body: updateSpecialtySchema,
   success: { status: 200, description: 'Especialidade atualizada.', schema: specialtySchema },
   conflict: conflictResponse(uniqueConflicts.specialties_name_key, councilInUse, inUse),
+  restricted: true,
 });
 document({
   method: 'get',
@@ -174,6 +182,7 @@ document({
   body: updateUnitSchema,
   success: { status: 200, description: 'Unidade atualizada.', schema: unitSchema },
   conflict: conflictResponse(uniqueConflicts.units_name_key, inUse),
+  restricted: true,
 });
 document({
   method: 'get',

@@ -78,6 +78,7 @@ export class LabIntegrationService {
   }
 
   async revokeClient(id: string, actor: Actor): Promise<IntegrationClient> {
+    refuseExampleEscalation(actor.actorId);
     const client = await this.repository.revokeClient(id, actor, this.clock.now());
     if (!client) throw notFound(clientNotFound);
     return client;

@@ -4,12 +4,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMaintenance } from '@/jobs/maintenance.js';
 import type { BookingsService } from '@/modules/bookings/bookings.service.js';
 import type { NotificationsService } from '@/modules/notifications/notifications.service.js';
-import { EXAMPLE_MULTI, EXAMPLE_MULTI_ID } from '@/modules/seed/seed.data.js';
+import { EXAMPLE_MULTI, EXAMPLE_MULTI_ID, EXAMPLE_MULTI_PROFILE } from '@/modules/seed/seed.data.js';
 import { createTestDb } from './support/create-test-db.js';
 import { fixedClock } from './support/fixed-clock.js';
 import { as, buildUsersApp, createAdmin, createPatient, login, START } from './support/users.js';
 
 const credentials = { email: EXAMPLE_MULTI.email, password: EXAMPLE_MULTI.password };
+
+async function exampleToken(app: Seeded['app']) {
+  return ((await login(app, credentials)).body as { token: string }).token;
+}
+
+type Seeded = Awaited<ReturnType<typeof seeded>>;
+
+async function idOf({ db }: Seeded, table: 'units' | 'specialties', name: string) {
+  const { rows } = await db.execute<{ id: string }>(sql`select id from ${sql.identifier(table)} where name = ${name}`);
+  return rows[0]?.id;
+}
+
+function expectRestricted(response: request.Response) {
+  expect(response.status).toBe(403);
+  expect(response.body).toMatchObject({ code: 'EXAMPLE_ACCOUNT_RESTRICTED' });
+}
 
 async function seeded() {
   const context = await buildUsersApp();
@@ -87,9 +103,9 @@ describe('example account', () => {
     expect(me.status).toBe(401);
   });
 
-  it('cannot hand out or take away doctor and admin profiles or create lab integrations', async () => {
+  it('cannot hand out or take away doctor and admin profiles or create or revoke lab integrations', async () => {
     const context = await seeded();
-    const token = ((await login(context.app, credentials)).body as { token: string }).token;
+    const token = await exampleToken(context.app);
     const visitor = await createPatient(context, 'visitante@email.com');
     const [patient] = (await context.db.execute(sql`select id from users where email = 'visitante@email.com'`))
       .rows as { id: string }[];
@@ -124,17 +140,60 @@ describe('example account', () => {
       await post('/api/admin/users', { ...person, email: 'medico.visitante@email.com', role: 'doctor', doctorProfile }),
       await post(`/api/admin/users/${patient?.id}/doctor-profile`, doctorProfile),
       await request(context.app).delete(`/api/admin/users/${doctor?.id}/doctor-profile`).set(as(token)),
+      await post('/api/admin/users', { ...person, role: 'patient' }),
+      await post(`/api/admin/users/${doctor?.id}/deactivate`),
+    );
+
+    const [labClient] = (await context.db.execute(sql`select id from integration_clients limit 1`)).rows as {
+      id: string;
+    }[];
+    expect(labClient).toBeDefined();
+    refused.push(await post(`/api/admin/integration-clients/${labClient?.id}/revoke`));
+
+    const patchProfile = (id: string | undefined, body: object) =>
+      request(context.app).patch(`/api/admin/users/${id}/doctor-profile`).set(as(token)).send(body);
+    refused.push(
+      await patchProfile(EXAMPLE_MULTI_ID, { registryNumber: '777777' }),
+      await patchProfile(doctor?.id, { registryNumber: '888888' }),
+    );
+
+    await context.db.execute(sql`update users set deactivated_at = now() where id in (${admin?.id}, ${doctor?.id})`);
+    refused.push(
+      await post(`/api/admin/users/${admin?.id}/reactivate`),
+      await post(`/api/admin/users/${doctor?.id}/reactivate`),
     );
 
     for (const response of refused) {
       expect(response.status).toBe(403);
       expect(response.body).toMatchObject({ code: 'EXAMPLE_ACCOUNT_RESTRICTED' });
     }
-    expect((await post('/api/admin/users', { ...person, role: 'patient' })).status).toBe(201);
+    const created = await context.db.execute(sql`select 1 from users where email = ${person.email}`);
+    expect(created.rows).toHaveLength(0);
+    const reactivatedAdmins = await context.db.execute(
+      sql`select 1 from users where id in (${admin?.id}, ${doctor?.id}) and deactivated_at is null`,
+    );
+    expect(reactivatedAdmins.rows).toHaveLength(0);
     const me = await request(context.app).get('/api/me').set(as(visitor));
     expect((me.body as { roles: string[] }).roles).toEqual(['patient']);
+    const revoked = await context.db.execute(sql`select 1 from integration_clients where revoked_at is not null`);
+    expect(revoked.rows).toHaveLength(0);
     const clients = await context.db.execute(sql`select 1 from integration_clients where name = 'Laboratório Visitante'`);
     expect(clients.rows).toHaveLength(0);
+  });
+
+  it('still deactivates and reactivates patients', async () => {
+    const context = await seeded();
+    const token = await exampleToken(context.app);
+    await createPatient(context, 'visitante@email.com');
+    const [patient] = (await context.db.execute(sql`select id from users where email = 'visitante@email.com'`))
+      .rows as { id: string }[];
+    const post = (path: string) => request(context.app).post(path).set(as(token));
+
+    expect((await post(`/api/admin/users/${patient?.id}/deactivate`)).status).toBe(200);
+    const response = await post(`/api/admin/users/${patient?.id}/reactivate`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ deactivatedAt: null });
   });
 
   it('is created again when a visitor removed it', async () => {
@@ -148,21 +207,112 @@ describe('example account', () => {
     expect((await login(context.app, credentials)).status).toBe(200);
   });
 
-  it('does not touch another account that took its e-mail', async () => {
+  it('does not touch another account that took its e-mail and fails so the next run tries again', async () => {
     const context = await seeded();
     await context.db.execute(sql`update users set email = 'livre@pessoa.com' where id = ${EXAMPLE_MULTI_ID}`);
     await context.db.execute(sql`
       insert into users (full_name, email, password_hash) values ('Outra Pessoa', ${EXAMPLE_MULTI.email}, 'x')
     `);
-    const warnings: string[] = [];
 
-    expect(await context.modules.seed.service.restoreExample(warnings)).toBe(false);
+    await expect(context.modules.seed.service.restoreExample()).rejects.toThrow();
 
-    expect(warnings).toHaveLength(1);
+    expect(await context.modules.seed.service.seedMultiProfile()).toHaveLength(1);
     const other = await context.db.execute<{ full_name: string }>(
       sql`select full_name from users where email = ${EXAMPLE_MULTI.email}`,
     );
     expect(other.rows[0]?.full_name).toBe('Outra Pessoa');
+  });
+
+  it('cannot change its own password', async () => {
+    const context = await seeded();
+    const token = await exampleToken(context.app);
+
+    const response = await request(context.app)
+      .post('/api/me/password')
+      .set(as(token))
+      .send({ currentPassword: EXAMPLE_MULTI.password, password: 'outra-senha-123', passwordConfirmation: 'outra-senha-123' });
+
+    expectRestricted(response);
+    expect((await login(context.app, credentials)).status).toBe(200);
+  });
+
+  it('cannot rename or deactivate the unit and specialty of its doctor profile', async () => {
+    const context = await seeded();
+    const token = await exampleToken(context.app);
+    const patch = (path: string, body: object) => request(context.app).patch(path).set(as(token)).send(body);
+    const unit = `/api/admin/units/${await idOf(context, 'units', EXAMPLE_MULTI_PROFILE.unit)}`;
+    const specialty = `/api/admin/specialties/${await idOf(context, 'specialties', EXAMPLE_MULTI_PROFILE.specialty)}`;
+
+    for (const response of [
+      await patch(unit, { isActive: false }),
+      await patch(unit, { name: 'Unidade Visitante' }),
+      await patch(specialty, { isActive: false }),
+      await patch(specialty, { name: 'Especialidade Visitante' }),
+    ]) {
+      expectRestricted(response);
+    }
+
+    expect((await patch(unit, { phone: '+551100001111' })).status).toBe(200);
+    expect((await patch(specialty, { appointmentDurationMin: 20 })).status).toBe(200);
+    const other = `/api/admin/units/${await idOf(context, 'units', 'Unidade Central')}`;
+    expect((await patch(other, { name: 'Unidade Centro' })).status).toBe(200);
+  });
+
+  it('reactivates the unit and specialty of its doctor profile', async () => {
+    const context = await seeded();
+    await context.db.execute(sql`update units set is_active = false where name = ${EXAMPLE_MULTI_PROFILE.unit}`);
+    await context.db.execute(
+      sql`update specialties set is_active = false where name = ${EXAMPLE_MULTI_PROFILE.specialty}`,
+    );
+
+    expect(await context.modules.seed.service.restoreExample()).toBe(true);
+
+    const active = await context.db.execute(sql`
+      select 1 from units u, specialties s
+      where u.name = ${EXAMPLE_MULTI_PROFILE.unit} and u.is_active
+        and s.name = ${EXAMPLE_MULTI_PROFILE.specialty} and s.is_active
+    `);
+    expect(active.rows).toHaveLength(1);
+    expect(await context.modules.seed.service.restoreExample()).toBe(false);
+  });
+
+  it('takes its registry back when it is free again', async () => {
+    const context = await seeded();
+    await context.db.execute(sql`update doctor_profiles set registry_number = '777777' where user_id = ${EXAMPLE_MULTI_ID}`);
+
+    expect(await context.modules.seed.service.restoreExample()).toBe(true);
+
+    const registry = await context.db.execute<{ registry_number: string }>(
+      sql`select registry_number from doctor_profiles where user_id = ${EXAMPLE_MULTI_ID}`,
+    );
+    expect(registry.rows[0]?.registry_number).toBe(EXAMPLE_MULTI_PROFILE.registryNumber);
+  });
+
+  it('still resets password, profiles and sessions when another doctor holds its registry', async () => {
+    const context = await seeded();
+    const token = await exampleToken(context.app);
+    const [doctor] = (
+      await context.db.execute(sql`select user_id as id from doctor_profiles where user_id <> ${EXAMPLE_MULTI_ID} limit 1`)
+    ).rows as { id: string }[];
+    await context.db.execute(sql`update doctor_profiles set registry_number = '777777' where user_id = ${EXAMPLE_MULTI_ID}`);
+    await context.db.execute(sql`
+      update doctor_profiles set registry_number = ${EXAMPLE_MULTI_PROFILE.registryNumber} where user_id = ${doctor?.id}
+    `);
+    await context.db.execute(sql`update users set password_hash = 'x' where id = ${EXAMPLE_MULTI_ID}`);
+    await context.db.execute(sql`delete from user_roles where user_id = ${EXAMPLE_MULTI_ID} and role = 'admin'`);
+    const warnings: string[] = [];
+
+    expect(await context.modules.seed.service.restoreExample(warnings)).toBe(true);
+
+    expect(warnings).toHaveLength(1);
+    expect((await request(context.app).get('/api/me').set(as(token))).status).toBe(401);
+    const response = await login(context.app, credentials);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ user: { roles: ['admin', 'doctor', 'patient'] } });
+    const holder = await context.db.execute<{ registry_number: string }>(
+      sql`select registry_number from doctor_profiles where user_id = ${doctor?.id}`,
+    );
+    expect(holder.rows[0]?.registry_number).toBe(EXAMPLE_MULTI_PROFILE.registryNumber);
   });
 
   it('never sends e-mails to it, even a password reset link', async () => {

@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, notInArray } from 'drizzle-orm';
+import { and, count, eq, isNull, ne, notInArray } from 'drizzle-orm';
 import type { Database } from '../../database/pg-client.js';
 import { bookingEvents, bookings } from '../../database/schema/bookings.js';
 import { examTypes, specialties, unitExamOffers, unitHours, units } from '../../database/schema/catalog.js';
@@ -45,6 +45,8 @@ export interface ExampleAccountSpec {
   registryNumber: string;
   registryUf: string;
 }
+
+const profileKey = { userId: doctorProfiles.userId };
 
 export interface SampleBooking {
   booking: Omit<typeof bookings.$inferInsert, 'examTypeId' | 'lane'>;
@@ -120,8 +122,10 @@ export class SeedRepository {
     return { ...user, roles: roleRows.map(({ role }) => role).sort(), profile, preferences: preferences?.total ?? 0 };
   }
 
-  restoreExample(spec: ExampleAccountSpec, now: Date): Promise<void> {
+  restoreExample(spec: ExampleAccountSpec, now: Date): Promise<boolean> {
     return this.db.transaction(async (tx) => {
+      await tx.update(specialties).set({ isActive: true }).where(eq(specialties.id, spec.specialtyId));
+      await tx.update(units).set({ isActive: true }).where(eq(units.id, spec.unitId));
       const account = {
         fullName: spec.fullName,
         email: spec.email,
@@ -136,25 +140,41 @@ export class SeedRepository {
         .insert(users)
         .values({ id: spec.id, ...account })
         .onConflictDoUpdate({ target: users.id, set: account });
-      await tx.delete(userRoles).where(and(eq(userRoles.userId, spec.id), notInArray(userRoles.role, [...spec.roles])));
-      await tx
-        .insert(userRoles)
-        .values(spec.roles.map((role) => ({ userId: spec.id, role, grantedAt: now })))
-        .onConflictDoNothing();
-      const profile = {
+      const [registryHolder] = await tx
+        .select({ userId: doctorProfiles.userId })
+        .from(doctorProfiles)
+        .where(
+          and(
+            eq(doctorProfiles.council, spec.council),
+            eq(doctorProfiles.registryUf, spec.registryUf),
+            eq(doctorProfiles.registryNumber, spec.registryNumber),
+            ne(doctorProfiles.userId, spec.id),
+          ),
+        )
+        .for('update');
+      const place = {
         specialtyId: spec.specialtyId,
         council: spec.council,
         unitId: spec.unitId,
-        registryNumber: spec.registryNumber,
-        registryUf: spec.registryUf,
         appointmentDurationMin: null,
       };
+      const profile = { ...place, registryNumber: spec.registryNumber, registryUf: spec.registryUf };
+      const saved = registryHolder
+        ? await tx.update(doctorProfiles).set(place).where(eq(doctorProfiles.userId, spec.id)).returning(profileKey)
+        : await tx
+            .insert(doctorProfiles)
+            .values({ userId: spec.id, ...profile })
+            .onConflictDoUpdate({ target: doctorProfiles.userId, set: profile })
+            .returning(profileKey);
+      const roles = saved.length > 0 ? [...spec.roles] : spec.roles.filter((role) => role !== 'doctor');
+      await tx.delete(userRoles).where(and(eq(userRoles.userId, spec.id), notInArray(userRoles.role, roles)));
       await tx
-        .insert(doctorProfiles)
-        .values({ userId: spec.id, ...profile })
-        .onConflictDoUpdate({ target: doctorProfiles.userId, set: profile });
+        .insert(userRoles)
+        .values(roles.map((role) => ({ userId: spec.id, role, grantedAt: now })))
+        .onConflictDoNothing();
       await tx.delete(sessions).where(eq(sessions.userId, spec.id));
       await tx.delete(emailPreferences).where(eq(emailPreferences.userId, spec.id));
+      return registryHolder === undefined;
     });
   }
 

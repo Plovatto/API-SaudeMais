@@ -6,6 +6,7 @@ import { unauthenticated } from '../../middleware/auth.js';
 import type { Clock } from '../../lib/clock.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import { definedFields } from '../../lib/defined.js';
+import { refuseExampleEscalation } from '../../lib/example-account.js';
 import { isUniqueViolation } from '../../lib/pg-errors.js';
 import { CLINIC_TIME_ZONE, DAY, HOUR, MINUTE, civilDateIn, civilYearsBefore } from '../../lib/time.js';
 import type { NotificationsService } from '../notifications/notifications.service.js';
@@ -195,6 +196,7 @@ export class UserService {
   }
 
   async changePassword({ sessionId, user }: AuthContext, { currentPassword, password }: ChangePasswordInput) {
+    refuseExampleEscalation(user.id);
     const now = this.clock.now();
     const stored = await this.repository.findPasswordHash(user.id);
     if (!stored || !(await verifyPassword(currentPassword, stored))) {

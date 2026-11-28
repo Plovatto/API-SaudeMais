@@ -1,6 +1,8 @@
 import { conflictError, notFound, unprocessable, type AppError } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
+import { refuseExampleEscalation } from '../../lib/example-account.js';
 import type { Pagination } from '../../lib/pagination.js';
+import { EXAMPLE_MULTI_PROFILE } from '../seed/seed.data.js';
 import type {
   CreateExamTypeInput,
   CreateSpecialtyInput,
@@ -21,7 +23,13 @@ import {
   type CatalogEntity,
   type Conflict,
 } from './catalog.messages.js';
-import { CatalogLimitError, InUseError, type Actor, type CatalogRepository } from './catalog.repository.js';
+import {
+  CatalogLimitError,
+  InUseError,
+  type Actor,
+  type CatalogRepository,
+  type CurrentNameGuard,
+} from './catalog.repository.js';
 
 function missing(entity: CatalogEntity): AppError {
   return notFound(notFoundMessages[entity]);
@@ -42,6 +50,17 @@ async function translated<T>(write: () => Promise<T>): Promise<T> {
     }
     throw error;
   }
+}
+
+function keepExamplePlace(
+  actor: Actor,
+  { name, isActive }: { name?: string | undefined; isActive?: boolean | undefined },
+  reservedName: string,
+): CurrentNameGuard {
+  return (currentName) => {
+    const renames = name !== undefined && name !== currentName;
+    if (currentName === reservedName && (renames || isActive === false)) refuseExampleEscalation(actor.actorId);
+  };
 }
 
 function found<T>(entity: CatalogEntity, value: T | undefined): T {
@@ -81,7 +100,8 @@ export class CatalogService {
   }
 
   async updateSpecialty(id: string, changes: UpdateSpecialtyInput, actor: Actor) {
-    return found('specialty', await translated(() => this.repository.updateSpecialty(id, changes, actor)));
+    const guard = keepExamplePlace(actor, changes, EXAMPLE_MULTI_PROFILE.specialty);
+    return found('specialty', await translated(() => this.repository.updateSpecialty(id, changes, actor, guard)));
   }
 
   createUnit(input: CreateUnitInput, actor: Actor) {
@@ -89,7 +109,8 @@ export class CatalogService {
   }
 
   async updateUnit(id: string, changes: UpdateUnitInput, actor: Actor) {
-    return found('unit', await translated(() => this.repository.updateUnit(id, changes, actor)));
+    const guard = keepExamplePlace(actor, changes, EXAMPLE_MULTI_PROFILE.unit);
+    return found('unit', await translated(() => this.repository.updateUnit(id, changes, actor, guard)));
   }
 
   createExamType(input: CreateExamTypeInput, actor: Actor) {
