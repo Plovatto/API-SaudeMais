@@ -12,7 +12,7 @@ const path = '/api/me/email-preferences';
 const preferencesSchema = z.array(emailPreferenceSchema);
 const limitNote = 'Limite: 120 requisições de perfil por minuto por IP.';
 const deliveryNote =
-  'Os e-mails saem junto com os avisos do app e o lembrete sai cerca de 24 horas antes (até 10 minutos a mais, para cobrir o intervalo entre as rodadas da manutenção) de consultas e exames confirmados. Contas desativadas não recebem e-mail.';
+  'Os e-mails saem junto com os avisos do app e o lembrete sai com a antecedência definida na política em `reminderLeadHours`, 24 horas por padrão (até 10 minutos a mais, para cobrir o intervalo entre as rodadas da manutenção) de consultas e exames confirmados. Contas desativadas não recebem e-mail.';
 
 documentOperation({
   method: 'get',

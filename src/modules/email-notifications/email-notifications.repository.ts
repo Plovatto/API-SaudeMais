@@ -2,10 +2,11 @@ import { and, eq, gt, inArray, isNull, lte, ne, not, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Database } from '../../database/pg-client.js';
 import { bookings } from '../../database/schema/bookings.js';
-import { units } from '../../database/schema/catalog.js';
+import { settings, units } from '../../database/schema/catalog.js';
 import { emailPreferences, type EmailTopic } from '../../database/schema/email-preferences.js';
 import { users } from '../../database/schema/users.js';
 import { EXAMPLE_ACCOUNT_ID } from '../../lib/example-account.js';
+import { readSettings } from '../../lib/settings.js';
 
 const doctorUsers = alias(users, 'doctor_users');
 
@@ -61,6 +62,10 @@ export class EmailNotificationsRepository {
       .update(bookings)
       .set({ remindedAt: null })
       .where(and(inArray(bookings.id, bookingIds), eq(bookings.remindedAt, claimedAt)));
+  }
+
+  async reminderLeadHours(): Promise<number> {
+    return (await readSettings(this.db, { reminderLeadHours: settings.reminderLeadHours })).reminderLeadHours;
   }
 
   claimReminders(now: Date, until: Date): Promise<Reminder[]> {

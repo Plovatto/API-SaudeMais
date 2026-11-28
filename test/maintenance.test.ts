@@ -7,6 +7,7 @@ import {
   bookings,
   notifications,
   passwordResetTokens,
+  settings,
   users,
   type BookingStatus,
 } from '@/database/schema/index.js';
@@ -157,6 +158,39 @@ describe('maintenance', () => {
       fromStatus: 'confirmed',
       toStatus: 'completed',
     });
+  });
+
+  it('completes stale appointments after the hours configured in the policy', async () => {
+    await context.db.update(settings).set({ autoCompleteAfterHours: 24 });
+    const id = await appointment(await userId(registration().email), 'confirmed', later(HOUR));
+
+    context.clock.advance(HOUR + 24 * HOUR - 1);
+    expect(await run()).toMatchObject({ appointmentsCompleted: 0 });
+    context.clock.advance(1);
+    expect(await run()).toMatchObject({ appointmentsCompleted: 1 });
+    expect(await statusOf(id)).toBe('completed');
+  });
+
+  it('keeps notifications and audit logs for the retention configured in the policy', async () => {
+    await context.db.update(settings).set({ notificationRetentionDays: 7, auditRetentionDays: 30 });
+    const patientId = await userId(registration().email);
+    await context.db.insert(notifications).values(
+      [7 * DAY + 1, 7 * DAY].map((age) => ({
+        userId: patientId,
+        audienceRole: 'admin' as const,
+        type: 'user_registered' as const,
+        createdAt: later(-age),
+      })),
+    );
+    await context.db.insert(auditLogs).values(
+      [30 * DAY + 1, 30 * DAY].map((age) => ({
+        actorType: 'system' as const,
+        action: 'test',
+        createdAt: later(-age),
+      })),
+    );
+
+    expect((await run()).purged).toEqual({ ...NOTHING_PURGED, notifications: 1, auditLogs: 1 });
   });
 
   it('purges expired sessions, reset tokens 48 hours after they expire, and old notifications and audit logs', async () => {

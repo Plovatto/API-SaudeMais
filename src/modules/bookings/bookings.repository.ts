@@ -15,14 +15,13 @@ import {
 import { settings, specialties, units } from '../../database/schema/catalog.js';
 import { examResults } from '../../database/schema/exam-results.js';
 import { users } from '../../database/schema/users.js';
+import { readSettings } from '../../lib/settings.js';
 import { HOUR, isoOrNull, type DayRange } from '../../lib/time.js';
 import { bookingActions, type BookingActions, type PolicySettings, type PolicySubject } from './booking-policy.js';
 
 export type BookingSide = 'patient' | 'doctor';
 
 export type Outcome = Extract<BookingStatus, 'completed' | 'no_show'>;
-
-const AUTO_COMPLETE_AFTER_HOURS = 72;
 
 export interface Canceller {
   role: CancellerRole;
@@ -152,16 +151,12 @@ export function seenBy(userId: string, side: BookingSide, { id, startsAt }: Seen
   return sql`${ofAccount(userId, [side])} and ${eq(bookings.id, id)} and ${eq(bookings.startsAt, startsAt)}`;
 }
 
-async function policySettings(db: Pick<Database, 'select'>): Promise<PolicySettings> {
-  const [row] = await db
-    .select({
-      appointmentLateWindowHours: settings.appointmentLateWindowHours,
-      examLateWindowHours: settings.examLateWindowHours,
-      maxReschedules: settings.maxReschedules,
-    })
-    .from(settings);
-  if (!row) throw new Error('Settings row is missing');
-  return row;
+function policySettings(db: Pick<Database, 'select'>): Promise<PolicySettings> {
+  return readSettings(db, {
+    appointmentLateWindowHours: settings.appointmentLateWindowHours,
+    examLateWindowHours: settings.examLateWindowHours,
+    maxReschedules: settings.maxReschedules,
+  });
 }
 
 export async function actionsAt(db: Pick<Database, 'select'>, now: Date) {
@@ -222,16 +217,12 @@ interface ActiveLimits {
   maxActiveExams: number;
 }
 
-export async function activeLimits(db: Pick<Database, 'select'>): Promise<ActiveLimits> {
-  const [row] = await db
-    .select({
-      maxActiveBookings: settings.maxActiveBookings,
-      maxActiveAppointments: settings.maxActiveAppointments,
-      maxActiveExams: settings.maxActiveExams,
-    })
-    .from(settings);
-  if (!row) throw new Error('Settings row is missing');
-  return row;
+export function activeLimits(db: Pick<Database, 'select'>): Promise<ActiveLimits> {
+  return readSettings(db, {
+    maxActiveBookings: settings.maxActiveBookings,
+    maxActiveAppointments: settings.maxActiveAppointments,
+    maxActiveExams: settings.maxActiveExams,
+  });
 }
 
 export async function activeFutureCounts(
@@ -377,8 +368,9 @@ export function completeEndedExams(tx: Transaction, now: Date): Promise<ChangedB
   );
 }
 
-export function completeStaleAppointments(tx: Transaction, now: Date): Promise<ChangedBooking[]> {
-  const startedBefore = new Date(now.getTime() - AUTO_COMPLETE_AFTER_HOURS * HOUR);
+export async function completeStaleAppointments(tx: Transaction, now: Date): Promise<ChangedBooking[]> {
+  const { autoCompleteAfterHours } = await readSettings(tx, { autoCompleteAfterHours: settings.autoCompleteAfterHours });
+  const startedBefore = new Date(now.getTime() - autoCompleteAfterHours * HOUR);
   return completeConfirmed(tx, and(eq(bookings.kind, 'appointment'), lte(bookings.startsAt, startedBefore)), now);
 }
 

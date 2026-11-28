@@ -204,9 +204,34 @@ const policyFields = {
   ),
   maxActiveAppointments: activeLimitField('Consultas ativas futuras que cada paciente pode ter ao mesmo tempo.'),
   maxActiveExams: activeLimitField('Exames ativos futuros que cada paciente pode ter ao mesmo tempo.'),
+  reminderLeadHours: z.number().int().min(1).max(168).openapi({
+    description: 'Antecedência, em horas, do e-mail de lembrete enviado para agendamentos confirmados.',
+    example: 24,
+  }),
+  autoCompleteAfterHours: z.number().int().min(1).max(720).openapi({
+    description:
+      'Horas após o início de uma consulta confirmada sem registro de desfecho para a rotina concluí-la automaticamente.',
+    example: 72,
+  }),
+  notificationRetentionDays: z.number().int().min(7).max(730).openapi({
+    description: 'Dias em que as notificações são mantidas antes de serem apagadas pela rotina de limpeza.',
+    example: 90,
+  }),
+  auditRetentionDays: z.number().int().min(30).max(1825).openapi({
+    description: 'Dias em que os registros de auditoria são mantidos antes de serem apagados pela rotina de limpeza.',
+    example: 180,
+  }),
 };
 
-export const policyInputSchema = registry.register('UpdatePolicyRequest', z.strictObject(policyFields));
+export const policyInputSchema = registry.register(
+  'UpdatePolicyRequest',
+  z.strictObject(policyFields).partial({
+    reminderLeadHours: true,
+    autoCompleteAfterHours: true,
+    notificationRetentionDays: true,
+    auditRetentionDays: true,
+  }),
+);
 export const policySchema = registry.register('Policy', z.object({ ...policyFields, updatedAt: z.iso.datetime() }));
 
 export const unitsQuery = z.strictObject({

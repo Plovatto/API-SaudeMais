@@ -268,6 +268,10 @@ const fullPolicy = {
   maxActiveBookings: 8,
   maxActiveAppointments: 6,
   maxActiveExams: 4,
+  reminderLeadHours: 48,
+  autoCompleteAfterHours: 24,
+  notificationRetentionDays: 30,
+  auditRetentionDays: 365,
 };
 
 describe('booking policy', () => {
@@ -288,7 +292,31 @@ describe('booking policy', () => {
       maxActiveBookings: 5,
       maxActiveAppointments: 5,
       maxActiveExams: 5,
+      reminderLeadHours: 24,
+      autoCompleteAfterHours: 72,
+      notificationRetentionDays: 90,
+      auditRetentionDays: 180,
       updatedAt: anyText,
+    });
+  });
+
+  it('keeps the operations settings when an older client saves only the booking rules', async () => {
+    const {
+      reminderLeadHours: _reminder,
+      autoCompleteAfterHours: _autoComplete,
+      notificationRetentionDays: _notifications,
+      auditRetentionDays: _audit,
+      ...bookingRules
+    } = fullPolicy;
+    const response = await adminCall('put', '/api/admin/policy', bookingRules);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ...bookingRules,
+      reminderLeadHours: 24,
+      autoCompleteAfterHours: 72,
+      notificationRetentionDays: 90,
+      auditRetentionDays: 180,
     });
   });
 

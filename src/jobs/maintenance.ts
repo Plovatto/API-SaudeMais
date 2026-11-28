@@ -1,11 +1,13 @@
 import { lt, lte, sql } from 'drizzle-orm';
 import { logger } from '../config/logger.js';
 import type { Database } from '../database/pg-client.js';
+import { settings } from '../database/schema/catalog.js';
 import { auditLogs } from '../database/schema/audit-logs.js';
 import { notifications } from '../database/schema/notifications.js';
 import { passwordResetTokens } from '../database/schema/password-reset-tokens.js';
 import { sessions } from '../database/schema/sessions.js';
 import type { Clock } from '../lib/clock.js';
+import { readSettings } from '../lib/settings.js';
 import { DAY, HOUR } from '../lib/time.js';
 import type { BookingsService } from '../modules/bookings/bookings.service.js';
 import type { EmailNotifier } from '../modules/email-notifications/email-notifications.notifier.js';
@@ -13,11 +15,7 @@ import type { NotificationsService } from '../modules/notifications/notification
 
 const MAINTENANCE_LOCK = 727_004;
 
-const RETENTION = {
-  resetTokens: 48 * HOUR,
-  notifications: 90 * DAY,
-  auditLogs: 180 * DAY,
-};
+const RESET_TOKEN_RETENTION = 48 * HOUR;
 
 interface MaintenanceDeps {
   db: Database;
@@ -56,10 +54,14 @@ export function createMaintenance({
     const { purged, recipients } = await db.transaction(async (tx) => {
       const now = clock.now();
       const before = (age: number) => new Date(now.getTime() - age);
+      const retention = await readSettings(tx, {
+        notificationDays: settings.notificationRetentionDays,
+        auditDays: settings.auditRetentionDays,
+      });
       const deleted = async (rows: PromiseLike<unknown[]>) => (await rows).length;
       const oldNotifications = await tx
         .delete(notifications)
-        .where(lt(notifications.createdAt, before(RETENTION.notifications)))
+        .where(lt(notifications.createdAt, before(retention.notificationDays * DAY)))
         .returning({ userId: notifications.userId, audienceRole: notifications.audienceRole });
       return {
         recipients: oldNotifications,
@@ -70,14 +72,14 @@ export function createMaintenance({
           resetTokens: await deleted(
             tx
               .delete(passwordResetTokens)
-              .where(lt(passwordResetTokens.expiresAt, before(RETENTION.resetTokens)))
+              .where(lt(passwordResetTokens.expiresAt, before(RESET_TOKEN_RETENTION)))
               .returning({ id: passwordResetTokens.id }),
           ),
           notifications: oldNotifications.length,
           auditLogs: await deleted(
             tx
               .delete(auditLogs)
-              .where(lt(auditLogs.createdAt, before(RETENTION.auditLogs)))
+              .where(lt(auditLogs.createdAt, before(retention.auditDays * DAY)))
               .returning({ id: auditLogs.id }),
           ),
         },
