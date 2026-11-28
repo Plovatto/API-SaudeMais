@@ -82,6 +82,7 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`DATE_TOO_FAR\` | 422 | O dia escolhido para bloquear fica a mais de 365 dias |
 | \`SAME_SLOT\` | 422 | O novo horário pedido no reagendamento é o horário atual |
 | \`ACTIVE_LIMIT\` | 422 | O paciente chegou a um limite de agendamentos ativos futuros da política (\`maxActiveBookings\`, \`maxActiveAppointments\` ou \`maxActiveExams\`) |
+| \`CATALOG_LIMIT_REACHED\` | 422 | Especialidades, unidades e tipos de exame aceitam 200 itens ativos cada; criar ou reativar além disso é recusado |
 | \`SPECIALTY_MISMATCH\` | 422 | O médico escolhido não atende a especialidade escolhida |
 | \`SELF_BOOKING\` | 422 | O médico tentou marcar consulta consigo mesmo |
 | \`REASON_REQUIRED\` | 422 | O médico precisa informar o motivo ao cancelar uma consulta |

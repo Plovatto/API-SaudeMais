@@ -1,3 +1,4 @@
+export * from './announcements.js';
 export * from './audit-logs.js';
 export * from './bookings.js';
 export * from './catalog.js';

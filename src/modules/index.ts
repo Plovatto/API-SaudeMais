@@ -8,6 +8,7 @@ import { createAdminAuditModule } from './admin-audit/index.js';
 import { createAdminHomeModule } from './admin-home/index.js';
 import { createAdminReportsModule } from './admin-reports/index.js';
 import { createAdminUsersModule } from './admin-users/index.js';
+import { createAnnouncementsModule } from './announcements/index.js';
 import { createAppointmentsModule } from './appointments/index.js';
 import { createBookingsModule } from './bookings/index.js';
 import { createCatalogModule } from './catalog/index.js';
@@ -97,6 +98,7 @@ export function createModules(deps: ModulesDeps) {
   });
   const examResults = createExamResultsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminHome = createAdminHomeModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
+  const announcements = createAnnouncementsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const adminAudit = createAdminAuditModule({ db: deps.db, requireAuth: users.requireAuth });
   const adminReports = createAdminReportsModule({ db: deps.db, clock: deps.clock, requireAuth: users.requireAuth });
   const maintenance = createMaintenance({
@@ -122,6 +124,7 @@ export function createModules(deps: ModulesDeps) {
     seed,
     adminHome,
     adminAudit,
+    announcements,
     doctorSchedule,
     doctors,
     appointments,
@@ -136,6 +139,7 @@ export function createModules(deps: ModulesDeps) {
       adminHome.router,
       adminReports.router,
       adminAudit.router,
+      announcements.router,
       doctorSchedule.router,
       doctors.router,
       appointments.router,
