@@ -1,8 +1,7 @@
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { createDb, createPool } from '../database/pg-client.js';
-import { ConsoleMailer } from '../mail/console-mailer.js';
-import { MailQueue } from '../mail/index.js';
+import { createMailer, MailQueue } from '../mail/index.js';
 import { createModulesFromEnv } from '../modules/index.js';
 
 const [job] = process.argv.slice(2);
@@ -14,8 +13,11 @@ if (job !== 'maintenance') {
 const pool = createPool(env.DATABASE_URL);
 
 try {
-  const { maintenance } = createModulesFromEnv(env, createDb(pool), new MailQueue(new ConsoleMailer(logger), logger));
+  const mail = new MailQueue(createMailer(env, logger), logger);
+  const { maintenance, email } = createModulesFromEnv(env, createDb(pool), mail);
   await maintenance.runExclusive();
+  await email.notifier.settled();
+  await mail.drain();
 } catch (err) {
   logger.fatal({ err }, 'Maintenance failed');
   process.exitCode = 1;
