@@ -1,4 +1,4 @@
-import type { AdminReport, ReportFormat } from './admin-reports.model.js';
+import type { AdminInsights, AdminReport, ReportFormat } from './admin-reports.model.js';
 
 type KindTotals = AdminReport['appointments'] | AdminReport['exams'];
 type StatusKey = Exclude<keyof AdminReport['series'][number], 'start'>;
@@ -59,6 +59,65 @@ export const RANKINGS = [
     of: (report: AdminReport) => report.topExamTypes,
   },
 ] as const;
+
+export type ExportInsights = Pick<AdminInsights, 'doctors' | 'units'>;
+
+interface BreakdownColumn<Row> {
+  label: string;
+  of: (row: Row) => number;
+}
+
+interface Outcomes {
+  total: number;
+  completed: number;
+  noShow: number;
+  cancelled: number;
+}
+
+const outcomeColumns = <Row extends Outcomes>(...kinds: BreakdownColumn<Row>[]): BreakdownColumn<Row>[] => [
+  { label: 'Total', of: ({ total }) => total },
+  ...kinds,
+  { label: 'Realizados', of: ({ completed }) => completed },
+  { label: 'Faltas', of: ({ noShow }) => noShow },
+  { label: 'Cancelados', of: ({ cancelled }) => cancelled },
+];
+
+function breakdown<Row extends Outcomes & { name: string }>(
+  sheet: string,
+  heading: string,
+  label: string,
+  rowsOf: (insights: ExportInsights) => Row[],
+  columns: BreakdownColumn<Row>[],
+) {
+  return {
+    sheet,
+    heading,
+    labels: columns.map((column) => column.label),
+    label,
+    of: (insights: ExportInsights) =>
+      rowsOf(insights).map((row) => ({ name: row.name, values: columns.map((column) => column.of(row)) })),
+  };
+}
+
+export const BREAKDOWNS = [
+  breakdown<ExportInsights['doctors'][number]>(
+    'Médicos',
+    'Médicos com mais consultas',
+    'Médico',
+    ({ doctors }) => doctors,
+    outcomeColumns(),
+  ),
+  breakdown<ExportInsights['units'][number]>(
+    'Unidades',
+    'Agendamentos por unidade',
+    'Unidade',
+    ({ units }) => units,
+    outcomeColumns(
+      { label: 'Consultas', of: ({ appointments }) => appointments },
+      { label: 'Exames', of: ({ exams }) => exams },
+    ),
+  ),
+];
 
 export const percentFormat = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 1 });
 
