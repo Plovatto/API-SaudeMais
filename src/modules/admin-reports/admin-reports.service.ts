@@ -10,6 +10,7 @@ import {
   reportPeriod,
   type AdminReport,
   type ReportExportQuery,
+  type ReportFormat,
   type ReportsQuery,
 } from './admin-reports.model.js';
 import { renderReportPdf } from './admin-reports.pdf.js';
@@ -34,7 +35,14 @@ const noLeadTime = {
   reschedules: 0,
 };
 
-const renderers = { pdf: renderReportPdf, xlsx: renderReportXlsx };
+function rendererFor(format: ReportFormat) {
+  switch (format) {
+    case 'pdf':
+      return renderReportPdf;
+    case 'xlsx':
+      return renderReportXlsx;
+  }
+}
 
 const shiftDays = (date: string, days: number) => civilDate(Date.parse(date) + days * DAY);
 
@@ -95,7 +103,7 @@ export class AdminReportsService {
     const [report, insights] = await Promise.all([this.report(query, now), this.insights(query, now)]);
     return {
       fileName: reportFileName(report, format),
-      content: await renderers[format](report, insights, now),
+      content: await rendererFor(format)(report, insights, now),
     };
   }
 }
