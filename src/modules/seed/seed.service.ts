@@ -126,17 +126,17 @@ export class SeedService {
     if (intact) return false;
     const registryRestored = await this.repository.restoreExample(
       {
-          id: EXAMPLE_MULTI_ID,
-          fullName: EXAMPLE_MULTI.fullName,
-          email: EXAMPLE_MULTI.email,
-          passwordHash: await hashPassword(EXAMPLE_MULTI.password),
-          roles,
-          specialtyId: specialty.id,
-          council: specialty.council,
-          unitId: unit.id,
-          registryNumber: EXAMPLE_MULTI_PROFILE.registryNumber,
-          registryUf: EXAMPLE_MULTI_PROFILE.registryUf,
-        },
+        id: EXAMPLE_MULTI_ID,
+        fullName: EXAMPLE_MULTI.fullName,
+        email: EXAMPLE_MULTI.email,
+        passwordHash: await hashPassword(EXAMPLE_MULTI.password),
+        roles,
+        specialtyId: specialty.id,
+        council: specialty.council,
+        unitId: unit.id,
+        registryNumber: EXAMPLE_MULTI_PROFILE.registryNumber,
+        registryUf: EXAMPLE_MULTI_PROFILE.registryUf,
+      },
       this.clock.now(),
     );
     if (!registryRestored) {
