@@ -9,10 +9,13 @@ interface SmtpConfig {
 }
 
 export function createSmtpTransport({ host, port, user, pass }: SmtpConfig): Transporter {
+  const secure = port === 465;
   return nodemailer.createTransport({
     host,
     port,
-    secure: port === 465,
+    secure,
+    requireTLS: !secure,
+    tls: { minVersion: 'TLSv1.2' },
     auth: { user, pass },
     pool: true,
     maxConnections: 2,
