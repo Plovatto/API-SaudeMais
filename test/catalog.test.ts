@@ -300,6 +300,26 @@ describe('booking policy', () => {
     });
   });
 
+  it('keeps the operations settings when an older client saves only the booking rules', async () => {
+    const {
+      reminderLeadHours: _reminder,
+      autoCompleteAfterHours: _autoComplete,
+      notificationRetentionDays: _notifications,
+      auditRetentionDays: _audit,
+      ...bookingRules
+    } = fullPolicy;
+    const response = await adminCall('put', '/api/admin/policy', bookingRules);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ...bookingRules,
+      reminderLeadHours: 24,
+      autoCompleteAfterHours: 72,
+      notificationRetentionDays: 90,
+      auditRetentionDays: 180,
+    });
+  });
+
   it('saves every value at once and records the change in the audit log', async () => {
     const response = await adminCall('put', '/api/admin/policy', fullPolicy);
 
