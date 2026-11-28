@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE } from '@/lib/time.js';
 import { UserRepository } from '@/modules/users/user.repository.js';
 import { hashToken } from '@/modules/users/user.token.js';
-import { as, buildUsersApp, HOUR, login, registerAndLogin, START } from './support/users.js';
+import { as, buildUsersApp, HOUR, login, nextResetToken, registerAndLogin, START } from './support/users.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
 const PASSWORD = 'senha-segura-123';
@@ -143,9 +143,9 @@ describe('session cache invalidation', () => {
 
   it('drops every session when a password reset is confirmed', async () => {
     const { app, auth, mail, mailer, token } = await withPatient();
-    await request(app).post('/api/password-reset/request').send({ email: 'ana.silva@email.com' }).expect(204);
-    await mail.drain();
-    const reset = /#token=([A-Za-z0-9_-]{43})/.exec(mailer.sent.at(-1)?.text ?? '')?.[1];
+    const reset = await nextResetToken({ mail, mailer }, () =>
+      request(app).post('/api/password-reset/request').send({ email: 'ana.silva@email.com' }).expect(204),
+    );
 
     await request(app)
       .post('/api/password-reset/confirm')

@@ -63,8 +63,6 @@ Códigos comuns a todas as rotas. Cada rota lista também os códigos específic
 | \`DOCTOR_PROFILE_EXISTS\` | 409 | A conta já tem perfil médico |
 | \`HAS_FUTURE_APPOINTMENTS\` | 409 | O médico tem consultas futuras que impedem a mudança |
 | \`RESET_NOT_SENT\` | 409 | Um link de redefinição foi enviado há pouco ou o limite de links foi atingido |
-| \`ACCOUNT_NOT_FOUND\` | 404 | Pedido de redefinição de senha para um e-mail sem conta ativa |
-| \`RESET_TOO_SOON\` | 429 | Pedido de redefinição recusado pelos limites: 30 segundos entre links e 5 por hora por conta, ou o teto diário do site |
 | \`TIME_OFF_EXISTS\` | 409 | O médico já bloqueou esse dia |
 | \`SLOT_TAKEN\` | 409 | O horário escolhido acabou de ser ocupado na agenda do médico |
 | \`NO_CAPACITY\` | 409 | Não há mais lugares na vaga de exame escolhida |

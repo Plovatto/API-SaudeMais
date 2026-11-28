@@ -16,7 +16,7 @@ interface PasswordResetModuleDeps {
 }
 
 export function createPasswordResetModule({ db, clock, mail, appUrl, sessions }: PasswordResetModuleDeps) {
-  const resets = new PasswordResetRepository(db, { perUserPerHour: 5, globalPerDay: 100, minIntervalMs: 30_000 });
+  const resets = new PasswordResetRepository(db, { perUserPerHour: 5, minIntervalMs: 30_000 });
   const service = new PasswordResetService(resets, new UserRepository(db), sessions, mail, clock, appUrl);
   return { router: createPasswordResetRouter(service), service };
 }
