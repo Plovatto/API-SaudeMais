@@ -124,17 +124,51 @@ describe('example account', () => {
       await post('/api/admin/users', { ...person, email: 'medico.visitante@email.com', role: 'doctor', doctorProfile }),
       await post(`/api/admin/users/${patient?.id}/doctor-profile`, doctorProfile),
       await request(context.app).delete(`/api/admin/users/${doctor?.id}/doctor-profile`).set(as(token)),
+      await post('/api/admin/users', { ...person, role: 'patient' }),
+    );
+
+    const patchProfile = (id: string | undefined, body: object) =>
+      request(context.app).patch(`/api/admin/users/${id}/doctor-profile`).set(as(token)).send(body);
+    refused.push(
+      await patchProfile(EXAMPLE_MULTI_ID, { registryNumber: '777777' }),
+      await patchProfile(doctor?.id, { registryNumber: '888888' }),
+    );
+
+    await context.db.execute(sql`update users set deactivated_at = now() where id in (${admin?.id}, ${doctor?.id})`);
+    refused.push(
+      await post(`/api/admin/users/${admin?.id}/reactivate`),
+      await post(`/api/admin/users/${doctor?.id}/reactivate`),
     );
 
     for (const response of refused) {
       expect(response.status).toBe(403);
       expect(response.body).toMatchObject({ code: 'EXAMPLE_ACCOUNT_RESTRICTED' });
     }
-    expect((await post('/api/admin/users', { ...person, role: 'patient' })).status).toBe(201);
+    const created = await context.db.execute(sql`select 1 from users where email = ${person.email}`);
+    expect(created.rows).toHaveLength(0);
+    const reactivatedAdmins = await context.db.execute(
+      sql`select 1 from users where id in (${admin?.id}, ${doctor?.id}) and deactivated_at is null`,
+    );
+    expect(reactivatedAdmins.rows).toHaveLength(0);
     const me = await request(context.app).get('/api/me').set(as(visitor));
     expect((me.body as { roles: string[] }).roles).toEqual(['patient']);
     const clients = await context.db.execute(sql`select 1 from integration_clients where name = 'Laboratório Visitante'`);
     expect(clients.rows).toHaveLength(0);
+  });
+
+  it('still deactivates and reactivates patients', async () => {
+    const context = await seeded();
+    const token = ((await login(context.app, credentials)).body as { token: string }).token;
+    await createPatient(context, 'visitante@email.com');
+    const [patient] = (await context.db.execute(sql`select id from users where email = 'visitante@email.com'`))
+      .rows as { id: string }[];
+    const post = (path: string) => request(context.app).post(path).set(as(token));
+
+    expect((await post(`/api/admin/users/${patient?.id}/deactivate`)).status).toBe(200);
+    const response = await post(`/api/admin/users/${patient?.id}/reactivate`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ deactivatedAt: null });
   });
 
   it('is created again when a visitor removed it', async () => {

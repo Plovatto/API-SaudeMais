@@ -137,6 +137,7 @@ document({
   summary: 'Reativar conta',
   description: 'Libera o login de novo. Repetir não tem efeito.',
   params: idParams,
+  restricted: true,
   success: { status: 200, description: 'Conta reativada.', ...detail },
 });
 document({
@@ -198,6 +199,7 @@ document({
   notFound: doctorProfileNotFound,
   conflict: conflictResponse(adminConflicts.registryTaken, adminConflicts.futureAppointments),
   unprocessable: unavailable.specialty,
+  restricted: true,
   success: { status: 200, description: 'Perfil médico atualizado.', ...detail },
 });
 document({
