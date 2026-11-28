@@ -182,6 +182,19 @@ describe('doctor e-mails', () => {
   });
 });
 
+describe('notifier', () => {
+  it('lets callers wait for background deliveries before draining the queue', async () => {
+    context.modules.email.notifier.deliver([
+      { userId: await userId(PATIENT_EMAIL), audienceRole: 'patient', type: 'appointment_expired' },
+    ]);
+
+    await context.modules.email.notifier.settled();
+    await context.mail.drain();
+
+    expect(sentTo(PATIENT_EMAIL)).toHaveLength(1);
+  });
+});
+
 describe('reminders', () => {
   it('reminds confirmed bookings of the next 24 hours once', async () => {
     const soon = await appointment(PATIENT_EMAIL, 'confirmed', later(23 * HOUR));

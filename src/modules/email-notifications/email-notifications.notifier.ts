@@ -11,6 +11,8 @@ import { noticeEmail, reminderEmail } from './email-notifications.templates.js';
 const REMINDER_SLACK = 10 * MINUTE;
 
 export class EmailNotifier {
+  private readonly pending = new Set<Promise<void>>();
+
   constructor(
     private readonly repository: EmailNotificationsRepository,
     private readonly mail: MailQueue,
@@ -19,7 +21,14 @@ export class EmailNotifier {
   ) {}
 
   deliver(deliveries: Delivery[]): void {
-    this.send(deliveries).catch((err: unknown) => logger.error({ err }, 'Notification e-mails failed'));
+    const delivery = this.send(deliveries)
+      .catch((err: unknown) => logger.error({ err }, 'Notification e-mails failed'))
+      .finally(() => this.pending.delete(delivery));
+    this.pending.add(delivery);
+  }
+
+  async settled(): Promise<void> {
+    await Promise.all([...this.pending]);
   }
 
   async remindUpcoming(): Promise<number> {

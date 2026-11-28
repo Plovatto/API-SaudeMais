@@ -13,8 +13,11 @@ if (job !== 'maintenance') {
 const pool = createPool(env.DATABASE_URL);
 
 try {
-  const { maintenance } = createModulesFromEnv(env, createDb(pool), new MailQueue(createMailer(env, logger), logger));
+  const mail = new MailQueue(createMailer(env, logger), logger);
+  const { maintenance, email } = createModulesFromEnv(env, createDb(pool), mail);
   await maintenance.runExclusive();
+  await email.notifier.settled();
+  await mail.drain();
 } catch (err) {
   logger.fatal({ err }, 'Maintenance failed');
   process.exitCode = 1;
