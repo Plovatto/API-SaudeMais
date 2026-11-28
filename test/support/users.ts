@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
-import { expect } from 'vitest';
+import { expect, vi } from 'vitest';
 import type { Database } from '@/database/pg-client.js';
 import { loginSchema, registerSchema } from '@/modules/users/user.model.js';
 import type { UserService } from '@/modules/users/user.service.js';
@@ -35,6 +35,18 @@ export function registration(overrides: Record<string, unknown> = {}) {
 }
 
 type App = Awaited<ReturnType<typeof buildUsersApp>>['app'];
+type Mailbox = Pick<Awaited<ReturnType<typeof buildUsersApp>>, 'mail' | 'mailer'>;
+
+export async function nextResetToken({ mail, mailer }: Mailbox, send: () => PromiseLike<unknown>): Promise<string> {
+  const before = mailer.sent.length;
+  await send();
+  return vi.waitFor(async () => {
+    await mail.drain();
+    const token = /#token=([A-Za-z0-9_-]{43})/.exec(mailer.sent.at(before)?.text ?? '')?.[1];
+    if (!token) throw new Error('No reset link was sent');
+    return token;
+  });
+}
 
 export function login(app: App, body: Record<string, unknown> = {}) {
   return request(app)

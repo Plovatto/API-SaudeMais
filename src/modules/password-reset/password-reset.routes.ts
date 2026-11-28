@@ -3,6 +3,7 @@ import { errorResponse, serverBusyResponse } from '../../docs/common-schemas.js'
 import { documentOperation } from '../../docs/operation.js';
 import { publicSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
+import { runInBackground } from '../../lib/background.js';
 import { DAY, MINUTE } from '../../lib/time.js';
 import { limitRequests } from '../../middleware/rate-limit.js';
 import { resetConfirmSchema, resetRequestSchema } from './password-reset.model.js';
@@ -15,7 +16,7 @@ documentOperation({
   tag: tags.accounts.name,
   summary: 'Pedir link para redefinir a senha',
   description:
-    'Envia ao e-mail um link válido por 30 minutos. A resposta é sempre 204, exista ou não uma conta ativa com o e-mail, para não revelar quem tem conta. Só contas ativas recebem o link, no máximo um a cada 30 segundos e 5 por hora; fora disso nada é enviado. Pedir de novo invalida o link anterior. Limite: 10 pedidos por IP a cada 15 minutos e 30 por dia.',
+    'Envia ao e-mail um link válido por 30 minutos. A resposta é sempre 204 e sai antes de qualquer busca, exista ou não uma conta ativa com o e-mail, para não revelar quem tem conta. Só contas ativas recebem o link, no máximo um a cada 30 segundos e 5 por hora; fora disso nada é enviado. Pedir de novo invalida o link anterior. Limite: 10 pedidos por IP a cada 15 minutos e 30 por dia.',
   auth: publicSecurity,
   body: resetRequestSchema,
   success: { status: 204, description: 'Pedido recebido. Se houver conta ativa com o e-mail, o link segue por e-mail.' },
@@ -46,9 +47,10 @@ export function createPasswordResetRouter(service: PasswordResetService): Router
   const requestLimit = limitRequests(10, 15 * MINUTE);
   const requestDailyLimit = limitRequests(30, DAY);
   const confirmLimit = limitRequests(20, 15 * MINUTE);
-  const request: RequestHandler = async (req, res) => {
-    await service.request(resetRequestSchema.parse(req.body));
+  const request: RequestHandler = (req, res) => {
+    const input = resetRequestSchema.parse(req.body);
     res.status(204).end();
+    runInBackground(() => service.request(input), 'Password reset request failed');
   };
   const confirm: RequestHandler = async (req, res) => {
     await service.confirm(resetConfirmSchema.parse(req.body));

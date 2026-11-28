@@ -169,6 +169,7 @@ describe('example account', () => {
     const context = await seeded();
 
     await request(context.app).post('/api/password-reset/request').send({ email: EXAMPLE_MULTI.email }).expect(204);
+    await context.modules.passwordReset.service.request({ email: EXAMPLE_MULTI.email });
     await context.mail.drain();
 
     expect(context.mailer.sent.filter(({ to }) => to === EXAMPLE_MULTI.email)).toHaveLength(0);
