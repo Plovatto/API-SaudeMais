@@ -91,20 +91,24 @@ export class SeedService {
 
   async seedMultiProfile(): Promise<string[]> {
     const warnings: string[] = [];
-    await this.restoreExample(warnings);
+    try {
+      await this.restoreExample(warnings);
+    } catch (error) {
+      if (!isUniqueViolation(error, 'users_email_key')) throw error;
+      warnings.push('Example account not restored: its e-mail belongs to another account');
+    }
     return warnings;
   }
 
   async restoreExample(warnings: string[] = []): Promise<boolean> {
-    const place = await this.doctorPlace(EXAMPLE_MULTI_PROFILE);
-    if (!place) {
-      warnings.push('Example account skipped: its specialty or unit is missing or inactive');
-      return false;
-    }
+    const place = await this.place(EXAMPLE_MULTI_PROFILE);
+    if (!place) throw new Error('Example account specialty or unit could not be found or created');
     const { specialty, unit } = place;
     const state = await this.repository.exampleState(EXAMPLE_MULTI_ID);
     const roles = [...EXAMPLE_MULTI_ROLES].sort();
     const intact =
+      specialty.isActive &&
+      unit.isActive &&
       state !== undefined &&
       state.fullName === EXAMPLE_MULTI.fullName &&
       state.email.toLowerCase() === EXAMPLE_MULTI.email &&
@@ -120,9 +124,8 @@ export class SeedService {
       state.preferences === 0 &&
       (await verifyPassword(EXAMPLE_MULTI.password, state.passwordHash));
     if (intact) return false;
-    try {
-      await this.repository.restoreExample(
-        {
+    const registryRestored = await this.repository.restoreExample(
+      {
           id: EXAMPLE_MULTI_ID,
           fullName: EXAMPLE_MULTI.fullName,
           email: EXAMPLE_MULTI.email,
@@ -134,14 +137,11 @@ export class SeedService {
           registryNumber: EXAMPLE_MULTI_PROFILE.registryNumber,
           registryUf: EXAMPLE_MULTI_PROFILE.registryUf,
         },
-        this.clock.now(),
-      );
-    } catch (error) {
-      if (isUniqueViolation(error, 'users_email_key') || isUniqueViolation(error, 'doctor_profiles_registry_key')) {
-        warnings.push('Example account not restored: its e-mail or registry belongs to another account');
-        return false;
-      }
-      throw error;
+      this.clock.now(),
+    );
+    if (!registryRestored) {
+      const { registryNumber, registryUf } = EXAMPLE_MULTI_PROFILE;
+      warnings.push(`Example account kept its registry: ${registryNumber}/${registryUf} belongs to another doctor`);
     }
     this.sessions.invalidateUser(EXAMPLE_MULTI_ID);
     await this.schedules.ensureDefault(EXAMPLE_MULTI_ID);
@@ -281,11 +281,16 @@ export class SeedService {
     return seed ? this.repository.ensureUnit(seed) : Promise.resolve(undefined);
   }
 
-  private async doctorPlace(target: DoctorProfileTarget) {
+  private async place(target: DoctorProfileTarget) {
     const specialtySeed = SPECIALTIES.find((specialty) => specialty.name === target.specialty);
     const specialty = specialtySeed ? await this.repository.ensureSpecialty(specialtySeed) : undefined;
     const unit = await this.unit(target.unit);
-    return specialty?.isActive && unit?.isActive ? { specialty, unit } : undefined;
+    return specialty && unit ? { specialty, unit } : undefined;
+  }
+
+  private async doctorPlace(target: DoctorProfileTarget) {
+    const place = await this.place(target);
+    return place?.specialty.isActive && place.unit.isActive ? place : undefined;
   }
 
   private async grantProfile(userId: string, email: string, target: DoctorProfileTarget): Promise<string[]> {
