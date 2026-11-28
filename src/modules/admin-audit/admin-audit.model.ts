@@ -6,6 +6,11 @@ import { registry } from '../../docs/registry.js';
 import { uuidParam } from '../../lib/params.js';
 import { civilDay, endNotBeforeStart } from '../doctors/doctors.model.js';
 
+const entityNeedsType = {
+  path: ['entityType'],
+  message: 'Informe o tipo do item junto com o item.',
+};
+
 export const DEFAULT_AUDIT_PAGE = 30;
 export const MAX_AUDIT_PAGE = 100;
 
@@ -29,7 +34,7 @@ export const auditLogsQuery = z
       example: 'user',
     }),
     entityId: z.string().trim().min(1).max(64).optional().openapi({
-      description: 'Só registros deste item. Combine com `entityType`.',
+      description: 'Só registros deste item. Exige `entityType`.',
       example: '0190a5d2-7c1e-7b3a-9f4d-2e8b6c1a5f30',
     }),
     cursor: uuidParam.optional().openapi({
@@ -43,7 +48,8 @@ export const auditLogsQuery = z
       .default(DEFAULT_AUDIT_PAGE)
       .openapi({ description: `Quantos registros por resposta, de 1 a ${MAX_AUDIT_PAGE}.`, example: DEFAULT_AUDIT_PAGE }),
   })
-  .refine(({ from, to }) => !from || !to || to >= from, endNotBeforeStart);
+  .refine(({ from, to }) => !from || !to || to >= from, endNotBeforeStart)
+  .refine(({ entityId, entityType }) => !entityId || entityType !== undefined, entityNeedsType);
 
 export type AuditLogsQuery = z.infer<typeof auditLogsQuery>;
 

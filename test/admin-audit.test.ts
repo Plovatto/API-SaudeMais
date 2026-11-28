@@ -183,6 +183,13 @@ describe('audit log listing', () => {
     expect((await list({ page: 2 })).status).toBe(400);
   });
 
+  it('refuses an entity id without its type', async () => {
+    const response = await list({ entityId: 'a1' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR', fields: { entityType: anyText } });
+  });
+
   it('returns 30 entries by default and up to 100 on request', async () => {
     await context.db.insert(auditLogs).values(
       Array.from({ length: 40 }, (_, index) => ({
@@ -206,7 +213,7 @@ describe('audit log listing', () => {
       .send({ fullName: 'Administrador Renomeado' })
       .expect(200);
 
-    const { items } = await body({ action: 'user.updated', entityId: adminId });
+    const { items } = await body({ action: 'user.updated', entityType: 'user', entityId: adminId });
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ actor: { id: adminId }, metadata: { fields: ['fullName'] } });
