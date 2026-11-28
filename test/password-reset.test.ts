@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CLINIC_TIME_ZONE, startOfDayIn } from '@/lib/time.js';
 import { PasswordResetRepository } from '@/modules/password-reset/password-reset.repository.js';
 import { buildUsersApp, login, registerAndLogin, registration, START } from './support/users.js';
@@ -98,52 +98,50 @@ describe('POST /api/password-reset/request', () => {
     expect(context.mailer.sent).toHaveLength(1);
   });
 
-  async function siteLimited(globalPerDay: number) {
+  it('keeps sending links to every account however many were sent that day', async () => {
     const context = await buildUsersApp();
     const ids: string[] = [];
     for (const email of ['a@email.com', 'b@email.com', 'c@email.com']) {
       const created = await request(context.app).post('/api/users/register').send(registration({ email }));
       ids.push((created.body as { id: string }).id);
     }
-    const resets = new PasswordResetRepository(context.db, { perUserPerHour: 5, globalPerDay, minIntervalMs: 30_000 });
-    const now = context.clock.now();
-    const token = (index: number) => ({
-      requestedBy: null,
-      tokenHash: String(index).repeat(64),
-      now,
-      expiresAt: new Date(now.getTime() + 30 * MINUTE),
-    });
-    const issue = (userId: string, index: number, requestedBy: string | null = null) =>
-      resets.issue({ userId, ...token(index), requestedBy, dayStart: startOfDayIn(CLINIC_TIME_ZONE, now) });
-    return { context, resets, token, issue, ids: ids as [string, string, string] };
-  }
-
-  it('stops sending once the daily total for the whole site is reached', async () => {
-    const { ids, issue } = await siteLimited(2);
+    const resets = new PasswordResetRepository(context.db, { perUserPerHour: 5, minIntervalMs: 30_000 });
+    const dayStart = startOfDayIn(CLINIC_TIME_ZONE, context.clock.now()).getTime();
 
     const results = [];
-    for (const [index, userId] of ids.entries()) results.push(await issue(userId, index));
+    for (let index = 0; index < 102; index += 1) {
+      const now = new Date(dayStart + MINUTE + index * 5 * MINUTE);
+      results.push(
+        await resets.issue({
+          userId: ids[index % ids.length] ?? '',
+          requestedBy: null,
+          tokenHash: index.toString(16).padStart(64, '0'),
+          now,
+          expiresAt: new Date(now.getTime() + 30 * MINUTE),
+        }),
+      );
+    }
 
-    expect(results).toEqual([true, true, false]);
+    expect(results.every(Boolean)).toBe(true);
   });
 
-  it('sends links from an administrator past the daily total for the whole site without counting them', async () => {
-    const { issue, ids } = await siteLimited(1);
-    const [first, second, third] = ids;
+  it('accepts 30 requests per address a day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: START });
+    try {
+      const { app } = await buildUsersApp();
+      const statuses: number[] = [];
+      for (let round = 0; round < 4; round += 1) {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          statuses.push((await requestReset(app, 'ninguem@email.com')).status);
+        }
+        vi.setSystemTime(Date.now() + 16 * MINUTE);
+      }
 
-    expect(await issue(first, 1, third)).toBe(true);
-    expect(await issue(second, 2)).toBe(true);
-    expect(await issue(third, 3, second)).toBe(true);
-  });
-
-  it('leaves welcome links out of the daily total for the whole site', async () => {
-    const { context, resets, token, issue, ids } = await siteLimited(1);
-    const [first, second, third] = ids;
-
-    await resets.store(context.db, { userId: first, purpose: 'welcome', ...token(1) });
-    await resets.store(context.db, { userId: second, purpose: 'welcome', ...token(2) });
-
-    expect(await issue(third, 3)).toBe(true);
+      expect(statuses.filter((status) => status === 204)).toHaveLength(30);
+      expect(statuses.slice(30)).toEqual([429, 429]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('invalidates the previous link when a new one is sent', async () => {

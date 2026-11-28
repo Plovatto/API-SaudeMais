@@ -3,7 +3,7 @@ import type { AuditEntry } from '../../lib/audit.js';
 import { AppError } from '../../lib/app-error.js';
 import type { Clock } from '../../lib/clock.js';
 import { EXAMPLE_ACCOUNT_ID } from '../../lib/example-account.js';
-import { CLINIC_TIME_ZONE, HOUR, MINUTE, startOfDayIn } from '../../lib/time.js';
+import { HOUR, MINUTE } from '../../lib/time.js';
 import type { MailQueue } from '../../mail/index.js';
 import { hashPassword } from '../users/user.password.js';
 import type { UserRepository } from '../users/user.repository.js';
@@ -43,13 +43,7 @@ export class PasswordResetService {
   ): Promise<boolean> {
     if (user.id === EXAMPLE_ACCOUNT_ID) return true;
     const { link, ...token } = this.newToken(RESET_TOKEN_MINUTES * MINUTE);
-    const issued = await this.resets.issue({
-      userId: user.id,
-      requestedBy,
-      ...token,
-      dayStart: startOfDayIn(CLINIC_TIME_ZONE, token.now),
-      audit,
-    });
+    const issued = await this.resets.issue({ userId: user.id, requestedBy, ...token, audit });
     if (issued) this.mail.enqueue(resetEmail(user.email, link, RESET_TOKEN_MINUTES));
     return issued;
   }

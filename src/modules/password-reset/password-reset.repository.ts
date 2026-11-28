@@ -10,7 +10,6 @@ const LOCK_NAMESPACE = 727_002;
 
 interface ResetLimits {
   perUserPerHour: number;
-  globalPerDay: number;
   minIntervalMs: number;
 }
 
@@ -20,7 +19,6 @@ interface NewResetToken {
   tokenHash: string;
   now: Date;
   expiresAt: Date;
-  dayStart: Date;
   audit?: AuditEntry | undefined;
 }
 
@@ -32,28 +30,20 @@ export class PasswordResetRepository {
     private readonly limits: ResetLimits,
   ) {}
 
-  issue({ userId, requestedBy, tokenHash, now, expiresAt, dayStart, audit }: NewResetToken): Promise<boolean> {
+  issue({ userId, requestedBy, tokenHash, now, expiresAt, audit }: NewResetToken): Promise<boolean> {
     return this.db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_NAMESPACE}, 0)`);
+      await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_NAMESPACE}, hashtext(${userId}))`);
       const recentSince = new Date(now.getTime() - this.limits.minIntervalMs);
       const hourSince = new Date(now.getTime() - HOUR);
-      const since = new Date(Math.min(recentSince.getTime(), dayStart.getTime(), hourSince.getTime()));
-      const [today] = await tx
+      const since = new Date(Math.min(recentSince.getTime(), hourSince.getTime()));
+      const [counts] = await tx
         .select({
-          total: sql<number>`count(*) filter (where ${passwordResetTokens.purpose} = 'reset' and ${passwordResetTokens.requestedBy} is null and ${passwordResetTokens.createdAt} >= ${dayStart})::int`,
-          forUser: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} >= ${hourSince})::int`,
-          recent: sql<number>`count(*) filter (where ${passwordResetTokens.userId} = ${userId} and ${passwordResetTokens.createdAt} > ${recentSince})::int`,
+          lastHour: sql<number>`count(*) filter (where ${passwordResetTokens.createdAt} >= ${hourSince})::int`,
+          recent: sql<number>`count(*) filter (where ${passwordResetTokens.createdAt} > ${recentSince})::int`,
         })
         .from(passwordResetTokens)
-        .where(gte(passwordResetTokens.createdAt, since));
-      if (
-        !today ||
-        (requestedBy === null && today.total >= this.limits.globalPerDay) ||
-        today.forUser >= this.limits.perUserPerHour ||
-        today.recent > 0
-      ) {
-        return false;
-      }
+        .where(and(eq(passwordResetTokens.userId, userId), gte(passwordResetTokens.createdAt, since)));
+      if (!counts || counts.lastHour >= this.limits.perUserPerHour || counts.recent > 0) return false;
       await tx
         .update(passwordResetTokens)
         .set({ revokedAt: now })
@@ -73,7 +63,7 @@ export class PasswordResetRepository {
       now,
       expiresAt,
       purpose,
-    }: Omit<NewResetToken, 'dayStart' | 'audit'> & { purpose?: ResetTokenPurpose },
+    }: Omit<NewResetToken, 'audit'> & { purpose?: ResetTokenPurpose },
   ): Promise<void> {
     await db
       .insert(passwordResetTokens)
