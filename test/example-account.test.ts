@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMaintenance } from '@/jobs/maintenance.js';
 import type { BookingsService } from '@/modules/bookings/bookings.service.js';
 import type { NotificationsService } from '@/modules/notifications/notifications.service.js';
-import { EXAMPLE_MULTI, EXAMPLE_MULTI_ID } from '@/modules/seed/seed.data.js';
+import { EXAMPLE_MULTI, EXAMPLE_MULTI_ID, EXAMPLE_MULTI_PROFILE } from '@/modules/seed/seed.data.js';
 import { createTestDb } from './support/create-test-db.js';
 import { fixedClock } from './support/fixed-clock.js';
 import { as, buildUsersApp, createAdmin, createPatient, login, START } from './support/users.js';
@@ -13,6 +13,13 @@ const credentials = { email: EXAMPLE_MULTI.email, password: EXAMPLE_MULTI.passwo
 
 async function exampleToken(app: Awaited<ReturnType<typeof seeded>>['app']) {
   return ((await login(app, credentials)).body as { token: string }).token;
+}
+
+type Seeded = Awaited<ReturnType<typeof seeded>>;
+
+async function idOf({ db }: Seeded, table: 'units' | 'specialties', name: string) {
+  const { rows } = await db.execute<{ id: string }>(sql`select id from ${sql.identifier(table)} where name = ${name}`);
+  return rows[0]?.id;
 }
 
 function expectRestricted(response: request.Response) {
@@ -219,6 +226,28 @@ describe('example account', () => {
 
     expectRestricted(response);
     expect((await login(context.app, credentials)).status).toBe(200);
+  });
+
+  it('cannot rename or deactivate the unit and specialty of its doctor profile', async () => {
+    const context = await seeded();
+    const token = await exampleToken(context.app);
+    const patch = (path: string, body: object) => request(context.app).patch(path).set(as(token)).send(body);
+    const unit = `/api/admin/units/${await idOf(context, 'units', EXAMPLE_MULTI_PROFILE.unit)}`;
+    const specialty = `/api/admin/specialties/${await idOf(context, 'specialties', EXAMPLE_MULTI_PROFILE.specialty)}`;
+
+    for (const response of [
+      await patch(unit, { isActive: false }),
+      await patch(unit, { name: 'Unidade Visitante' }),
+      await patch(specialty, { isActive: false }),
+      await patch(specialty, { name: 'Especialidade Visitante' }),
+    ]) {
+      expectRestricted(response);
+    }
+
+    expect((await patch(unit, { phone: '+551100001111' })).status).toBe(200);
+    expect((await patch(specialty, { appointmentDurationMin: 20 })).status).toBe(200);
+    const other = `/api/admin/units/${await idOf(context, 'units', 'Unidade Central')}`;
+    expect((await patch(other, { name: 'Unidade Centro' })).status).toBe(200);
   });
 
   it('never sends e-mails to it, even a password reset link', async () => {

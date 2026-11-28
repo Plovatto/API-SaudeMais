@@ -77,11 +77,22 @@ const policyColumns = {
   updatedAt: settings.updatedAt,
 };
 
-const lockable: Record<CatalogEntity, { table: PgTable; id: AnyPgColumn; booked: AnyPgColumn }> = {
-  specialty: { table: specialties, id: specialties.id, booked: bookings.specialtyId },
-  unit: { table: units, id: units.id, booked: bookings.unitId },
-  exam_type: { table: examTypes, id: examTypes.id, booked: bookings.examTypeId },
+interface Lockable {
+  table: PgTable;
+  id: AnyPgColumn;
+  name: AnyPgColumn<{ data: string; notNull: true }>;
+  booked: AnyPgColumn;
+}
+
+const lockable: Record<CatalogEntity, Lockable> = {
+  specialty: { table: specialties, id: specialties.id, name: specialties.name, booked: bookings.specialtyId },
+  unit: { table: units, id: units.id, name: units.name, booked: bookings.unitId },
+  exam_type: { table: examTypes, id: examTypes.id, name: examTypes.name, booked: bookings.examTypeId },
 };
+
+export type CurrentNameGuard = (currentName: string) => void;
+
+const allowAny: CurrentNameGuard = () => undefined;
 
 type UnitRow = Omit<Unit, 'hours'>;
 type HourRow = Unit['hours'][number];
@@ -156,9 +167,19 @@ export class CatalogRepository {
     );
   }
 
-  updateSpecialty(id: string, changes: UpdateSpecialtyInput, actor: Actor): Promise<Specialty | undefined> {
-    return this.updateAudited('specialty', id, changes, actor, (tx) =>
-      tx.update(specialties).set(changes).where(eq(specialties.id, id)).returning(specialtyColumns),
+  updateSpecialty(
+    id: string,
+    changes: UpdateSpecialtyInput,
+    actor: Actor,
+    guard = allowAny,
+  ): Promise<Specialty | undefined> {
+    return this.updateAudited(
+      'specialty',
+      id,
+      changes,
+      actor,
+      (tx) => tx.update(specialties).set(changes).where(eq(specialties.id, id)).returning(specialtyColumns),
+      guard,
     );
   }
 
@@ -184,17 +205,29 @@ export class CatalogRepository {
     return { ...row, hours: sortHours(hours) };
   }
 
-  updateUnit(id: string, { hours, ...changes }: UpdateUnitInput, actor: Actor): Promise<Unit | undefined> {
+  updateUnit(
+    id: string,
+    { hours, ...changes }: UpdateUnitInput,
+    actor: Actor,
+    guard = allowAny,
+  ): Promise<Unit | undefined> {
     const audited = { ...changes, ...(hours && { hours: hours.length }) };
-    return this.updateAudited('unit', id, audited, actor, async (tx) => {
-      const [row] =
-        Object.keys(changes).length > 0
-          ? await tx.update(units).set(changes).where(eq(units.id, id)).returning(unitColumns)
-          : await tx.select(unitColumns).from(units).where(eq(units.id, id));
-      if (!row) return [];
-      if (hours) await replaceHours(tx, id, hours);
-      return this.withHours([row], tx);
-    });
+    return this.updateAudited(
+      'unit',
+      id,
+      audited,
+      actor,
+      async (tx) => {
+        const [row] =
+          Object.keys(changes).length > 0
+            ? await tx.update(units).set(changes).where(eq(units.id, id)).returning(unitColumns)
+            : await tx.select(unitColumns).from(units).where(eq(units.id, id));
+        if (!row) return [];
+        if (hours) await replaceHours(tx, id, hours);
+        return this.withHours([row], tx);
+      },
+      guard,
+    );
   }
 
   async unitExists(id: string): Promise<boolean> {
@@ -298,9 +331,12 @@ export class CatalogRepository {
     changes: Record<string, unknown>,
     actor: Actor,
     update: (tx: Transaction) => Promise<Row[]>,
+    guard = allowAny,
   ): Promise<Row | undefined> {
     return this.db.transaction(async (tx) => {
-      if (!(await lockRow(tx, entity, id))) return undefined;
+      const currentName = await lockRow(tx, entity, id);
+      if (currentName === undefined) return undefined;
+      guard(currentName);
       const [row] = await update(tx);
       if (changes.isActive === false) await this.ensureUnused(tx, eq(lockable[entity].booked, id));
       if (row) await recordAudit(tx, { ...actor, ...changeEntry(entity, id, changes) });
@@ -331,10 +367,10 @@ export class CatalogRepository {
   }
 }
 
-async function lockRow(tx: Transaction, entity: CatalogEntity, id: string): Promise<boolean> {
-  const { table, id: idColumn } = lockable[entity];
-  const rows = await tx.select({ id: idColumn }).from(table).where(eq(idColumn, id)).for('no key update');
-  return rows.length > 0;
+async function lockRow(tx: Transaction, entity: CatalogEntity, id: string): Promise<string | undefined> {
+  const { table, id: idColumn, name } = lockable[entity];
+  const [row] = await tx.select({ name }).from(table).where(eq(idColumn, id)).for('no key update');
+  return row?.name;
 }
 
 async function replaceHours(tx: Transaction, unitId: string, hours: HourRow[]): Promise<void> {
