@@ -1,4 +1,4 @@
-import { lt, lte, sql } from 'drizzle-orm';
+import { asc, inArray, lt, lte, sql } from 'drizzle-orm';
 import { logger } from '../config/logger.js';
 import type { Database } from '../database/pg-client.js';
 import { settings } from '../database/schema/catalog.js';
@@ -16,6 +16,31 @@ import type { NotificationsService } from '../modules/notifications/notification
 const MAINTENANCE_LOCK = 727_004;
 
 const RESET_TOKEN_RETENTION = 48 * HOUR;
+const AUDIT_PURGE_BATCH = 5000;
+
+async function purgeAuditLogs(db: Database, before: Date): Promise<number> {
+  let purged = 0;
+  for (;;) {
+    const batch = await db.transaction((tx) =>
+      tx
+        .delete(auditLogs)
+        .where(
+          inArray(
+            auditLogs.id,
+            tx
+              .select({ id: auditLogs.id })
+              .from(auditLogs)
+              .where(lt(auditLogs.createdAt, before))
+              .orderBy(asc(auditLogs.createdAt))
+              .limit(AUDIT_PURGE_BATCH),
+          ),
+        )
+        .returning({ id: auditLogs.id }),
+    );
+    purged += batch.length;
+    if (batch.length < AUDIT_PURGE_BATCH) return purged;
+  }
+}
 
 interface MaintenanceDeps {
   db: Database;
@@ -51,13 +76,13 @@ export function createMaintenance({
   };
 
   const purge = async () => {
+    const now = clock.now();
+    const before = (age: number) => new Date(now.getTime() - age);
+    const retention = await readSettings(db, {
+      notificationDays: settings.notificationRetentionDays,
+      auditDays: settings.auditRetentionDays,
+    });
     const { purged, recipients } = await db.transaction(async (tx) => {
-      const now = clock.now();
-      const before = (age: number) => new Date(now.getTime() - age);
-      const retention = await readSettings(tx, {
-        notificationDays: settings.notificationRetentionDays,
-        auditDays: settings.auditRetentionDays,
-      });
       const deleted = async (rows: PromiseLike<unknown[]>) => (await rows).length;
       const oldNotifications = await tx
         .delete(notifications)
@@ -76,17 +101,12 @@ export function createMaintenance({
               .returning({ id: passwordResetTokens.id }),
           ),
           notifications: oldNotifications.length,
-          auditLogs: await deleted(
-            tx
-              .delete(auditLogs)
-              .where(lt(auditLogs.createdAt, before(retention.auditDays * DAY)))
-              .returning({ id: auditLogs.id }),
-          ),
         },
       };
     });
+    const auditLogsPurged = await purgeAuditLogs(db, before(retention.auditDays * DAY));
     notificationsService.forget(recipients);
-    return purged;
+    return { ...purged, auditLogs: auditLogsPurged };
   };
 
   const run = async () => ({

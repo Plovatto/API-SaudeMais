@@ -1,10 +1,10 @@
 import type { Database } from '../database/pg-client.js';
-import { auditLogs, type ActorType } from '../database/schema/audit-logs.js';
+import { auditLogs, type ActorType, type AuditAction } from '../database/schema/audit-logs.js';
 
 export interface AuditEntry {
   actorType?: ActorType;
   actorId: string | null;
-  action: string;
+  action: AuditAction;
   entityType: string;
   entityId: string;
   metadata?: Record<string, unknown>;

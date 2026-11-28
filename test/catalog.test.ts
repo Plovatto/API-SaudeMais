@@ -473,7 +473,7 @@ describe('pagination and audit', () => {
     const unit = await adminCall('post', '/api/admin/units', unitBody('Unidade Auditoria')).expect(201);
     await adminCall('patch', `/api/admin/units/${idOf(unit)}`, { address: 'Avenida Paulista, 1000' }).expect(200);
 
-    const rows = await context.db.execute<{ action: string; actor_type: string; has_actor: boolean }>(sql`
+    const rows = await context.db.execute<{ action: string; actor_type: string; has_actor: boolean; metadata: unknown }>(sql`
       select action, actor_type, actor_id is not null as has_actor, metadata from audit_logs
       where entity_id in (${idOf(specialty)}, ${idOf(unit)}) order by created_at
     `);
@@ -486,5 +486,11 @@ describe('pagination and audit', () => {
     ]);
     expect(rows.rows.every((row) => row.actor_type === 'user' && row.has_actor)).toBe(true);
     expect(JSON.stringify(rows.rows)).not.toContain('Paulista');
+    expect(rows.rows.map((row) => row.metadata)).toEqual([
+      { name: 'Auditoria' },
+      { fields: ['isActive'] },
+      { name: 'Unidade Auditoria' },
+      { fields: ['address'] },
+    ]);
   });
 });
