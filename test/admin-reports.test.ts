@@ -1,22 +1,18 @@
-import { sql } from 'drizzle-orm';
 import request from 'supertest';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { DAY } from '@/lib/time.js';
+import { AdminReportsRepository } from '@/modules/admin-reports/admin-reports.repository.js';
+import { AdminReportsService } from '@/modules/admin-reports/admin-reports.service.js';
 import { binary } from './support/binary.js';
 import { setupClinic, type Clinic } from './support/doctors.js';
+import { insertAppointment, insertExam, REPORT_PATIENT as PATIENT } from './support/report-bookings.js';
 import { as, login } from './support/users.js';
 import { EXCEL_EPOCH, workbookOf } from './support/xlsx.js';
 
 const ADMIN = { email: 'admin@saudemais.test', password: 'admin-segura-123' };
-const PATIENT = 'ana.silva@email.com';
 
 let context: Clinic;
 let admin: string;
-
-interface Cancellation {
-  role?: 'patient' | 'doctor' | 'admin' | 'system';
-  late?: boolean;
-}
 
 interface Totals {
   total: number;
@@ -57,45 +53,16 @@ const zero = {
   expired: 0,
 };
 
-const cancellationColumns = (status: string, { role, late = false }: Cancellation) => sql`
-  ${status}::text,
-  case when ${status}::text = 'cancelled' then now() end,
-  ${role ?? null}::text,
-  case when ${role ?? null}::text <> 'system' then u.id end,
-  case when ${role ?? null}::text = 'doctor' then 'Motivo do médico' end,
-  ${late}
-`;
+const appointment = (startsAt: string, status: string, options?: Parameters<typeof insertAppointment>[3]) =>
+  insertAppointment(context.db, startsAt, status, options);
 
-function appointment(
+const exam = (
+  code: string,
+  publicCode: string,
   startsAt: string,
   status: string,
-  {
-    doctor = 'Dr. Carlos Mendes',
-    email = PATIENT,
-    ...cancellation
-  }: Cancellation & { doctor?: string; email?: string } = {},
-) {
-  return context.db.execute(sql`
-    insert into bookings (kind, patient_id, unit_id, doctor_id, specialty_id, visit_type, starts_at, ends_at,
-      status, cancelled_at, cancelled_by_role, cancelled_by, cancel_reason, late_cancellation)
-    select 'appointment', u.id, p.unit_id, p.user_id, p.specialty_id, 'routine', ${startsAt}::timestamptz,
-      ${startsAt}::timestamptz + interval '30 minutes', ${cancellationColumns(status, cancellation)}
-    from users u, doctor_profiles p join users d on d.id = p.user_id
-    where u.email = ${email} and d.full_name = ${doctor}
-  `);
-}
-
-function exam(code: string, publicCode: string, startsAt: string, status: string, cancellation: Cancellation = {}) {
-  return context.db.execute(sql`
-    insert into bookings (kind, patient_id, unit_id, exam_type_id, public_code, lane, starts_at, ends_at,
-      status, cancelled_at, cancelled_by_role, cancelled_by, cancel_reason, late_cancellation)
-    select 'exam', u.id, o.unit_id, o.exam_type_id, ${publicCode}, 1, ${startsAt}::timestamptz,
-      ${startsAt}::timestamptz + interval '20 minutes', ${cancellationColumns(status, cancellation)}
-    from users u, unit_exam_offers o join exam_types e on e.id = o.exam_type_id
-    where u.email = ${PATIENT} and e.code = ${code}
-    limit 1
-  `);
-}
+  options?: Parameters<typeof insertExam>[5],
+) => insertExam(context.db, code, publicCode, startsAt, status, options);
 
 const reports = (query: Record<string, string> = {}, token = admin) =>
   request(context.app).get('/api/admin/reports').query(query).set(as(token));
@@ -274,6 +241,24 @@ describe('GET /api/admin/reports', () => {
 describe('GET /api/admin/reports/export', () => {
   const period = { from: '2026-11-10', to: '2026-11-20' };
 
+  it('reads the clock once so the report and the insights share one period', async () => {
+    const repository = new AdminReportsRepository(context.db);
+    const report = vi.spyOn(repository, 'report');
+    const insights = vi.spyOn(repository, 'insights');
+    let current = context.clock.now().getTime();
+    const drifting = {
+      now: () => {
+        current += DAY;
+        return new Date(current);
+      },
+    };
+
+    await new AdminReportsService(repository, drifting).export({ format: 'xlsx' });
+
+    expect(report.mock.calls[0]?.[0]).toEqual(insights.mock.calls[0]?.[0]);
+    expect(report.mock.calls[0]?.[2]).toEqual(insights.mock.calls[0]?.[2]);
+  });
+
   it('downloads the report of the period as a pdf attachment', async () => {
     const response = await exportOf({ ...period, format: 'pdf' }).expect(200);
 
@@ -301,7 +286,7 @@ describe('GET /api/admin/reports/export', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(response.headers['content-disposition']).toBe('attachment; filename=relatorio_2026-11-10_a_2026-11-20.xlsx');
-    expect(workbook.names).toEqual(['Resumo', 'Série', 'Especialidades', 'Exames']);
+    expect(workbook.names).toEqual(['Resumo', 'Série', 'Especialidades', 'Exames', 'Médicos', 'Unidades']);
     expect(summary[1]).toEqual(['Período', '10/11/2026 a 20/11/2026', null]);
     expect(summary[4]).toEqual(['Indicador', 'Consultas', 'Exames']);
     expect(summary.slice(5)).toEqual(

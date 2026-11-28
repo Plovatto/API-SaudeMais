@@ -2,7 +2,9 @@ import { BRAND } from '../../lib/brand.js';
 import { openPdf, PDF_COLORS, PDF_MARGIN, printable, type PdfColumn } from '../../lib/pdf.js';
 import { clinicDateTime } from '../../lib/time.js';
 import {
+  BREAKDOWNS,
   civilDayLabel,
+  type ExportInsights,
   EMPTY_REPORT,
   isEmptyReport,
   percentFormat,
@@ -21,7 +23,7 @@ const COLUMN_PADDING = 10;
 
 const footer = (page: number, pages: number) => `${BRAND} · ${REPORT_TITLE} · Página ${page} de ${pages}`;
 
-export function renderReportPdf(report: AdminReport, generatedAt: Date): Promise<Buffer> {
+export function renderReportPdf(report: AdminReport, insights: ExportInsights, generatedAt: Date): Promise<Buffer> {
   const { doc, width, pair, header, keepSpace, table, finish } = openPdf({
     Title: REPORT_TITLE,
     Subject: periodLabel(report),
@@ -118,6 +120,17 @@ export function renderReportPdf(report: AdminReport, generatedAt: Date): Promise
         { label: 'Agendamentos', x: PDF_MARGIN + width - 90, width: 86, align: 'right' },
       ],
       items.map(({ name, total }) => [name, String(total)]),
+    );
+  }
+
+  for (const { heading: title, label, labels, of } of BREAKDOWNS) {
+    const rows = of(insights);
+    if (rows.length === 0) continue;
+    doc.moveDown(0.6);
+    heading(title);
+    table(
+      fittedColumns([label, ...labels], ['Dra. Beatriz Lima Ferreira', ...labels.map(() => '000000')]),
+      rows.map(({ name, values }) => [name, ...values.map(String)]),
     );
   }
 
