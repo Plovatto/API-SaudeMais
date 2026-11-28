@@ -4,7 +4,7 @@ import { captureLogger } from './support/capture-logger.js';
 import { ConsoleMailer } from '@/mail/console-mailer.js';
 import { composeMail } from '@/mail/compose.js';
 import { createMailer, MailQueue, type MailMessage } from '@/mail/index.js';
-import { SmtpMailer } from '@/mail/smtp-mailer.js';
+import { createSmtpTransport, SmtpMailer } from '@/mail/smtp-mailer.js';
 import { MemoryMailer } from './support/memory-mailer.js';
 
 const message: MailMessage = {
@@ -66,9 +66,24 @@ describe('createMailer', () => {
   it('refuses the smtp driver without credentials instead of falling back to the log', () => {
     const { logger } = captureLogger();
 
-    expect(() => createMailer({ MAIL_DRIVER: 'smtp', SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: 465 }, logger)).toThrow(
-      /required for smtp/,
-    );
+    expect(() => createMailer({ NODE_ENV: 'test', MAIL_DRIVER: 'smtp', SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: 465 }, logger),
+    ).toThrow(/required for smtp/);
+  });
+});
+
+describe('createSmtpTransport', () => {
+  const credentials = { host: 'smtp.example.com', user: 'user', pass: 'pass' };
+
+  it.each([587, 25])('requires STARTTLS with TLS 1.2 or newer on port %i', (port) => {
+    const { options } = createSmtpTransport({ ...credentials, port });
+
+    expect(options).toMatchObject({ secure: false, requireTLS: true, tls: { minVersion: 'TLSv1.2' } });
+  });
+
+  it('uses implicit TLS on port 465', () => {
+    const { options } = createSmtpTransport({ ...credentials, port: 465 });
+
+    expect(options).toMatchObject({ secure: true, requireTLS: false, tls: { minVersion: 'TLSv1.2' } });
   });
 });
 
@@ -108,6 +123,29 @@ describe('mail drivers', () => {
     await new ConsoleMailer(logger).send(message);
 
     expect(lines.join('')).toContain(message.subject);
+  });
+
+  it('keeps the recipient and body out of the log outside development', async () => {
+    const { logger, lines } = captureLogger();
+
+    await createMailer({ NODE_ENV: 'production', MAIL_DRIVER: 'console', SMTP_HOST: '', SMTP_PORT: 465 }, logger).send(
+      message,
+    );
+
+    const output = lines.join('');
+    expect(output).toContain(message.subject);
+    expect(output).not.toContain(message.to);
+    expect(output).not.toContain(message.text);
+  });
+
+  it('writes the recipient and body to the log in development', async () => {
+    const { logger, lines } = captureLogger();
+
+    await createMailer({ NODE_ENV: 'development', MAIL_DRIVER: 'console', SMTP_HOST: '', SMTP_PORT: 465 }, logger).send(
+      message,
+    );
+
+    expect(lines.join('')).toContain(message.to);
   });
 
   it('keeps SMTP passwords out of the logs', () => {
