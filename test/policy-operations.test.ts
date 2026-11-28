@@ -62,10 +62,14 @@ describe('policy operations', () => {
     expect(audit.rows[0]?.metadata).toMatchObject(values);
   });
 
-  it('refuses a policy without the new fields', async () => {
+  it('keeps a stored value that a client leaves out', async () => {
+    expect((await save({ ...policy, reminderLeadHours: 12 })).status).toBe(200);
     const { reminderLeadHours: _left, ...incomplete } = policy;
 
-    expect((await save(incomplete)).status).toBe(400);
+    const response = await save(incomplete);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ reminderLeadHours: 12 });
   });
 
   it.each(BOUNDS.flatMap(([field, , min, max]) => [min - 1, max + 1, 2.5].map((value) => [field, value] as const)))(
