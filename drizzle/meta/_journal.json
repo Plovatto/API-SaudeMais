@@ -183,6 +183,13 @@
       "when": 1795791662094,
       "tag": "0025_audit_logs_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795792254532,
+      "tag": "0026_announcements",
+      "breakpoints": true
     }
   ]
 }
