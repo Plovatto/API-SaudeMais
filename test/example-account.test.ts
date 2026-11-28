@@ -11,6 +11,15 @@ import { as, buildUsersApp, createAdmin, createPatient, login, START } from './s
 
 const credentials = { email: EXAMPLE_MULTI.email, password: EXAMPLE_MULTI.password };
 
+async function exampleToken(app: Awaited<ReturnType<typeof seeded>>['app']) {
+  return ((await login(app, credentials)).body as { token: string }).token;
+}
+
+function expectRestricted(response: request.Response) {
+  expect(response.status).toBe(403);
+  expect(response.body).toMatchObject({ code: 'EXAMPLE_ACCOUNT_RESTRICTED' });
+}
+
 async function seeded() {
   const context = await buildUsersApp();
   await context.modules.seed.service.seed();
@@ -197,6 +206,19 @@ describe('example account', () => {
       sql`select full_name from users where email = ${EXAMPLE_MULTI.email}`,
     );
     expect(other.rows[0]?.full_name).toBe('Outra Pessoa');
+  });
+
+  it('cannot change its own password', async () => {
+    const context = await seeded();
+    const token = await exampleToken(context.app);
+
+    const response = await request(context.app)
+      .post('/api/me/password')
+      .set(as(token))
+      .send({ currentPassword: EXAMPLE_MULTI.password, password: 'outra-senha-123', passwordConfirmation: 'outra-senha-123' });
+
+    expectRestricted(response);
+    expect((await login(context.app, credentials)).status).toBe(200);
   });
 
   it('never sends e-mails to it, even a password reset link', async () => {

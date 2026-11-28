@@ -1,6 +1,12 @@
 import { Router, type Request, type RequestHandler } from 'express';
 import { ipKeyGenerator } from 'express-rate-limit';
-import { errorResponse, fieldErrorExample, notFoundResponse, serverBusyResponse } from '../../docs/common-schemas.js';
+import {
+  errorResponse,
+  exampleAccountResponse,
+  fieldErrorExample,
+  notFoundResponse,
+  serverBusyResponse,
+} from '../../docs/common-schemas.js';
 import { documentOperation } from '../../docs/operation.js';
 import { publicSecurity } from '../../docs/registry.js';
 import { tags } from '../../docs/tags.js';
@@ -116,6 +122,7 @@ documentOperation({
   body: changePasswordSchema,
   success: { status: 204, description: 'Senha trocada.' },
   errors: {
+    403: exampleAccountResponse,
     422: errorResponse(
       `Senha atual incorreta (\`${invalidCurrentPassword.code}\`).`,
       fieldErrorExample(invalidCurrentPassword),
