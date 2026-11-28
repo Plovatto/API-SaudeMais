@@ -1,3 +1,5 @@
+import { MAX_ACTIVE_CATALOG_ITEMS } from '../../database/schema/catalog.js';
+
 export type CatalogEntity = 'specialty' | 'unit' | 'exam_type';
 
 export const notFoundMessages: Record<CatalogEntity, string> = {
@@ -16,6 +18,14 @@ export const uniqueConflicts = {
   exam_types_name_key: { code: 'NAME_TAKEN', field: 'name', message: 'Já existe um tipo de exame com esse nome.' },
   exam_types_code_key: { code: 'CODE_TAKEN', field: 'code', message: 'Já existe um tipo de exame com esse código.' },
 } satisfies Record<string, Conflict>;
+
+export const CATALOG_LIMIT_CODE = 'CATALOG_LIMIT_REACHED';
+
+export const catalogLimitMessages: Record<CatalogEntity, string> = {
+  specialty: `O limite de ${MAX_ACTIVE_CATALOG_ITEMS} especialidades ativas foi atingido; desative uma antes de continuar.`,
+  unit: `O limite de ${MAX_ACTIVE_CATALOG_ITEMS} unidades ativas foi atingido; desative uma antes de continuar.`,
+  exam_type: `O limite de ${MAX_ACTIVE_CATALOG_ITEMS} tipos de exame ativos foi atingido; desative um antes de continuar.`,
+};
 
 export const examTypeInactive: Conflict = {
   code: 'EXAM_TYPE_INACTIVE',

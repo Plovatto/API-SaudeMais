@@ -1,4 +1,4 @@
-import { conflictError, notFound, type AppError } from '../../lib/app-error.js';
+import { conflictError, notFound, unprocessable, type AppError } from '../../lib/app-error.js';
 import { withConstraintConflicts } from '../../lib/constraint-conflicts.js';
 import type { Pagination } from '../../lib/pagination.js';
 import type {
@@ -12,6 +12,8 @@ import type {
   UpdateUnitInput,
 } from './catalog.model.js';
 import {
+  CATALOG_LIMIT_CODE,
+  catalogLimitMessages,
   councilInUse,
   examTypeInactive,
   notFoundMessages,
@@ -19,7 +21,7 @@ import {
   type CatalogEntity,
   type Conflict,
 } from './catalog.messages.js';
-import { InUseError, type Actor, type CatalogRepository } from './catalog.repository.js';
+import { CatalogLimitError, InUseError, type Actor, type CatalogRepository } from './catalog.repository.js';
 
 function missing(entity: CatalogEntity): AppError {
   return notFound(notFoundMessages[entity]);
@@ -35,6 +37,9 @@ async function translated<T>(write: () => Promise<T>): Promise<T> {
     return await withConstraintConflicts(write, constraintConflicts);
   } catch (error) {
     if (error instanceof InUseError) throw conflictError(error.conflict);
+    if (error instanceof CatalogLimitError) {
+      throw unprocessable(CATALOG_LIMIT_CODE, catalogLimitMessages[error.entity]);
+    }
     throw error;
   }
 }

@@ -125,6 +125,7 @@ export const unitExamOffers = pgTable(
 
 export const DEFAULT_ACTIVE_LIMIT = 5;
 export const MAX_ACTIVE_LIMIT = 50;
+export const MAX_ACTIVE_CATALOG_ITEMS = 200;
 
 export const settings = pgTable(
   'settings',
