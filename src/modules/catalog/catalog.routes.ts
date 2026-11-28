@@ -2,8 +2,8 @@ import type { ResponseConfig } from '@asteasolutions/zod-to-openapi';
 import { idParams } from '../../lib/params.js';
 import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
-import { MAX_ACTIVE_LIMIT } from '../../database/schema/catalog.js';
-import { conflictResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
+import { MAX_ACTIVE_CATALOG_ITEMS, MAX_ACTIVE_LIMIT } from '../../database/schema/catalog.js';
+import { conflictResponse, errorResponse, forbiddenResponse, notFoundResponse } from '../../docs/common-schemas.js';
 import { documentOperation, type OperationDoc } from '../../docs/operation.js';
 import { tags } from '../../docs/tags.js';
 import { paginationQuery } from '../../lib/pagination.js';
@@ -11,7 +11,9 @@ import { noStore } from '../../middleware/auth.js';
 import { limitRequests } from '../../middleware/rate-limit.js';
 import type { CatalogController } from './catalog.controller.js';
 import {
+  CATALOG_LIMIT_CODE,
   capacityInUse,
+  catalogLimitMessages,
   councilInUse,
   examTypeInactive,
   inUse,
@@ -45,6 +47,12 @@ const notFoundOf = (entity: CatalogEntity) => notFoundResponse(notFoundMessages[
 const specialtyConflict = conflictResponse(uniqueConflicts.specialties_name_key, councilInUse);
 const unitConflict = conflictResponse(uniqueConflicts.units_name_key);
 const examTypeConflict = conflictResponse(uniqueConflicts.exam_types_code_key, uniqueConflicts.exam_types_name_key);
+const limitResponse = (entity: CatalogEntity) =>
+  errorResponse(`Limite de itens ativos do cadastro atingido (\`${CATALOG_LIMIT_CODE}\`).`, {
+    message: catalogLimitMessages[entity],
+    code: CATALOG_LIMIT_CODE,
+  });
+const limitNote = ` Cada cadastro aceita no máximo ${MAX_ACTIVE_CATALOG_ITEMS} itens ativos; acima disso, criar ou reativar é recusado (\`${CATALOG_LIMIT_CODE}\`).`;
 const deactivationNote =
   ' Desativar é recusado (`IN_USE`) enquanto houver agendamento futuro ativo ligado ao cadastro.';
 
@@ -54,9 +62,10 @@ interface Operation extends Omit<OperationDoc, 'tag' | 'errors' | 'success'> {
   entity?: CatalogEntity;
   success: { status: 200 | 201; description: string; schema: z.ZodType };
   conflict?: ResponseConfig;
+  limited?: boolean;
 }
 
-function document({ admin = true, entity = 'unit', conflict, ...operation }: Operation) {
+function document({ admin = true, entity = 'unit', conflict, limited, ...operation }: Operation) {
   documentOperation({
     ...operation,
     tag: admin ? tags.administration.name : tags.catalog.name,
@@ -64,6 +73,7 @@ function document({ admin = true, entity = 'unit', conflict, ...operation }: Ope
       ...(admin && { 403: forbiddenResponse }),
       ...(operation.params && { 404: notFoundOf(entity) }),
       ...(conflict && { 409: conflict }),
+      ...(limited && { 422: limitResponse(entity) }),
     },
   });
 }
@@ -112,7 +122,10 @@ document({
   path: '/api/admin/specialties',
   operationId: 'adminCreateSpecialty',
   summary: 'Criar especialidade',
-  description: 'Cria uma especialidade ativa com o conselho e a duração padrão da consulta (30 minutos se omitida).',
+  description:
+    'Cria uma especialidade ativa com o conselho e a duração padrão da consulta (30 minutos se omitida).' + limitNote,
+  entity: 'specialty',
+  limited: true,
   body: createSpecialtySchema,
   success: { status: 201, description: 'Especialidade criada.', schema: specialtySchema },
   conflict: specialtyConflict,
@@ -122,9 +135,10 @@ document({
   path: '/api/admin/specialties/{id}',
   operationId: 'adminUpdateSpecialty',
   summary: 'Alterar ou ativar e desativar especialidade',
-  description: `Altera só os campos enviados. A nova duração vale para agendamentos futuros criados depois da mudança.${deactivationNote}`,
+  description: `Altera só os campos enviados. A nova duração vale para agendamentos futuros criados depois da mudança.${deactivationNote}${limitNote}`,
   params: idParams,
   entity: 'specialty',
+  limited: true,
   body: updateSpecialtySchema,
   success: { status: 200, description: 'Especialidade atualizada.', schema: specialtySchema },
   conflict: conflictResponse(uniqueConflicts.specialties_name_key, councilInUse, inUse),
@@ -143,7 +157,8 @@ document({
   path: '/api/admin/units',
   operationId: 'adminCreateUnit',
   summary: 'Criar unidade',
-  description: 'Cria uma unidade ativa com endereço, telefone e o horário de cada dia em que abre.',
+  description: 'Cria uma unidade ativa com endereço, telefone e o horário de cada dia em que abre.' + limitNote,
+  limited: true,
   body: createUnitSchema,
   success: { status: 201, description: 'Unidade criada.', schema: unitSchema },
   conflict: unitConflict,
@@ -153,8 +168,9 @@ document({
   path: '/api/admin/units/{id}',
   operationId: 'adminUpdateUnit',
   summary: 'Alterar ou ativar e desativar unidade',
-  description: `Altera só os campos enviados. \`hours\`, quando enviado, substitui todos os horários da unidade.${deactivationNote}`,
+  description: `Altera só os campos enviados. \`hours\`, quando enviado, substitui todos os horários da unidade.${deactivationNote}${limitNote}`,
   params: idParams,
+  limited: true,
   body: updateUnitSchema,
   success: { status: 200, description: 'Unidade atualizada.', schema: unitSchema },
   conflict: conflictResponse(uniqueConflicts.units_name_key, inUse),
@@ -173,7 +189,10 @@ document({
   path: '/api/admin/exam-types',
   operationId: 'adminCreateExamType',
   summary: 'Criar tipo de exame',
-  description: 'Cria um tipo de exame ativo, laboratorial ou de imagem, com código estável, duração e preparo.',
+  description:
+    'Cria um tipo de exame ativo, laboratorial ou de imagem, com código estável, duração e preparo.' + limitNote,
+  entity: 'exam_type',
+  limited: true,
   body: createExamTypeSchema,
   success: { status: 201, description: 'Tipo de exame criado.', schema: examTypeSchema },
   conflict: examTypeConflict,
@@ -183,9 +202,10 @@ document({
   path: '/api/admin/exam-types/{id}',
   operationId: 'adminUpdateExamType',
   summary: 'Alterar ou ativar e desativar tipo de exame',
-  description: `Altera só os campos enviados.${deactivationNote}`,
+  description: `Altera só os campos enviados.${deactivationNote}${limitNote}`,
   params: idParams,
   entity: 'exam_type',
+  limited: true,
   body: updateExamTypeSchema,
   success: { status: 200, description: 'Tipo de exame atualizado.', schema: examTypeSchema },
   conflict: conflictResponse(uniqueConflicts.exam_types_code_key, uniqueConflicts.exam_types_name_key, inUse),
