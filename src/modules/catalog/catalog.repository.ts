@@ -324,10 +324,13 @@ export class CatalogRepository {
           rows.map((row) => row.id),
         ),
       );
-    return rows.map((row) => ({
-      ...row,
-      hours: sortHours(hours.filter((hour) => hour.unitId === row.id).map(({ unitId: _unitId, ...hour }) => hour)),
-    }));
+    const hoursByUnit = new Map<string, HourRow[]>();
+    for (const { unitId, ...hour } of hours) {
+      const unitHoursList = hoursByUnit.get(unitId);
+      if (unitHoursList) unitHoursList.push(hour);
+      else hoursByUnit.set(unitId, [hour]);
+    }
+    return rows.map((row) => ({ ...row, hours: sortHours(hoursByUnit.get(row.id) ?? []) }));
   }
 }
 
