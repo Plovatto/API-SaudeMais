@@ -16,15 +16,6 @@ import type { PasswordResetRepository } from './password-reset.repository.js';
 const RESET_TOKEN_MINUTES = 30;
 export const INVALID_RESET_TOKEN_MESSAGE = 'Este link é inválido ou já venceu. Peça um novo.';
 export const WELCOME_TOKEN_HOURS = 72;
-export const RESET_ACCOUNT_NOT_FOUND_MESSAGE = 'Não encontramos uma conta com este e-mail.';
-export const RESET_TOO_SOON_MESSAGE =
-  'Já enviamos um link há pouco. Confira seu e-mail e o spam, ou tente de novo em alguns minutos.';
-
-function accountNotFound(): AppError {
-  return new AppError(404, 'ACCOUNT_NOT_FOUND', RESET_ACCOUNT_NOT_FOUND_MESSAGE, {
-    email: RESET_ACCOUNT_NOT_FOUND_MESSAGE,
-  });
-}
 
 function invalidResetToken(): AppError {
   return new AppError(400, 'INVALID_RESET_TOKEN', INVALID_RESET_TOKEN_MESSAGE, { token: INVALID_RESET_TOKEN_MESSAGE });
@@ -42,8 +33,7 @@ export class PasswordResetService {
 
   async request({ email }: ResetRequestInput): Promise<void> {
     const user = await this.users.findLoginCandidate(email);
-    if (!user || user.deactivatedAt) throw accountNotFound();
-    if (!(await this.sendLink(user, null))) throw new AppError(429, 'RESET_TOO_SOON', RESET_TOO_SOON_MESSAGE);
+    if (user && !user.deactivatedAt) await this.sendLink(user, null);
   }
 
   async sendLink(

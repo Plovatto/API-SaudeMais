@@ -42,28 +42,37 @@ describe('POST /api/password-reset/request', () => {
     expect(context.mailer.sent[0]?.text).toContain('https://app.saudemais.test/redefinir-senha#token=');
   });
 
-  it('says there is no account for an unknown e-mail, without sending anything', async () => {
+  it('answers an unknown e-mail the same way, without sending anything', async () => {
     const context = await withAccount();
 
     const response = await requestReset(context.app, 'ninguem@email.com');
     await context.mail.drain();
 
-    expect(response.status).toBe(404);
-    expect(response.body).toMatchObject({
-      code: 'ACCOUNT_NOT_FOUND',
-      fields: { email: 'Não encontramos uma conta com este e-mail.' },
-    });
+    expect(response.status).toBe(204);
+    expect(response.body).toEqual({});
     expect(context.mailer.sent).toHaveLength(0);
   });
 
-  it('waits 30 seconds between links and sends at most 5 per hour', async () => {
+  it('answers a deactivated account the same way, without sending anything', async () => {
+    const context = await withAccount();
+    await context.db.execute(sql`update users set deactivated_at = now()`);
+
+    const response = await requestReset(context.app);
+    await context.mail.drain();
+
+    expect(response.status).toBe(204);
+    expect(context.mailer.sent).toHaveLength(0);
+  });
+
+  it('waits 30 seconds between links and sends at most 5 per hour, answering every request the same way', async () => {
     const context = await withAccount();
     const statuses: number[] = [];
+    const sent: number[] = [];
     const ask = async (advanceSeconds: number) => {
       context.clock.advance(advanceSeconds * 1000);
-      const response = await requestReset(context.app);
-      statuses.push(response.status);
-      if (response.status === 429) expect(response.body).toMatchObject({ code: 'RESET_TOO_SOON' });
+      statuses.push((await requestReset(context.app)).status);
+      await context.mail.drain();
+      sent.push(context.mailer.sent.length);
     };
 
     await ask(0);
@@ -72,10 +81,9 @@ describe('POST /api/password-reset/request', () => {
     await ask(31);
     context.clock.advance(61 * MINUTE);
     await ask(0);
-    await context.mail.drain();
 
-    expect(statuses).toEqual([204, 429, 204, 204, 204, 204, 429, 204]);
-    expect(context.mailer.sent).toHaveLength(6);
+    expect(statuses).toEqual([204, 204, 204, 204, 204, 204, 204, 204]);
+    expect(sent).toEqual([1, 1, 2, 3, 4, 5, 5, 6]);
   });
 
   it('keeps the 30 seconds between links across midnight', async () => {
@@ -84,8 +92,7 @@ describe('POST /api/password-reset/request', () => {
 
     await requestReset(context.app).expect(204);
     context.clock.advance(20_000);
-    const refused = await requestReset(context.app).expect(429);
-    expect(refused.body).toMatchObject({ code: 'RESET_TOO_SOON' });
+    await requestReset(context.app).expect(204);
     await context.mail.drain();
 
     expect(context.mailer.sent).toHaveLength(1);
