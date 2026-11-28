@@ -223,7 +223,15 @@ const policyFields = {
   }),
 };
 
-export const policyInputSchema = registry.register('UpdatePolicyRequest', z.strictObject(policyFields));
+export const policyInputSchema = registry.register(
+  'UpdatePolicyRequest',
+  z.strictObject(policyFields).partial({
+    reminderLeadHours: true,
+    autoCompleteAfterHours: true,
+    notificationRetentionDays: true,
+    auditRetentionDays: true,
+  }),
+);
 export const policySchema = registry.register('Policy', z.object({ ...policyFields, updatedAt: z.iso.datetime() }));
 
 export const unitsQuery = z.strictObject({
