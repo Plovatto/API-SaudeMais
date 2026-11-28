@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, gt, inArray, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, exists, gt, inArray, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '../../database/pg-client.js';
 import type { AuditAction } from '../../database/schema/audit-logs.js';
@@ -306,10 +306,10 @@ export class CatalogRepository {
     if (scope && (await hasActiveFuture(tx, scope, this.clock.now()))) throw new InUseError();
   }
 
-  private async ensureRoom(tx: Transaction, entity: CatalogEntity, excludedId?: string): Promise<void> {
-    const { table, id, isActive, limitLock } = lockable[entity];
+  private async ensureRoom(tx: Transaction, entity: CatalogEntity): Promise<void> {
+    const { table, isActive, limitLock } = lockable[entity];
     await tx.execute(sql`select pg_advisory_xact_lock(${LIMIT_LOCK_NAMESPACE}, ${limitLock})`);
-    const active = await tx.$count(table, and(eq(isActive, true), excludedId ? ne(id, excludedId) : undefined));
+    const active = await tx.$count(table, eq(isActive, true));
     if (active >= this.activeLimit) throw new CatalogLimitError(entity);
   }
 
@@ -341,8 +341,9 @@ export class CatalogRepository {
     update: (tx: Transaction) => Promise<Row[]>,
   ): Promise<Row | undefined> {
     return this.db.transaction(async (tx) => {
-      if (!(await lockRow(tx, entity, id))) return undefined;
-      if (changes.isActive === true) await this.ensureRoom(tx, entity, id);
+      const wasActive = await lockRow(tx, entity, id);
+      if (wasActive === undefined) return undefined;
+      if (!wasActive && changes.isActive === true) await this.ensureRoom(tx, entity);
       const [row] = await update(tx);
       if (changes.isActive === false) await this.ensureUnused(tx, eq(lockable[entity].booked, id));
       if (row) await recordAudit(tx, { ...actor, ...changeEntry(entity, id, changes) });
@@ -376,10 +377,10 @@ export class CatalogRepository {
   }
 }
 
-async function lockRow(tx: Transaction, entity: CatalogEntity, id: string): Promise<boolean> {
-  const { table, id: idColumn } = lockable[entity];
-  const rows = await tx.select({ id: idColumn }).from(table).where(eq(idColumn, id)).for('no key update');
-  return rows.length > 0;
+async function lockRow(tx: Transaction, entity: CatalogEntity, id: string): Promise<boolean | undefined> {
+  const { table, id: idColumn, isActive } = lockable[entity];
+  const [row] = await tx.select({ isActive }).from(table).where(eq(idColumn, id)).for('no key update');
+  return row ? Boolean(row.isActive) : undefined;
 }
 
 async function replaceHours(tx: Transaction, unitId: string, hours: HourRow[]): Promise<void> {

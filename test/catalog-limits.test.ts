@@ -47,18 +47,21 @@ const catalogs = [
   {
     entity: 'specialty',
     create: (suffix: string) => context.service.createSpecialty(specialtyInput(`Limite ${suffix}`), context.actor),
-    update: (id: string, changes: { isActive: boolean }) => context.service.updateSpecialty(id, changes, context.actor),
+    update: (id: string, changes: { isActive?: boolean; name?: string }) =>
+      context.service.updateSpecialty(id, changes, context.actor),
   },
   {
     entity: 'unit',
     create: (suffix: string) => context.service.createUnit(unitInput(`Limite ${suffix}`), context.actor),
-    update: (id: string, changes: { isActive: boolean }) => context.service.updateUnit(id, changes, context.actor),
+    update: (id: string, changes: { isActive?: boolean; name?: string }) =>
+      context.service.updateUnit(id, changes, context.actor),
   },
   {
     entity: 'exam type',
     create: (suffix: string) =>
       context.service.createExamType(examTypeInput(`lim_${suffix.toLowerCase()}`), context.actor),
-    update: (id: string, changes: { isActive: boolean }) => context.service.updateExamType(id, changes, context.actor),
+    update: (id: string, changes: { isActive?: boolean; name?: string }) =>
+      context.service.updateExamType(id, changes, context.actor),
   },
 ];
 
@@ -75,6 +78,11 @@ describe.each(catalogs)('active $entity limit', ({ create, update }) => {
 
     await expect(update(first.id, { isActive: true })).rejects.toMatchObject(limitReached);
     await expect(update(replacement.id, { isActive: true })).resolves.toMatchObject({ isActive: true });
+    await expect(
+      update(replacement.id, { isActive: true, name: `Renomeado ${replacement.id}` }),
+    ).resolves.toMatchObject({
+      isActive: true,
+    });
   });
 });
 
